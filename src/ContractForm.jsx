@@ -22,22 +22,22 @@ const ContractForm = () => {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  try {
-    await fetch("https://script.google.com/macros/s/AKfycbxXQVoFHRxLDpLq_2Rwc1i4QyG03_PKxFfLcbfo8T9avLEftOJZ9KQKQ-JULILKX2DYBg/exec", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(formData),
-    });
+    e.preventDefault();
+    try {
+      await fetch('/api/submit-contract', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData),
+      });
 
-    alert("ส่งข้อมูลสัญญาเรียบร้อยแล้ว!");
-  } catch (error) {
-    console.error("เกิดข้อผิดพลาด:", error);
-    alert("ส่งข้อมูลไม่สำเร็จ");
-  }
-};
+      alert("ส่งข้อมูลสัญญาเรียบร้อยแล้ว!");
+    } catch (error) {
+      console.error("เกิดข้อผิดพลาด:", error);
+      alert("ส่งข้อมูลไม่สำเร็จ");
+    }
+  };
 
   return (
     <div className="contract-form-container">
