@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import liff from '@line/liff';
 import ContractForm from './ContractForm';
+import CheckPage from './CheckPage';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -19,10 +21,17 @@ function App() {
       });
   }, []);
 
+  if (!isLoggedIn) {
+    return <p>กำลังเข้าสู่ระบบผ่าน LINE...</p>;
+  }
+
   return (
-    <div>
-      {isLoggedIn ? <ContractForm /> : <p>กำลังเข้าสู่ระบบผ่าน LINE...</p>}
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<ContractForm />} />
+        <Route path="/check" element={<CheckPage />} />
+      </Routes>
+    </Router>
   );
 }
 
