@@ -1,50 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import './CheckPage.css';
-import liff from '@line/liff';
 
 export default function CheckPage() {
   const [phone, setPhone] = useState('');
   const [contract, setContract] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [initializing, setInitializing] = useState(true); // 👈 แสดงสถานะกำลังเข้าสู่ระบบ
 
-  // 📦 ตรวจสอบ session และดึงโปรไฟล์ใหม่ถ้าจำเป็น
   useEffect(() => {
-    const initLiff = async () => {
-      try {
-        await liff.init({ liffId: '2007877821-b3kqP26L' }); // 🔁 ใส่ LIFF ID จริง
-
-        if (!liff.isLoggedIn()) {
-          liff.login(); // 🔁 Redirect ไป login
-          return;
-        }
-
-        // ✅ หาก login แล้ว แต่ยังไม่มี sessionStorage → ดึงโปรไฟล์ใหม่
-        const storedUserId = sessionStorage.getItem('lineUserId');
-        if (!storedUserId) {
-          const profile = await liff.getProfile();
-          sessionStorage.setItem('lineUserId', profile.userId);
-          sessionStorage.setItem('lineName', profile.displayName);
-          console.log('LINE profile loaded:', profile);
-        }
-
-        // 🔁 โหลดเบอร์ที่เคยกรอกไว้
-        const savedPhone = sessionStorage.getItem('phone');
-        if (savedPhone) {
-          setPhone(savedPhone);
-          fetchContract(savedPhone);
-        }
-      } catch (err) {
-        console.error('LIFF init failed:', err);
-      } finally {
-        setInitializing(false);
-      }
-    };
-
-    initLiff();
+    const savedPhone = sessionStorage.getItem('phone');
+    if (savedPhone) {
+      setPhone(savedPhone);
+      fetchContract(savedPhone); // โหลดอัตโนมัติถ้ามีเบอร์อยู่แล้ว
+    }
   }, []);
 
-  // 📡 เรียกข้อมูลจาก Google Apps Script
   const fetchContract = async (phoneNumber) => {
     setLoading(true);
     try {
@@ -55,14 +24,16 @@ export default function CheckPage() {
       setContract(data);
       sessionStorage.setItem('phone', phoneNumber);
     } catch (err) {
-      console.error('เกิดข้อผิดพลาดในการดึงข้อมูล:', err);
+      console.error('เกิดข้อผิดพลาด:', err);
+      setContract({ error: true });
     }
     setLoading(false);
   };
 
   const handleSearch = () => {
-    if (!phone) return;
-    fetchContract(phone);
+    if (phone.trim() !== '') {
+      fetchContract(phone);
+    }
   };
 
   const formatDate = (dateStr) => {
@@ -70,15 +41,6 @@ export default function CheckPage() {
     const date = new Date(dateStr);
     return date.toLocaleDateString('th-TH');
   };
-
-  // 🔄 กรณีกำลัง Login ผ่าน LINE
-  if (initializing) {
-    return (
-      <div className="check-container">
-        <p>กำลังเข้าสู่ระบบผ่าน LINE...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="check-container">
