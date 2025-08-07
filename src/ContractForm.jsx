@@ -45,7 +45,7 @@ const ContractForm = () => {
 
   return (
     <div className="contract-form-container">
-      <h2>ฟอร์มกรอกข้อมูลสัญญา(v2)</h2>
+      <h2>ฟอร์มกรอกข้อมูลสัญญา</h2>
       <form className="contract-form" onSubmit={handleSubmit}>
         <input type="text" name="name" placeholder="ชื่อ-นามสกุล" onChange={handleChange} required />
         <input type="tel" name="phone" placeholder="เบอร์โทร" onChange={handleChange} required />
