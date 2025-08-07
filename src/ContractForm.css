@@ -6,76 +6,77 @@
   border-radius: 12px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
   font-family: 'Arial', sans-serif;
-}
 
-.form-container h2 {
-  font-size: 1.4rem;
-  text-align: center;
-  margin-bottom: 1.5rem;
-  color: #333;
-}
 
-.form-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
+  .form-container h2 {
+    font-size: 1.4rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: #333;
+  }
 
-input,
-textarea,
-select {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 1rem;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  box-sizing: border-box;
-  background-color: #fafafa;
-  transition: border-color 0.2s ease-in-out;
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-  outline: none;
-  border-color: #4CAF50;
-}
-
-textarea {
-  min-height: 100px;
-  resize: vertical;
-}
-
-button {
-  width: 100%;
-  background-color: #4CAF50;
-  color: white;
-  padding: 0.75rem;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background-color 0.2s ease-in-out;
-}
-
-button:hover {
-  background-color: #45a049;
-}
-
-@media screen and (min-width: 600px) {
   .form-grid {
-    flex-direction: row;
-    flex-wrap: wrap;
+    display: flex;
+    flex-direction: column;
     gap: 1rem;
   }
 
-  .form-grid > * {
-    flex: 1 1 48%;
+  input,
+  textarea,
+  select {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+    background-color: #fafafa;
+    transition: border-color 0.2s ease-in-out;
   }
 
-  .form-grid textarea,
-  .form-grid button {
-    flex: 1 1 100%;
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: none;
+    border-color: #4CAF50;
+  }
+
+  textarea {
+    min-height: 100px;
+    resize: vertical;
+  }
+
+  button {
+    width: 100%;
+    background-color: #4CAF50;
+    color: white;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+  }
+
+  button:hover {
+    background-color: #45a049;
+  }
+
+  @media screen and (min-width: 600px) {
+    .form-grid {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .form-grid > * {
+      flex: 1 1 48%;
+    }
+
+    .form-grid textarea,
+    .form-grid button {
+      flex: 1 1 100%;
+    }
   }
 }
