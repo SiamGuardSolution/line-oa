@@ -1,15 +1,26 @@
-import React, { useState } from 'react';
-import './CheckPage.css'; // ✅ ใช้แบบธรรมดา
+import React, { useState, useEffect } from 'react';
+import './CheckPage.css';
 
 export default function CheckPage() {
   const [phone, setPhone] = useState('');
   const [contract, setContract] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSearch = async () => {
+  // ✅ โหลดข้อมูลจาก sessionStorage ถ้ามี
+  useEffect(() => {
+    const savedPhone = sessionStorage.getItem('phone');
+    if (savedPhone) {
+      setPhone(savedPhone);
+      fetchContract(savedPhone);
+    }
+  }, []);
+
+  const fetchContract = async (phoneNumber) => {
     setLoading(true);
     try {
-      const res = await fetch(`https://script.google.com/macros/s/AKfycbzjWbm1loGYp5EWtSbXxRouSzgHmQhxNrD_gdrOo8H7k1FBQOZIg_qIbTknfdbVSivm4A/exec?phone=${phone}`);
+      const res = await fetch(
+        `https://script.google.com/macros/s/AKfycbzjWbm1loGYp5EWtSbXxRouSzgHmQhxNrD_gdrOo8H7k1FBQOZIg_qIbTknfdbVSivm4A/exec?phone=${phoneNumber}`
+      );
       const data = await res.json();
       setContract(data);
     } catch (err) {
@@ -18,11 +29,15 @@ export default function CheckPage() {
     setLoading(false);
   };
 
-  return (
-    <div className="container">
-      <h2 className="title">ตรวจสอบข้อมูลสัญญา</h2>
+  const handleSearch = async () => {
+    sessionStorage.setItem('phone', phone); // ✅ บันทึกเบอร์ไว้
+    fetchContract(phone);
+  };
 
-      <div className="inputGroup">
+  return (
+    <div className="check-container">
+      <h2>ตรวจสอบข้อมูลสัญญา</h2>
+      <div className="input-group">
         <input
           type="tel"
           placeholder="กรอกเบอร์โทร"
@@ -39,15 +54,10 @@ export default function CheckPage() {
         <div className="card">
           <h3>ข้อมูลสัญญา</h3>
           <p><strong>ชื่อ:</strong> {contract.name}</p>
-          <p><strong>ที่อยู่:</strong> {contract.address}</p>
-          <p><strong>Facebook:</strong> {contract.facebook}</p>
           <p><strong>เบอร์โทร:</strong> {contract.phone}</p>
-          <p><strong>เริ่มสัญญา:</strong> {new Date(contract.startDate).toLocaleDateString()}</p>
-          <p><strong>สิ้นสุดสัญญา:</strong> {new Date(contract.endDate).toLocaleDateString()}</p>
-          <p><strong>รอบบริการถัดไป:</strong> {new Date(contract.nextService).toLocaleDateString()}</p>
-          <p><strong>ประเภทบริการ:</strong> {contract.serviceType}</p>
-          <p><strong>แพ็กเกจ:</strong> {contract.package}</p>
-          {contract.note && <p><strong>📝 หมายเหตุ:</strong> {contract.note}</p>}
+          <p><strong>เริ่มสัญญา:</strong> {contract.startDate}</p>
+          <p><strong>รอบบริการถัดไป:</strong> {contract.nextService}</p>
+          <p><strong>สถานะ:</strong> {/* แสดงสถานะจากวันที่ */}</p>
         </div>
       )}
 
