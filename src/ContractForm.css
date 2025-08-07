@@ -87,9 +87,4 @@
     padding: 16px;
   }
 
-  .contract-form textarea {
-    display: block !important;
-    background-color: yellow !important;
-  }
-
 }
