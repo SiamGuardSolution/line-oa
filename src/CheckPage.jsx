@@ -1,5 +1,6 @@
+// ✅ CheckPage.jsx
 import React, { useState } from 'react';
-import './CheckPage.css';
+import styles from './CheckPage.css';
 
 export default function CheckPage() {
   const [phone, setPhone] = useState('');
@@ -19,24 +20,25 @@ export default function CheckPage() {
   };
 
   return (
-    <div className="check-container">
-      <h2 className="check-heading">🔍 ตรวจสอบข้อมูลสัญญา</h2>
+    <div className={styles.container}>
+      <h2 className={styles.title}>ตรวจสอบข้อมูลสัญญา</h2>
 
-      <input
-        type="tel"
-        className="check-input"
-        placeholder="กรอกเบอร์โทรศัพท์"
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-      />
+      <div className={styles.inputGroup}>
+        <input
+          type="tel"
+          placeholder="กรอกเบอร์โทร เช่น 0960470110"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          className={styles.input}
+        />
+        <button onClick={handleSearch} className={styles.button}>ค้นหา</button>
+      </div>
 
-      <button className="check-button" onClick={handleSearch}>ค้นหา</button>
-
-      {loading && <p className="check-loading">กำลังค้นหา...</p>}
+      {loading && <p className={styles.loading}>กำลังค้นหา...</p>}
 
       {contract && !contract.error && (
-        <div className="check-result">
-          <h3 className="check-subheading">📄 ข้อมูลสัญญา</h3>
+        <div className={styles.card}>
+          <h3>ข้อมูลสัญญา</h3>
           <p><strong>ชื่อ:</strong> {contract.name}</p>
           <p><strong>ที่อยู่:</strong> {contract.address}</p>
           <p><strong>Facebook:</strong> {contract.facebook}</p>
@@ -46,11 +48,13 @@ export default function CheckPage() {
           <p><strong>รอบบริการถัดไป:</strong> {new Date(contract.nextService).toLocaleDateString()}</p>
           <p><strong>ประเภทบริการ:</strong> {contract.serviceType}</p>
           <p><strong>แพ็กเกจ:</strong> {contract.package}</p>
-          {contract.note && <p><strong>หมายเหตุ:</strong> {contract.note}</p>}
+          {contract.note && <p><strong>📝 หมายเหตุ:</strong> {contract.note}</p>}
         </div>
       )}
 
-      {contract?.error && <p className="check-error">❌ ไม่พบข้อมูลสำหรับเบอร์โทรนี้</p>}
+      {contract?.error && (
+        <p className={styles.error}>ไม่พบข้อมูลสำหรับเบอร์โทรนี้</p>
+      )}
     </div>
   );
 }

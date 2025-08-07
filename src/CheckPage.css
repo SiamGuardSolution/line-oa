@@ -1,0 +1,65 @@
+/* ✅ CheckPage.module.css */
+.container {
+  max-width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  background-color: #fff;
+  font-family: sans-serif;
+}
+
+.title {
+  font-size: 1.5rem;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.input {
+  padding: 12px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.button {
+  padding: 12px;
+  font-size: 16px;
+  background-color: #007aff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.button:hover {
+  background-color: #005bb5;
+}
+
+.loading {
+  text-align: center;
+  color: #555;
+}
+
+.card {
+  background-color: #f8f8f8;
+  padding: 16px;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  font-size: 16px;
+}
+
+.card p {
+  margin: 6px 0;
+}
+
+.error {
+  color: red;
+  text-align: center;
+  margin-top: 20px;
+}
