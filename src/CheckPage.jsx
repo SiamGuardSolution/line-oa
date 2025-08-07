@@ -6,7 +6,6 @@ export default function CheckPage() {
   const [contract, setContract] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // ✅ โหลดข้อมูลจาก sessionStorage ถ้ามี
   useEffect(() => {
     const savedPhone = sessionStorage.getItem('phone');
     if (savedPhone) {
@@ -23,6 +22,7 @@ export default function CheckPage() {
       );
       const data = await res.json();
       setContract(data);
+      sessionStorage.setItem('phone', phoneNumber);
     } catch (err) {
       console.error('เกิดข้อผิดพลาด:', err);
     }
@@ -30,13 +30,19 @@ export default function CheckPage() {
   };
 
   const handleSearch = async () => {
-    sessionStorage.setItem('phone', phone); // ✅ บันทึกเบอร์ไว้
     fetchContract(phone);
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('th-TH');
   };
 
   return (
     <div className="check-container">
-      <h2>ตรวจสอบข้อมูลสัญญา</h2>
+      <h2>🔍 ตรวจสอบข้อมูลสัญญา</h2>
+
       <div className="input-group">
         <input
           type="tel"
@@ -55,9 +61,13 @@ export default function CheckPage() {
           <h3>ข้อมูลสัญญา</h3>
           <p><strong>ชื่อ:</strong> {contract.name}</p>
           <p><strong>เบอร์โทร:</strong> {contract.phone}</p>
-          <p><strong>เริ่มสัญญา:</strong> {contract.startDate}</p>
-          <p><strong>รอบบริการถัดไป:</strong> {contract.nextService}</p>
-          <p><strong>สถานะ:</strong> {/* แสดงสถานะจากวันที่ */}</p>
+          <p><strong>เริ่มสัญญา:</strong> {formatDate(contract.startDate)}</p>
+          <p><strong>รอบบริการถัดไป:</strong> {formatDate(contract.nextService)}</p>
+          <p><strong>สถานะ:</strong> {
+            new Date() <= new Date(contract.endDate)
+              ? 'อยู่ในระยะประกัน'
+              : 'หมดสัญญาแล้ว'
+          }</p>
         </div>
       )}
 

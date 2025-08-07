@@ -1,23 +1,21 @@
-/* ✅ CheckPage.module.css */
-.container {
-  max-width: 100%;
+.check-container {
   padding: 16px;
-  box-sizing: border-box;
-  background-color: #fff;
-  font-family: sans-serif;
+  font-family: 'sans-serif';
+  max-width: 480px;
+  margin: auto;
 }
 
-.title {
-  font-size: 1.5rem;
-  margin-bottom: 16px;
+h2 {
   text-align: center;
+  font-size: 1.25rem;
+  margin-bottom: 20px;
 }
 
-.inputGroup {
+.input-group {
   display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 24px;
 }
 
 .input {
@@ -28,38 +26,39 @@
 }
 
 .button {
+  background-color: #007bff;
+  color: white;
   padding: 12px;
   font-size: 16px;
-  background-color: #007aff;
-  color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
 }
 
 .button:hover {
-  background-color: #005bb5;
-}
-
-.loading {
-  text-align: center;
-  color: #555;
+  background-color: #0056b3;
 }
 
 .card {
-  background-color: #f8f8f8;
+  background-color: #fdfdfd;
   padding: 16px;
-  border-radius: 10px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   font-size: 16px;
 }
 
-.card p {
-  margin: 6px 0;
+.card h3 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 18px;
 }
 
 .error {
   color: red;
   text-align: center;
-  margin-top: 20px;
+}
+
+.loading {
+  text-align: center;
+  font-style: italic;
 }
