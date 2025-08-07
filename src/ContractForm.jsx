@@ -48,7 +48,7 @@ const ContractForm = () => {
       <h2>ฟอร์มกรอกข้อมูลสัญญา</h2>
       <form className="contract-form" onSubmit={handleSubmit}>
         <input type="text" name="name" placeholder="ชื่อ-นามสกุล" onChange={handleChange} required />
-        <input type="tel" name="phone" placeholder="เบอร์โทร" onChange={handleChange} required />
+        <input type="text" name="phone" placeholder="เบอร์โทร" onChange={handleChange} required />
         <input type="text" name="facebook" placeholder="Facebook ลูกค้า" onChange={handleChange} />
         <textarea name="address" placeholder="ที่อยู่ลูกค้า" rows="3" onChange={handleChange} />
         <input type="text" name="serviceType" placeholder="ประเภทบริการ" onChange={handleChange} />
