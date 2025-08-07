@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import "./ContractForm.module.css";
+import "./ContractForm.css";
 
 const ContractForm = () => {
   const [formData, setFormData] = useState({
@@ -21,7 +21,7 @@ const ContractForm = () => {
       [e.target.name]: e.target.value
     }));
 
-    console.log("📝 formData.note:", formData.note);
+    console.log("formData.note:", formData.note);
 
   };
 
