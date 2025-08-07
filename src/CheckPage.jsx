@@ -1,6 +1,5 @@
-// ✅ CheckPage.jsx
 import React, { useState } from 'react';
-import styles from './CheckPage.css';
+import './CheckPage.css'; // ✅ ใช้แบบธรรมดา
 
 export default function CheckPage() {
   const [phone, setPhone] = useState('');
@@ -20,24 +19,24 @@ export default function CheckPage() {
   };
 
   return (
-    <div className={styles.container}>
-      <h2 className={styles.title}>ตรวจสอบข้อมูลสัญญา</h2>
+    <div className="container">
+      <h2 className="title">ตรวจสอบข้อมูลสัญญา</h2>
 
-      <div className={styles.inputGroup}>
+      <div className="inputGroup">
         <input
           type="tel"
-          placeholder="กรอกเบอร์โทร เช่น 0960470110"
+          placeholder="กรอกเบอร์โทร"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          className={styles.input}
+          className="input"
         />
-        <button onClick={handleSearch} className={styles.button}>ค้นหา</button>
+        <button onClick={handleSearch} className="button">ค้นหา</button>
       </div>
 
-      {loading && <p className={styles.loading}>กำลังค้นหา...</p>}
+      {loading && <p className="loading">กำลังค้นหา...</p>}
 
       {contract && !contract.error && (
-        <div className={styles.card}>
+        <div className="card">
           <h3>ข้อมูลสัญญา</h3>
           <p><strong>ชื่อ:</strong> {contract.name}</p>
           <p><strong>ที่อยู่:</strong> {contract.address}</p>
@@ -53,7 +52,7 @@ export default function CheckPage() {
       )}
 
       {contract?.error && (
-        <p className={styles.error}>ไม่พบข้อมูลสำหรับเบอร์โทรนี้</p>
+        <p className="error">ไม่พบข้อมูลสำหรับเบอร์โทรนี้</p>
       )}
     </div>
   );
