@@ -1,0 +1,96 @@
+/* CheckPage.module.css */
+
+.container {
+  max-width: 100%;
+  padding: 16px;
+  background-color: #fff;
+  font-family: 'Prompt', sans-serif;
+  box-sizing: border-box;
+  min-height: 100vh;
+}
+
+.title {
+  font-size: 1.25rem;
+  margin-bottom: 20px;
+  text-align: center;
+  color: #222;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.input {
+  padding: 14px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.button {
+  padding: 14px;
+  font-size: 16px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.button:hover {
+  background-color: #218838;
+}
+
+.loading {
+  text-align: center;
+  font-size: 16px;
+  color: #555;
+}
+
+.card {
+  background-color: #f9f9f9;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+  font-size: 15px;
+  line-height: 1.6;
+  margin-top: 10px;
+}
+
+.card p {
+  margin: 6px 0;
+}
+
+.error {
+  color: red;
+  text-align: center;
+  margin-top: 20px;
+  font-size: 15px;
+}
+
+/* Responsive: ปรับสำหรับจอเล็กมาก ๆ */
+@media (max-width: 400px) {
+  .title {
+    font-size: 1.1rem;
+  }
+
+  .input {
+    font-size: 15px;
+    padding: 12px;
+  }
+
+  .button {
+    font-size: 15px;
+    padding: 12px;
+  }
+
+  .card {
+    font-size: 14px;
+  }
+}

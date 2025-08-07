@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import "./ContractForm.css";
+import "./ContractForm.module.css";
 
 const ContractForm = () => {
   const [formData, setFormData] = useState({
