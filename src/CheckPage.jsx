@@ -1,5 +1,5 @@
-// CheckPage.jsx
 import React, { useState } from 'react';
+import './CheckPage.css';
 
 export default function CheckPage() {
   const [phone, setPhone] = useState('');
@@ -8,37 +8,49 @@ export default function CheckPage() {
 
   const handleSearch = async () => {
     setLoading(true);
-    const res = await fetch(`https://script.google.com/macros/s/AKfycbzjWbm1loGYp5EWtSbXxRouSzgHmQhxNrD_gdrOo8H7k1FBQOZIg_qIbTknfdbVSivm4A/exec?phone=${phone}`);
-    const data = await res.json();
-    setContract(data);
+    try {
+      const res = await fetch(`https://script.google.com/macros/s/AKfycbzjWbm1loGYp5EWtSbXxRouSzgHmQhxNrD_gdrOo8H7k1FBQOZIg_qIbTknfdbVSivm4A/exec?phone=${phone}`);
+      const data = await res.json();
+      setContract(data);
+    } catch (err) {
+      console.error('เกิดข้อผิดพลาด:', err);
+    }
     setLoading(false);
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>ตรวจสอบข้อมูลสัญญา</h2>
+    <div className="check-container">
+      <h2 className="check-heading">🔍 ตรวจสอบข้อมูลสัญญา</h2>
+
       <input
         type="tel"
+        className="check-input"
         placeholder="กรอกเบอร์โทรศัพท์"
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
-        style={{ padding: 10, width: '100%', marginBottom: 10 }}
       />
-      <button onClick={handleSearch} style={{ padding: 10 }}>ค้นหา</button>
 
-      {loading && <p>กำลังค้นหา...</p>}
+      <button className="check-button" onClick={handleSearch}>ค้นหา</button>
+
+      {loading && <p className="check-loading">กำลังค้นหา...</p>}
 
       {contract && !contract.error && (
-        <div style={{ marginTop: 20 }}>
+        <div className="check-result">
+          <h3 className="check-subheading">📄 ข้อมูลสัญญา</h3>
           <p><strong>ชื่อ:</strong> {contract.name}</p>
-          <p><strong>เริ่มสัญญา:</strong> {contract.startDate}</p>
-          <p><strong>รอบบริการถัดไป:</strong> {contract.nextServiceDate}</p>
-          <p><strong>สถานะ:</strong> {contract.status}</p>
-          <p><strong>หมายเหตุ:</strong> {contract.note}</p>
+          <p><strong>ที่อยู่:</strong> {contract.address}</p>
+          <p><strong>Facebook:</strong> {contract.facebook}</p>
+          <p><strong>เบอร์โทร:</strong> {contract.phone}</p>
+          <p><strong>เริ่มสัญญา:</strong> {new Date(contract.startDate).toLocaleDateString()}</p>
+          <p><strong>สิ้นสุดสัญญา:</strong> {new Date(contract.endDate).toLocaleDateString()}</p>
+          <p><strong>รอบบริการถัดไป:</strong> {new Date(contract.nextService).toLocaleDateString()}</p>
+          <p><strong>ประเภทบริการ:</strong> {contract.serviceType}</p>
+          <p><strong>แพ็กเกจ:</strong> {contract.package}</p>
+          {contract.note && <p><strong>หมายเหตุ:</strong> {contract.note}</p>}
         </div>
       )}
 
-      {contract?.error && <p style={{ color: 'red' }}>{contract.error}</p>}
+      {contract?.error && <p className="check-error">❌ ไม่พบข้อมูลสำหรับเบอร์โทรนี้</p>}
     </div>
   );
 }
