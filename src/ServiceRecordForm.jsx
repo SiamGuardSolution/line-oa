@@ -23,6 +23,7 @@ export default function ServiceRecordForm() {
     try {
       await fetch('https://script.google.com/macros/s/AKfycbzjWbm1loGYp5EWtSbXxRouSzgHmQhxNrD_gdrOo8H7k1FBQOZIg_qIbTknfdbVSivm4A/exec?path=service-record', {
         method: 'POST',
+        mode: "cors",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerName: 'สมหญิง',
