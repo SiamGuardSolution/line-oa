@@ -21,10 +21,16 @@ export default function ServiceRecordForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await fetch('/api/submit-service', {
+      await fetch('https://script.google.com/macros/s/AKfycbzjWbm1loGYp5EWtSbXxRouSzgHmQhxNrD_gdrOo8H7k1FBQOZIg_qIbTknfdbVSivm4A/exec?path=service-record', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          customerName: 'สมหญิง',
+          phone: '0891234567',
+          serviceDate: '2025-08-08',
+          technician: 'ช่างแซม',
+          serviceNote: 'ตรวจสอบแล้ว ไม่พบปัญหา',
+        }),
       });
       alert('บันทึกเรียบร้อยแล้ว!');
     } catch (err) {
