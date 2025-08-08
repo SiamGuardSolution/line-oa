@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const googleScriptUrl = 'https://script.google.com/macros/s/AKfycbxXQVoFHRxLDpLq_2Rwc1i4QyG03_PKxFfLcbfo8T9avLEftOJZ9KQKQ-JULILKX2DYBg/exec'; // เปลี่ยน URL ตรงนี้
+    const googleScriptUrl = 'https://script.google.com/macros/s/AKfycbxXQVoFHRxLDpLq_2Rwc1i4QyG03_PKxFfLcbfo8T9avLEftOJZ9KQKQ-JULILKX2DYBg/exec?path=contract'; // เปลี่ยน URL ตรงนี้
 
     const response = await fetch(googleScriptUrl, {
       method: 'POST',
