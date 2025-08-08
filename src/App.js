@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
 import liff from '@line/liff';
 import ContractForm from './ContractForm';
 import CheckPage from './CheckPage';
 import ServiceRecordForm from './ServiceRecordForm';
+
+console.log('✅ ServiceRecordForm loaded:', typeof ServiceRecordForm);
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -23,7 +26,11 @@ function App() {
   }, []);
 
   if (!isLoggedIn) {
-    return <p>กำลังเข้าสู่ระบบผ่าน LINE...</p>;
+   return (
+      <div style={{ textAlign: 'center', marginTop: '50px' }}>
+        <p>กำลังเข้าสู่ระบบผ่าน LINE...</p>
+      </div>
+    );
   }
 
   return (
