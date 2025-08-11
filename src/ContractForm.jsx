@@ -9,7 +9,7 @@ const ContractForm = () => {
     facebook: "",
     address: "",
     serviceType: "",
-    package: "",
+    servicePackage: "",
     startDate: "",
     endDate: "",
     nextServiceDate: "",
@@ -29,15 +29,11 @@ const ContractForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await fetch("https://script.google.com/macros/s/AKfycbzjWbm1loGYp5EWtSbXxRouSzgHmQhxNrD_gdrOo8H7k1FBQOZIg_qIbTknfdbVSivm4A/exec?path=contract", {
+      await fetch("/api/submit-contract", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(formData)
-      })
-
-
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
       alert("ส่งข้อมูลสัญญาเรียบร้อยแล้ว!");
     } catch (error) {
       console.error("เกิดข้อผิดพลาด:", error);

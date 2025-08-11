@@ -4,7 +4,6 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import liff from '@line/liff';
 import ContractForm from './ContractForm';
 import CheckPage from './CheckPage';
-import ServiceRecordForm from './ServiceRecordForm';
 
 console.log('✅ ServiceRecordForm loaded:', typeof ServiceRecordForm);
 
@@ -38,7 +37,6 @@ function App() {
       <Routes>
         <Route path="/" element={<ContractForm />} />
         <Route path="/check" element={<CheckPage />} />
-        <Route path="/service-record-form" element={<ServiceRecordForm />} />
       </Routes>
     </Router>
   );
