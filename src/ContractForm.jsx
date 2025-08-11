@@ -82,12 +82,19 @@ export default function ContractForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-
       const text = await res.text();
-      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
 
+      let data;
+      try { data = JSON.parse(text); } catch { /* ไม่ใช่ JSON */ }
+
+      if (!res.ok || data?.result !== "success") {
+        console.error("Server response:", text);
+        alert("ส่งข้อมูลไม่สำเร็จ: " + (data?.message || text || `HTTP ${res.status}`));
+        return;
+      }
+
+      console.log("DEBUG from GAS:", data); // จะเห็น sheetUrl/sheetName/row
       alert("ส่งข้อมูลสัญญาเรียบร้อยแล้ว!");
-      setFormData(INITIAL);
     } catch (err) {
       console.error("เกิดข้อผิดพลาด:", err);
       alert("ส่งข้อมูลไม่สำเร็จ");
