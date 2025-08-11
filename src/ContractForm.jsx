@@ -20,16 +20,30 @@ export default function ContractForm() {
   const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e) => {
-    // กันพังกรณีถูกเรียกโดยไม่มี event ที่ถูกต้อง
-    if (!e || !e.target) return;
     const { name, value } = e.target;
-    if (!name) return;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => {
+      if (name === "startDate") {
+        return {
+          ...prev,
+          startDate: value,
+          nextServiceDate: addMonths(value, 4) // auto-fill
+        };
+      }
+      return { ...prev, [name]: value };
+    });
   };
+
+  // helper
+  function addMonths(dateStr, n) {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    if (isNaN(d)) return "";
+    d.setMonth(d.getMonth() + n);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    const dd = String(d.getDate()).padStart(2,"0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -144,6 +158,7 @@ export default function ContractForm() {
           name="nextServiceDate"
           value={formData.nextServiceDate}
           onChange={handleChange}
+          readOnly
         />
 
         <label htmlFor="note">หมายเหตุ</label>
