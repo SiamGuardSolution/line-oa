@@ -8,7 +8,7 @@ const INITIAL = {
   facebook: "",
   address: "",
   serviceType: "",
-  servicePackage: "spray",     // 'spray' | 'bait'
+  servicePackage: "spray", // 'spray' | 'bait'
   startDate: "",
   endDate: "",
   serviceDate1: "",
@@ -57,7 +57,6 @@ export default function ContractForm() {
   // ---------- core recompute ----------
   const recomputeDates = (pkg, startDate, lastServiceDate) => {
     if (pkg === "spray") {
-      // กติกาเดิม
       const s1 = addMonths(startDate, 4);
       const s2 = addMonths(s1, 4);
       const end = addMonths(startDate, 12);
@@ -68,21 +67,19 @@ export default function ContractForm() {
         endDate: end
       }));
     } else {
-      // bait: รอบถัดไปทุก 15 วันจาก "วันล่าสุด" (fallback เป็น startDate)
+      // bait
       const base = lastServiceDate || startDate;
       const next = addDays(base, 15);
-      // สิ้นสุดสัญญา: ครบ 6 รอบภายใน 3 เดือน -> endDate = startDate + 3 เดือน (อัตโนมัติ)
       const end = startDate ? addMonths(startDate, 3) : "";
       setFormData((prev) => ({
         ...prev,
         serviceDate1: next || "",
-        serviceDate2: "",       // ไม่ใช้ในแพ็กเกจนี้
+        serviceDate2: "", // ไม่ใช้งานใน bait
         endDate: end
       }));
     }
   };
 
-  // คำนวณใหม่เมื่อ package / startDate / lastServiceDate เปลี่ยน
   useEffect(() => {
     recomputeDates(formData.servicePackage, formData.startDate, formData.lastServiceDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -100,7 +97,20 @@ export default function ContractForm() {
     }
 
     if (name === "servicePackage") {
-      setFormData((prev) => ({ ...prev, servicePackage: value }));
+      // เคลียร์ค่าที่ไม่เกี่ยวของอีกแพ็กเกจ เพื่อเลี่ยงส่งค่าหลงเหลือ
+      if (value === "spray") {
+        setFormData((prev) => ({
+          ...prev,
+          servicePackage: value,
+          lastServiceDate: "" // spray ไม่ใช้
+        }));
+      } else {
+        setFormData((prev) => ({
+          ...prev,
+          servicePackage: value,
+          serviceDate2: "" // bait ไม่ใช้
+        }));
+      }
       return;
     }
 
@@ -114,7 +124,7 @@ export default function ContractForm() {
       return;
     }
 
-    // endDate ถูกคำนวณอัตโนมัติทั้งสองแพ็กเกจ ไม่ให้แก้เอง
+    // endDate ถูกคำนวณอัตโนมัติทั้งสองแพ็กเกจ
     if (name === "endDate") return;
 
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -162,14 +172,6 @@ export default function ContractForm() {
 
   // ---------- UI ----------
   const pkg = formData.servicePackage;
-  const serviceDate1Label =
-    pkg === "spray"
-      ? "รอบบริการครั้งที่ 1 (+4 เดือน)"
-      : "รอบบริการครั้งถัดไป (+15 วันจากวันล่าสุด/วันที่เริ่ม)";
-  const serviceDate2Label =
-    pkg === "spray"
-      ? "รอบบริการครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)"
-      : "— (ใช้เฉพาะแพ็กเกจอัดน้ำยา+ฉีดพ่น)";
 
   return (
     <div className="contract-form-container">
@@ -217,7 +219,7 @@ export default function ContractForm() {
           onChange={handleChange}
         />
 
-        {/* Package dropdown */}
+        {/* Package */}
         <label>แพ็กเกจ</label>
         <select
           name="servicePackage"
@@ -228,7 +230,7 @@ export default function ContractForm() {
           <option value="bait">วางเหยื่อ 5,500 บาท</option>
         </select>
 
-        {/* Dates */}
+        {/* วันที่เริ่ม ใช้ร่วมกัน */}
         <label htmlFor="startDate">วันที่เริ่มสัญญา</label>
         <input
           id="startDate"
@@ -238,44 +240,72 @@ export default function ContractForm() {
           onChange={handleChange}
         />
 
-        <label>วันล่าสุด (ใช้คำนวณสำหรับแพ็กเกจวางเหยื่อ)</label>
-        <input
-          type="date"
-          name="lastServiceDate"
-          value={formData.lastServiceDate}
-          onChange={handleChange}
-        />
+        {/* เฉพาะแพ็กเกจ "วางเหยื่อ" */}
+        {pkg === "bait" && (
+          <>
+            <label>วันล่าสุด (ใช้คำนวณสำหรับแพ็กเกจวางเหยื่อ)</label>
+            <input
+              type="date"
+              name="lastServiceDate"
+              value={formData.lastServiceDate}
+              onChange={handleChange}
+            />
 
-        <label htmlFor="serviceDate1">{serviceDate1Label}</label>
-        <input
-          id="serviceDate1"
-          type="date"
-          name="serviceDate1"
-          value={formData.serviceDate1}
-          readOnly
-        />
+            <label htmlFor="serviceDate1">
+              รอบบริการครั้งถัดไป (+15 วันจากวันล่าสุด/วันที่เริ่ม)
+            </label>
+            <input
+              id="serviceDate1"
+              type="date"
+              name="serviceDate1"
+              value={formData.serviceDate1}
+              readOnly
+            />
 
-        <label htmlFor="serviceDate2">{serviceDate2Label}</label>
-        <input
-          id="serviceDate2"
-          type="date"
-          name="serviceDate2"
-          value={formData.serviceDate2}
-          readOnly
-        />
+            <label htmlFor="endDate">
+              วันที่สิ้นสุดสัญญา (ครบ 6 รอบใน 3 เดือน — คำนวณอัตโนมัติ)
+            </label>
+            <input
+              id="endDate"
+              type="date"
+              name="endDate"
+              value={formData.endDate}
+              readOnly
+            />
+          </>
+        )}
 
-        <label htmlFor="endDate">
-          {pkg === "spray"
-            ? "วันที่สิ้นสุดสัญญา (+1 ปี)"
-            : "วันที่สิ้นสุดสัญญา (ครบ 6 รอบใน 3 เดือน — คำนวณอัตโนมัติ)"}
-        </label>
-        <input
-          id="endDate"
-          type="date"
-          name="endDate"
-          value={formData.endDate}
-          readOnly  // คำนวณอัตโนมัติ
-        />
+        {/* เฉพาะแพ็กเกจ "อัดน้ำยา+ฉีดพ่น" */}
+        {pkg === "spray" && (
+          <>
+            <label htmlFor="serviceDate1">รอบบริการครั้งที่ 1 (+4 เดือน)</label>
+            <input
+              id="serviceDate1"
+              type="date"
+              name="serviceDate1"
+              value={formData.serviceDate1}
+              readOnly
+            />
+
+            <label htmlFor="serviceDate2">รอบบริการครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)</label>
+            <input
+              id="serviceDate2"
+              type="date"
+              name="serviceDate2"
+              value={formData.serviceDate2}
+              readOnly
+            />
+
+            <label htmlFor="endDate">วันที่สิ้นสุดสัญญา (+1 ปี)</label>
+            <input
+              id="endDate"
+              type="date"
+              name="endDate"
+              value={formData.endDate}
+              readOnly
+            />
+          </>
+        )}
 
         <label htmlFor="note">หมายเหตุ</label>
         <textarea
