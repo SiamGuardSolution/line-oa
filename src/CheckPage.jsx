@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import "./CheckPage.css";
 
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzsJks_4XtSktsyhW2PjrtTehWwOz1CWLic6tqKSwL52plTna1gug9AgvXSiSPquyg4zA/exec";
 // สีและชื่อแพ็กเกจ
 const pkgLabel = (val) =>
   val === "bait" ? "วางเหยื่อ 5,500 บาท" : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
@@ -55,7 +56,7 @@ export default function CheckPage() {
     setContract(null);
     try {
       // ปรับ endpoint ให้ตรงโปรเจกต์ของคุณ
-      const res = await fetch(`https://script.google.com/macros/s/AKfycbzsJks_4XtSktsyhW2PjrtTehWwOz1CWLic6tqKSwL52plTna1gug9AgvXSiSPquyg4zA/exec?phone=${digits}`);
+      const res = await fetch(`${GAS_URL}?path=check&phone=${digits}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data || !data.contract) {
