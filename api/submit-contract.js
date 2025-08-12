@@ -1,5 +1,5 @@
 // api/submit-contract.js  (CommonJS)
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzsJks_4XtSktsyhW2PjrtTehWwOz1CWLic6tqKSwL52plTna1gug9AgvXSiSPquyg4zA/exec';
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3-chu_IQPZ4XjUpAb0T4g93kRT0UzvlDmOaNm5vmcm_x5atcQ6qpIGWf7dOGQyrGIjw/exec';
 
 function readJsonBody(req) {
   if (req.body && Object.keys(req.body).length) return Promise.resolve(req.body);

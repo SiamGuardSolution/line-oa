@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import "./CheckPage.css";
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzsJks_4XtSktsyhW2PjrtTehWwOz1CWLic6tqKSwL52plTna1gug9AgvXSiSPquyg4zA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbz3-chu_IQPZ4XjUpAb0T4g93kRT0UzvlDmOaNm5vmcm_x5atcQ6qpIGWf7dOGQyrGIjw/exec";
 // สีและชื่อแพ็กเกจ
 const pkgLabel = (val) =>
   val === "bait" ? "วางเหยื่อ 5,500 บาท" : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
