@@ -55,7 +55,7 @@ export default function CheckPage() {
     setContract(null);
     try {
       // ปรับ endpoint ให้ตรงโปรเจกต์ของคุณ
-      const res = await fetch(`/api/check-contract?phone=${digits}`);
+      const res = await fetch(`https://script.google.com/macros/s/AKfycbzsJks_4XtSktsyhW2PjrtTehWwOz1CWLic6tqKSwL52plTna1gug9AgvXSiSPquyg4zA/exec?phone=${digits}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data || !data.contract) {
