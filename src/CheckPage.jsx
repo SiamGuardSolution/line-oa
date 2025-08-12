@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import "./CheckPage.css";
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxvD66P9k2NxFOquKyYMvTXYf5xm-fhu36yZtEWARfyAZ4J7c1-SYMD6U4imW1f5hVC4A/exec";
-// สีและชื่อแพ็กเกจ
+
 const pkgLabel = (val) =>
   val === "bait" ? "วางเหยื่อ 5,500 บาท" : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
 
@@ -40,10 +40,19 @@ const addMonths = (dateStr, n) => {
 export default function CheckPage() {
   const [phoneInput, setPhoneInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [contract, setContract] = useState(null);
   const [error, setError] = useState("");
 
-  // ดึงข้อมูลสัญญาตามเบอร์
+  // หลายสัญญา + index ที่เลือก
+  const [contracts, setContracts] = useState([]);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  // ใช้ค่าที่เลือกมาเป็น "contract ปัจจุบัน"
+  const contract = useMemo(
+    () => (contracts && contracts.length ? contracts[activeIdx] || null : null),
+    [contracts, activeIdx]
+  );
+
+  // ค้นหาจากเบอร์
   const onSearch = async (e) => {
     e?.preventDefault?.();
     setError("");
@@ -53,16 +62,25 @@ export default function CheckPage() {
       return;
     }
     setLoading(true);
-    setContract(null);
+    setContracts([]); // เคลียร์ผลก่อนหน้า
+
     try {
-      // ปรับ endpoint ให้ตรงโปรเจกต์ของคุณ
-      const res = await fetch(`${GAS_URL}?path=check&phone=${digits}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (!data || !data.contract) {
-        setError("ไม่พบข้อมูลสัญญาตามเบอร์ที่ระบุ");
+      const url = `${GAS_URL}?path=check&phone=${digits}&v=${Date.now()}`; // กันแคช
+      const res = await fetch(url);
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { throw new Error("BAD_JSON"); }
+      if (!res.ok) throw new Error(`HTTP_${res.status}`);
+
+      if (Array.isArray(data.contracts) && data.contracts.length) {
+        setContracts(data.contracts);
+        setActiveIdx(0);
+      } else if (data.contract) {
+        setContracts([data.contract]);
+        setActiveIdx(0);
       } else {
-        setContract(data.contract);
+        setContracts([]);
+        setError("ไม่พบข้อมูลสัญญาตามเบอร์ที่ระบุ");
       }
     } catch (err) {
       console.error(err);
@@ -72,10 +90,10 @@ export default function CheckPage() {
     }
   };
 
-  // เตรียมชุด “กำหนดการ” ตามแพ็กเกจ (แสดงเฉพาะของแพ็กเกจนั้น)
+  // สร้างกำหนดการตามแพ็กเกจของ "contract ปัจจุบัน"
   const schedule = useMemo(() => {
     if (!contract) return [];
-    const pkg = contract.servicePackage; // 'spray' | 'bait'
+    const pkg = contract.servicePackage;
     const start = contract.startDate;
     if (pkg === "spray") {
       const s1 = contract.serviceDate1 || addMonths(start, 4);
@@ -87,7 +105,6 @@ export default function CheckPage() {
         { label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true },
       ];
     }
-    // bait: 6 นัดภายใน 3 เดือน (ทุก 15 วันจากวันล่าสุด/วันที่เริ่ม)
     const base = contract.lastServiceDate || start;
     const slots = Array.from({ length: 6 }).map((_, i) => ({
       label: `รอบบริการครั้งที่ ${i + 1}`,
@@ -97,7 +114,7 @@ export default function CheckPage() {
     return [...slots, { label: "สิ้นสุดสัญญา (3 เดือน)", date: end, isEnd: true }];
   }, [contract]);
 
-  // สถานะ: หมดอายุหรือยัง
+  // สถานะสัญญา
   const status = useMemo(() => {
     if (!contract?.endDate) return null;
     const today = new Date();
@@ -129,7 +146,7 @@ export default function CheckPage() {
         {error && <div className="alert">{error}</div>}
       </header>
 
-      {/* สเกเลตันโหลด */}
+      {/* Loading skeleton */}
       {loading && (
         <div className="card skeleton">
           <div className="s1" />
@@ -138,7 +155,35 @@ export default function CheckPage() {
         </div>
       )}
 
-      {/* ผลลัพธ์ */}
+      {/* ตัวเลือกสัญญา (กรณีมีหลายรายการ) */}
+      {contracts.length > 1 && !loading && (
+        <div className="card" style={{ padding: 10 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {contracts.map((c, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveIdx(i)}
+                style={{
+                  border: "1px solid #e6eef7",
+                  borderRadius: 999,
+                  padding: "8px 12px",
+                  background: i === activeIdx ? "#e8f1ff" : "#fff",
+                  fontWeight: i === activeIdx ? 700 : 500,
+                  cursor: "pointer",
+                }}
+                title={c.servicePackageLabel || c.servicePackage}
+              >
+                {(c.startDate || "ไม่ทราบวันเริ่ม")} · {c.servicePackage === "bait" ? "วางเหยื่อ" : "ฉีดพ่น"}
+              </button>
+            ))}
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12, color: "#64748b" }}>
+            พบ {contracts.length} สัญญา — กดเพื่อสลับดูรายละเอียด
+          </div>
+        </div>
+      )}
+
+      {/* ผลลัพธ์ของสัญญาที่เลือก */}
       {contract && (
         <>
           <section className="card">
@@ -191,7 +236,6 @@ export default function CheckPage() {
             </div>
           </section>
 
-          {/* กำหนดการ (แสดงเฉพาะของแพ็กเกจที่เลือก) */}
           <section className="card">
             <div className="row between">
               <h3 className="title">กำหนดการ</h3>
@@ -216,7 +260,6 @@ export default function CheckPage() {
       )}
 
       <footer className="foot-hint">
-        {/* เคล็ดลับเล็กน้อยสำหรับผู้ใช้ */}
         กรณีไม่พบข้อมูล ลองตรวจสอบจำนวนหลักของเบอร์โทรอีกครั้ง
       </footer>
     </div>
