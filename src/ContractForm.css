@@ -1,77 +1,163 @@
-.contract-form-container {
-  max-width: 100%;
-  padding: 20px;
-  box-sizing: border-box;
-  background-color: #f9f9f9;
-  min-height: 100vh;
-  font-family: sans-serif;
+/* ContractForm.css — Mobile-first, thumb-friendly */
+
+:root{
+  --bg:#f6f8fb;
+  --card:#ffffff;
+  --border:#e6e9ef;
+  --text:#0f172a;
+  --muted:#64748b;
+  --primary:#2563eb;
+  --primary-contrast:#ffffff;
+  --radius:16px;
+  --shadow:0 6px 20px rgba(2,6,23,.06);
 }
 
-.contract-form-container h2 {
-  font-size: 1.5rem;
-  margin-bottom: 20px;
-  text-align: center;
-  color: #333;
+*{ box-sizing:border-box; }
+
+body{ background:var(--bg); }
+
+.contract-form-container{
+  max-width:720px; /* ดูในมือถือจะเต็มจอ, tablet/desktop ก็ไม่กว้างเกินไป */
+  margin: clamp(12px, 2vw, 24px) auto;
+  padding: 0 12px;
 }
 
-.contract-form {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
+.contract-form-container h2{
+  margin: 12px 0 16px;
+  font-size: clamp(18px, 2.4vw, 24px);
+  color:var(--text);
+  letter-spacing:.2px;
 }
 
-.contract-form input,
-.contract-form textarea,
-.contract-form select {
-  padding: 12px 14px;
-  font-size: 1rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  width: 100%;
-  box-sizing: border-box;
-  background-color: #fff;
+.contract-form{
+  display: grid;
+  gap: 12px;
 }
 
-.contract-form label {
-  font-weight: bold;
-  font-size: 0.95rem;
-  color: #444;
-}
-
-.contract-form button {
+/* --- Card Section --- */
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   padding: 14px;
-  font-size: 1.1rem;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 8px;
+}
+
+.card h3{
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.helper{
+  margin: -4px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* --- Form Controls --- */
+.form-group{
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+label{
+  font-size: 13px;
+  color: var(--muted);
+}
+
+input[type="text"],
+input[type="tel"],
+input[type="date"],
+select,
+textarea{
+  width: 100%;
+  padding: 12px 14px;               /* ใหญ่พอสำหรับนิ้วโป้ง */
+  font-size: 16px;                  /* >=16px ป้องกัน iOS ซูมอัตโนมัติ */
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  background: #fff;
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+  min-height: 44px;                 /* tap target */
+}
+
+textarea{
+  min-height: 96px;
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus{
+  border-color: #bfd1ff;
+  box-shadow: 0 0 0 4px rgba(37,99,235,.08);
+}
+
+/* --- Two-column layout (tablet up) --- */
+@media (min-width: 768px){
+  .card.grid-2{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+  }
+  .grid-span-2{ grid-column: span 2; }
+}
+
+/* --- Sticky Submit Bar --- */
+.form-actions{
+  position: sticky;
+  bottom: 8px;
+  z-index: 10;
+  margin-top: 6px;
+}
+
+.form-actions .bar{
+  background: var(--card);
+  border:1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  padding: 8px;
+  display:flex;
+  gap:8px;
+}
+
+button[type="submit"]{
+  flex:1;
+  border:0;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-contrast);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 12px 16px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  min-height: 44px;
+  transition: transform .05s ease, filter .15s ease;
 }
 
-.contract-form button:hover {
-  background-color: #0056b3;
+button[disabled]{
+  opacity:.6;
+  cursor: not-allowed;
 }
 
-/* Responsive tweaks for small phones */
-@media (max-width: 480px) {
-  .contract-form-container {
-    padding: 15px 10px;
-  }
+button[type="submit"]:active{
+  transform: translateY(1px);
+}
 
-  .contract-form-container h2 {
-    font-size: 1.25rem;
-  }
+/* --- Small utilities --- */
+.row{
+  display:grid;
+  gap:8px;
+}
 
-  .contract-form input,
-  .contract-form textarea,
-  .contract-form select {
-    font-size: 0.95rem;
-    padding: 10px 12px;
-  }
-
-  .contract-form button {
-    font-size: 1rem;
-    padding: 12px;
+@media (min-width: 768px){
+  .row.cols-2{
+    grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ลดช่องว่างสุดท้ายในการ์ด */
+.card > .form-group:last-child { margin-bottom: 0; }

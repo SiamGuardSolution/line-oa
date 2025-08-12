@@ -174,153 +174,212 @@ export default function ContractForm() {
   const pkg = formData.servicePackage;
 
   return (
-    <div className="contract-form-container">
-      <h2>ฟอร์มกรอกข้อมูลสัญญา</h2>
-      <form className="contract-form" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          name="name"
-          placeholder="ชื่อ-นามสกุล"
-          value={formData.name}
-          onChange={handleChange}
-          required
-        />
+  <div className="contract-form-container">
+    <h2>ฟอร์มกรอกข้อมูลสัญญา</h2>
 
-        <input
-          type="tel"
-          name="phone"
-          placeholder="เบอร์โทร (0xx-xxx-xxxx)"
-          value={formatThaiPhone(formData.phone)}
-          onChange={handleChange}
-          required
-        />
+    <form className="contract-form" onSubmit={handleSubmit}>
+      {/* การ์ด: ข้อมูลลูกค้า */}
+      <div className="card">
+        <h3>ข้อมูลลูกค้า</h3>
+        <div className="form-group">
+          <label>ชื่อ–นามสกุล</label>
+          <input
+            type="text"
+            name="name"
+            placeholder="เช่น สมชาย ใจดี"
+            autoComplete="name"
+            value={formData.name}
+            onChange={handleChange}
+            required
+          />
+        </div>
 
-        <input
-          type="text"
-          name="facebook"
-          placeholder="Facebook ลูกค้า"
-          value={formData.facebook}
-          onChange={handleChange}
-        />
+        <div className="row cols-2">
+          <div className="form-group">
+            <label>เบอร์โทร</label>
+            <input
+              type="tel"
+              name="phone"
+              inputMode="numeric"
+              placeholder="0xx-xxx-xxxx"
+              autoComplete="tel"
+              value={formatThaiPhone(formData.phone)}
+              onChange={handleChange}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Facebook ลูกค้า</label>
+            <input
+              type="text"
+              name="facebook"
+              placeholder="URL / ชื่อบัญชี"
+              value={formData.facebook}
+              onChange={handleChange}
+            />
+          </div>
+        </div>
 
-        <textarea
-          name="address"
-          placeholder="ที่อยู่ลูกค้า"
-          rows="3"
-          value={formData.address}
-          onChange={handleChange}
-        />
+        <div className="form-group">
+          <label>ที่อยู่ลูกค้า</label>
+          <textarea
+            name="address"
+            placeholder="บ้านเลขที่, ซอย, ถนน, เขต/อำเภอ, จังหวัด"
+            rows="3"
+            autoComplete="street-address"
+            value={formData.address}
+            onChange={handleChange}
+          />
+        </div>
+      </div>
 
-        <input
-          type="text"
-          name="serviceType"
-          placeholder="ประเภทบริการ"
-          value={formData.serviceType}
-          onChange={handleChange}
-        />
+      {/* การ์ด: รายละเอียดบริการ */}
+      <div className="card grid-2">
+        <h3 className="grid-span-2">รายละเอียดบริการ</h3>
 
-        {/* Package */}
-        <label>แพ็กเกจ</label>
-        <select
-          name="servicePackage"
-          value={formData.servicePackage}
-          onChange={handleChange}
-        >
-          <option value="spray">อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี</option>
-          <option value="bait">วางเหยื่อ 5,500 บาท</option>
-        </select>
+        <div className="form-group">
+          <label>ประเภทบริการ</label>
+          <input
+            type="text"
+            name="serviceType"
+            placeholder="เช่น กำจัดปลวก"
+            value={formData.serviceType}
+            onChange={handleChange}
+          />
+        </div>
 
-        {/* วันที่เริ่ม ใช้ร่วมกัน */}
-        <label htmlFor="startDate">วันที่เริ่มสัญญา</label>
-        <input
-          id="startDate"
-          type="date"
-          name="startDate"
-          value={formData.startDate}
-          onChange={handleChange}
-        />
+        <div className="form-group">
+          <label>แพ็กเกจ</label>
+          <select
+            name="servicePackage"
+            value={formData.servicePackage}
+            onChange={handleChange}
+          >
+            <option value="spray">อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี</option>
+            <option value="bait">วางเหยื่อ 5,500 บาท</option>
+          </select>
+        </div>
 
-        {/* เฉพาะแพ็กเกจ "วางเหยื่อ" */}
+        <div className="form-group">
+          <label>วันที่เริ่มสัญญา</label>
+          <input
+            id="startDate"
+            type="date"
+            name="startDate"
+            value={formData.startDate}
+            onChange={handleChange}
+          />
+        </div>
+
+        {/* เฉพาะแพ็กเกจวางเหยื่อ */}
         {pkg === "bait" && (
-          <>
-            <label>วันล่าสุด (ใช้คำนวณสำหรับแพ็กเกจวางเหยื่อ)</label>
+          <div className="form-group">
+            <label>วันล่าสุด (คำนวณรอบถัดไป)</label>
             <input
               type="date"
               name="lastServiceDate"
               value={formData.lastServiceDate}
               onChange={handleChange}
             />
-
-            <label htmlFor="serviceDate1">
-              รอบบริการครั้งถัดไป (+15 วันจากวันล่าสุด/วันที่เริ่ม)
-            </label>
-            <input
-              id="serviceDate1"
-              type="date"
-              name="serviceDate1"
-              value={formData.serviceDate1}
-              readOnly
-            />
-
-            <label htmlFor="endDate">
-              วันที่สิ้นสุดสัญญา (ครบ 6 รอบใน 3 เดือน — คำนวณอัตโนมัติ)
-            </label>
-            <input
-              id="endDate"
-              type="date"
-              name="endDate"
-              value={formData.endDate}
-              readOnly
-            />
-          </>
+            <div className="helper">ถ้าเว้นว่าง ระบบจะอ้างอิงวันที่เริ่มสัญญา</div>
+          </div>
         )}
+      </div>
 
-        {/* เฉพาะแพ็กเกจ "อัดน้ำยา+ฉีดพ่น" */}
+      {/* การ์ด: กำหนดการ (แสดงเฉพาะของแพ็กเกจที่เลือก) */}
+      <div className="card grid-2">
+        <h3 className="grid-span-2">กำหนดการ</h3>
+
+        {/* spray */}
         {pkg === "spray" && (
           <>
-            <label htmlFor="serviceDate1">รอบบริการครั้งที่ 1 (+4 เดือน)</label>
-            <input
-              id="serviceDate1"
-              type="date"
-              name="serviceDate1"
-              value={formData.serviceDate1}
-              readOnly
-            />
+            <div className="form-group">
+              <label>รอบบริการครั้งที่ 1 (+4 เดือน)</label>
+              <input
+                id="serviceDate1"
+                type="date"
+                name="serviceDate1"
+                value={formData.serviceDate1}
+                readOnly
+              />
+            </div>
 
-            <label htmlFor="serviceDate2">รอบบริการครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)</label>
-            <input
-              id="serviceDate2"
-              type="date"
-              name="serviceDate2"
-              value={formData.serviceDate2}
-              readOnly
-            />
+            <div className="form-group">
+              <label>รอบบริการครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)</label>
+              <input
+                id="serviceDate2"
+                type="date"
+                name="serviceDate2"
+                value={formData.serviceDate2}
+                readOnly
+              />
+            </div>
 
-            <label htmlFor="endDate">วันที่สิ้นสุดสัญญา (+1 ปี)</label>
-            <input
-              id="endDate"
-              type="date"
-              name="endDate"
-              value={formData.endDate}
-              readOnly
-            />
+            <div className="form-group grid-span-2">
+              <label>วันที่สิ้นสุดสัญญา (+1 ปี)</label>
+              <input
+                id="endDate"
+                type="date"
+                name="endDate"
+                value={formData.endDate}
+                readOnly
+              />
+            </div>
           </>
         )}
 
-        <label htmlFor="note">หมายเหตุ</label>
-        <textarea
-          id="note"
-          name="note"
-          value={formData.note}
-          onChange={handleChange}
-          rows="3"
-          placeholder="เช่น ลูกค้าต้องการช่างคนเดิม"
-        />
+        {/* bait */}
+        {pkg === "bait" && (
+          <>
+            <div className="form-group">
+              <label>รอบบริการครั้งถัดไป (+15 วัน)</label>
+              <input
+                id="serviceDate1"
+                type="date"
+                name="serviceDate1"
+                value={formData.serviceDate1}
+                readOnly
+              />
+            </div>
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? "กำลังส่ง..." : "ส่งข้อมูล"}
-        </button>
-      </form>
-    </div>
-  );
+            <div className="form-group grid-span-2">
+              <label>วันที่สิ้นสุดสัญญา (ครบ 6 รอบใน 3 เดือน)</label>
+              <input
+                id="endDate"
+                type="date"
+                name="endDate"
+                value={formData.endDate}
+                readOnly
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* การ์ด: หมายเหตุ */}
+      <div className="card">
+        <div className="form-group">
+          <label>หมายเหตุ</label>
+          <textarea
+            id="note"
+            name="note"
+            value={formData.note}
+            onChange={handleChange}
+            rows="3"
+            placeholder="เช่น ลูกค้าต้องการช่างคนเดิม"
+          />
+        </div>
+      </div>
+
+      {/* Sticky submit */}
+      <div className="form-actions">
+        <div className="bar">
+          <button type="submit" disabled={submitting}>
+            {submitting ? "กำลังส่ง..." : "ส่งข้อมูล"}
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+);
 }
