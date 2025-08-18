@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from "react";
 import "./CheckPage.css";
 
+const API_BASE =
+  process.env.REACT_APP_API_BASE ||
+  "https://siamguards-proxy.phet67249.workers.dev"; // ← ใส่ของคุณ
+const api = (p) => `${API_BASE ? API_BASE : ""}${p}`;
 
 const pkgLabel = (val) =>
   val === "bait" ? "วางเหยื่อ 5,500 บาท" : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
@@ -64,12 +68,30 @@ export default function CheckPage() {
     setContracts([]); // เคลียร์ผลก่อนหน้า
 
     try {
-      const url = `/api/check-contract?phone=${encodeURIComponent(digits)}&v=${Date.now()}`;
-      const res = await fetch(url);
-      const text = await res.text();
+      const url = api(`/api/check-contract?phone=${encodeURIComponent(digits)}&v=${Date.now()}`);
+      console.log("[CHECK] url:", url);
+
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      const ct = res.headers.get("content-type") || "";
+
       let data;
-      try { data = JSON.parse(text); } catch { throw new Error("BAD_JSON"); }
-      if (!res.ok) throw new Error(`HTTP_${res.status}`);
+      if (ct.includes("application/json")) {
+        // ปลอดภัยสุด: ให้ browser parse JSON ให้เลย
+        data = await res.json();
+      } else {
+        const raw = await res.text();
+        console.error("[CHECK] Non-JSON response", res.status, ct, raw.slice(0, 400));
+        setError("เซิร์ฟเวอร์ตอบกลับไม่ใช่ JSON กรุณาลองใหม่");
+        setLoading(false);
+        return;
+      }
+
+      if (!res.ok) {
+        console.error("[CHECK] HTTP error", res.status, data);
+        setError("ดึงข้อมูลไม่สำเร็จ กรุณาลองใหม่");
+        setLoading(false);
+        return;
+      }
 
       if (Array.isArray(data.contracts) && data.contracts.length) {
         setContracts(data.contracts);
@@ -82,7 +104,7 @@ export default function CheckPage() {
         setError("ไม่พบข้อมูลสัญญาตามเบอร์ที่ระบุ");
       }
     } catch (err) {
-      console.error(err);
+      console.error("[CHECK] fetch failed:", err);
       setError("ดึงข้อมูลไม่สำเร็จ กรุณาลองใหม่");
     } finally {
       setLoading(false);
