@@ -126,43 +126,55 @@ body{ background:var(--bg); }
 .span2{ grid-column: span 2; }
 
 /* Timeline */
+/* Timeline – ใช้ flex กันข้อความซ้อนทับกับจุด */
 .timeline{
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0 0 0 14px;
-  position: relative;
+  list-style:none;
+  margin:12px 0 0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
 }
-.timeline::before{
-  content:"";
-  position:absolute;
-  left:6px; top:0; bottom:0;
-  width:2px;
-  background: #e5eefb;
-}
+
 .timeline li{
-  position:relative;
-  padding: 10px 0 10px 10px;
+  display:flex;
+  align-items:flex-start;
+  gap:12px;          /* ระยะห่างระหว่างจุดกับข้อความ */
 }
-.timeline .dot{
-  position:absolute;
-  left:-1px;
-  width:14px; height:14px;
-  background:#fff;
-  border:2px solid var(--primary);
+
+.timeline li .dot{
+  width:14px;
+  height:14px;
   border-radius:50%;
-  top: 14px;
+  border:2px solid #3b82f6;  /* น้ำเงิน */
+  background:#fff;
+  flex:0 0 14px;             /* จองความกว้างให้จุด ป้องกันข้อความไหลใต้จุด */
+  margin-top:4px;            /* จัดตำแหน่งให้เสมอ baseline */
 }
-.timeline .label{
-  font-size: 13px;
-  color: var(--muted);
-}
-.timeline .date{
-  font-size: 16px;
-  color: var(--ink);
-  margin-top: 2px;
-}
+
 .timeline li.end .dot{
-  border-color: var(--accent);
+  border-color:#16a34a;      /* เขียว */
+  background:#e8fbe8;
+}
+
+.timeline .meta{
+  flex:1 1 auto;
+  min-width:0;               /* อนุญาตให้หด/ตัดบรรทัดได้ */
+}
+
+.timeline .label{
+  font-weight:600;
+  line-height:1.35;
+  word-break:break-word;
+  overflow-wrap:anywhere;
+}
+
+.timeline .date{
+  margin-top:2px;
+  line-height:1.35;
+  color:#0f172a;
+  word-break:break-word;
+  overflow-wrap:anywhere;
 }
 
 /* Skeleton loading */
