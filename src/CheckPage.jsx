@@ -138,8 +138,8 @@ export default function CheckPage() {
       const s2 = contract.serviceDate2 || addMonths(s1, 4);
       const end = contract.endDate || addMonths(start, 12);
       return [
-        { label: "รอบบริการครั้งที่ 1 (+4 เดือน)", date: s1 },
-        { label: "รอบบริการครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 },
+        { label: "Service ครั้งที่ 1 (+4 เดือน)", date: s1 },
+        { label: "Service ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 },
         { label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true },
       ];
     }
@@ -147,7 +147,7 @@ export default function CheckPage() {
     // bait: 6 นัดทุก 15 วัน นับจาก lastServiceDate หรือ start, สิ้นสุด 3 เดือน
     const base = contract.lastServiceDate || start;
     const slots = Array.from({ length: 6 }).map((_, i) => ({
-      label: `รอบบริการครั้งที่ ${i + 1}`,
+      label: `Service ครั้งที่ ${i + 1}`,
       date: addDays(base, 15 * (i + 1)),
     }));
     const end = addMonths(start, 3);
@@ -264,7 +264,7 @@ export default function CheckPage() {
               <div className="field">
                 <label>สิ้นสุดสัญญา</label>
                 <div className="value">
-                  {derivePkg(contract) === "bait"
+                  {derivePkg(contract) === "5500"
                     ? addMonths(contract.startDate, 3) || "-"
                     : (contract.endDate || "-")}
                 </div>
@@ -290,7 +290,7 @@ export default function CheckPage() {
             <div className="row between">
               <h3 className="title">กำหนดการ</h3>
               <span className="pill">
-                {derivePkg(contract) === "bait" ? "ทุก 15 วัน (6 ครั้ง)" : "2 ครั้ง / ปี"}
+                {derivePkg(contract) === "5500" ? "ทุก 15 วัน (6 ครั้ง)" : "2 ครั้ง / ปี"}
               </span>
             </div>
 
