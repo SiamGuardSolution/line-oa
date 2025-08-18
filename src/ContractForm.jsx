@@ -8,7 +8,7 @@ const INITIAL = {
   facebook: "",
   address: "",
   serviceType: "",
-  servicePackage: "spray", // 'spray' | 'bait'
+  servicePackage: "3993", // 'spray' | 'bait'
   startDate: "",
   endDate: "",
   serviceDate1: "",
@@ -56,7 +56,7 @@ export default function ContractForm() {
 
   // ---------- core recompute ----------
   const recomputeDates = (pkg, startDate, lastServiceDate) => {
-    if (pkg === "spray") {
+    if (pkg === "3993") {
       const s1 = addMonths(startDate, 4);
       const s2 = addMonths(s1, 4);
       const end = addMonths(startDate, 12);
@@ -98,7 +98,7 @@ export default function ContractForm() {
 
     if (name === "servicePackage") {
       // เคลียร์ค่าที่ไม่เกี่ยวของอีกแพ็กเกจ เพื่อเลี่ยงส่งค่าหลงเหลือ
-      if (value === "spray") {
+      if (value === "3993") {
         setFormData((prev) => ({
           ...prev,
           servicePackage: value,
@@ -135,7 +135,7 @@ export default function ContractForm() {
     setSubmitting(true);
     try {
       const pkgLabel =
-        formData.servicePackage === "spray"
+        formData.servicePackage === "3993"
           ? "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี"
           : "วางเหยื่อ 5,500 บาท";
 
@@ -255,8 +255,8 @@ export default function ContractForm() {
             value={formData.servicePackage}
             onChange={handleChange}
           >
-            <option value="spray">อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี</option>
-            <option value="bait">วางเหยื่อ 5,500 บาท</option>
+            <option value="3993">อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี</option>
+            <option value="5500">วางเหยื่อ 5,500 บาท</option>
           </select>
         </div>
 
@@ -272,7 +272,7 @@ export default function ContractForm() {
         </div>
 
         {/* เฉพาะแพ็กเกจวางเหยื่อ */}
-        {pkg === "bait" && (
+        {pkg === "5500" && (
           <div className="form-group">
             <label>วันล่าสุด (คำนวณรอบถัดไป)</label>
             <input
@@ -291,7 +291,7 @@ export default function ContractForm() {
         <h3 className="grid-span-2">กำหนดการ</h3>
 
         {/* spray */}
-        {pkg === "spray" && (
+        {pkg === "3993" && (
           <>
             <div className="form-group">
               <label>รอบบริการครั้งที่ 1 (+4 เดือน)</label>
@@ -329,7 +329,7 @@ export default function ContractForm() {
         )}
 
         {/* bait */}
-        {pkg === "bait" && (
+        {pkg === "5500" && (
           <>
             <div className="form-group">
               <label>รอบบริการครั้งถัดไป (+15 วัน)</label>

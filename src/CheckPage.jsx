@@ -3,11 +3,28 @@ import "./CheckPage.css";
 
 const API_BASE =
   process.env.REACT_APP_API_BASE ||
-  "https://siamguards-proxy.phet67249.workers.dev"; // ← ใส่ของคุณ
+  "https://siamguards-proxy.phet67249.workers.dev";
 const api = (p) => `${API_BASE ? API_BASE : ""}${p}`;
 
+// ===== Helpers =====
 const pkgLabel = (val) =>
-  val === "bait" ? "วางเหยื่อ 5,500 บาท" : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
+  val === "5500" ? "วางเหยื่อ 5,500 บาท" : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
+
+// ตีความแพ็กเกจให้ robust จากหลายฟิลด์
+function derivePkg(c) {
+  const t = `${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
+    .toLowerCase();
+  if (
+    t.includes("เหยื่อ") ||
+    t.includes("5500") ||
+    t.includes("วางเหยื่อ") ||
+    t.includes("5,500") ||
+    t.includes("5500")
+  ) {
+    return "5500";
+  }
+  return "3993";
+}
 
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
 const formatThaiPhone = (digits) => {
@@ -76,7 +93,6 @@ export default function CheckPage() {
 
       let data;
       if (ct.includes("application/json")) {
-        // ปลอดภัยสุด: ให้ browser parse JSON ให้เลย
         data = await res.json();
       } else {
         const raw = await res.text();
@@ -111,12 +127,13 @@ export default function CheckPage() {
     }
   };
 
-  // สร้างกำหนดการตามแพ็กเกจของ "contract ปัจจุบัน"
+  // กำหนดการตามแพ็กเกจ (ใช้ derivePkg เสมอ)
   const schedule = useMemo(() => {
     if (!contract) return [];
-    const pkg = contract.servicePackage;
+    const pkg = derivePkg(contract);
     const start = contract.startDate;
-    if (pkg === "spray") {
+
+    if (pkg === "3993") {
       const s1 = contract.serviceDate1 || addMonths(start, 4);
       const s2 = contract.serviceDate2 || addMonths(s1, 4);
       const end = contract.endDate || addMonths(start, 12);
@@ -126,20 +143,26 @@ export default function CheckPage() {
         { label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true },
       ];
     }
+
+    // bait: 6 นัดทุก 15 วัน นับจาก lastServiceDate หรือ start, สิ้นสุด 3 เดือน
     const base = contract.lastServiceDate || start;
     const slots = Array.from({ length: 6 }).map((_, i) => ({
       label: `รอบบริการครั้งที่ ${i + 1}`,
       date: addDays(base, 15 * (i + 1)),
     }));
-    const end = contract.endDate || addMonths(start, 3);
+    const end = addMonths(start, 3);
     return [...slots, { label: "สิ้นสุดสัญญา (3 เดือน)", date: end, isEnd: true }];
   }, [contract]);
 
-  // สถานะสัญญา
+  // สถานะสัญญา (ถ้า bait ให้คำนวณ end = start + 3 เดือน)
   const status = useMemo(() => {
-    if (!contract?.endDate) return null;
+    if (!contract) return null;
+    const pkg = derivePkg(contract);
+    const assumedEnd =
+      pkg === "5500" ? addMonths(contract.startDate, 3) : (contract.endDate || "");
+    if (!assumedEnd) return null;
     const today = new Date();
-    const end = new Date(contract.endDate);
+    const end = new Date(assumedEnd);
     if (isNaN(end)) return null;
     if (end < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
       return { text: "หมดอายุ", tone: "danger" };
@@ -167,7 +190,6 @@ export default function CheckPage() {
         {error && <div className="alert">{error}</div>}
       </header>
 
-      {/* Loading skeleton */}
       {loading && (
         <div className="card skeleton">
           <div className="s1" />
@@ -176,27 +198,29 @@ export default function CheckPage() {
         </div>
       )}
 
-      {/* ตัวเลือกสัญญา (กรณีมีหลายรายการ) */}
       {contracts.length > 1 && !loading && (
         <div className="card" style={{ padding: 10 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {contracts.map((c, i) => (
-              <button
-                key={i}
-                onClick={() => setActiveIdx(i)}
-                style={{
-                  border: "1px solid #e6eef7",
-                  borderRadius: 999,
-                  padding: "8px 12px",
-                  background: i === activeIdx ? "#e8f1ff" : "#fff",
-                  fontWeight: i === activeIdx ? 700 : 500,
-                  cursor: "pointer",
-                }}
-                title={c.servicePackageLabel || c.servicePackage}
-              >
-                {(c.startDate || "ไม่ทราบวันเริ่ม")} · {c.servicePackage === "bait" ? "วางเหยื่อ" : "ฉีดพ่น"}
-              </button>
-            ))}
+            {contracts.map((c, i) => {
+              const p = derivePkg(c);
+              return (
+                <button
+                  key={i}
+                  onClick={() => setActiveIdx(i)}
+                  style={{
+                    border: "1px solid #e6eef7",
+                    borderRadius: 999,
+                    padding: "8px 12px",
+                    background: i === activeIdx ? "#e8f1ff" : "#fff",
+                    fontWeight: i === activeIdx ? 700 : 500,
+                    cursor: "pointer",
+                  }}
+                  title={c.servicePackageLabel || pkgLabel(p)}
+                >
+                  {(c.startDate || "ไม่ทราบวันเริ่ม")} · {p === "5500" ? "เหยื่อ" : "ฉีดพ่น"}
+                </button>
+              );
+            })}
           </div>
           <div style={{ marginTop: 6, fontSize: 12, color: "#64748b" }}>
             พบ {contracts.length} สัญญา — กดเพื่อสลับดูรายละเอียด
@@ -204,7 +228,6 @@ export default function CheckPage() {
         </div>
       )}
 
-      {/* ผลลัพธ์ของสัญญาที่เลือก */}
       {contract && (
         <>
           <section className="card">
@@ -225,7 +248,9 @@ export default function CheckPage() {
 
               <div className="field">
                 <label>แพ็กเกจ</label>
-                <div className="value">{pkgLabel(contract.servicePackage)}</div>
+                <div className="value">
+                  {contract.servicePackageLabel || pkgLabel(derivePkg(contract))}
+                </div>
               </div>
               <div className="field">
                 <label>ประเภทบริการ</label>
@@ -238,7 +263,11 @@ export default function CheckPage() {
               </div>
               <div className="field">
                 <label>สิ้นสุดสัญญา</label>
-                <div className="value">{contract.endDate || "-"}</div>
+                <div className="value">
+                  {derivePkg(contract) === "bait"
+                    ? addMonths(contract.startDate, 3) || "-"
+                    : (contract.endDate || "-")}
+                </div>
               </div>
 
               {contract.address && (
@@ -261,7 +290,7 @@ export default function CheckPage() {
             <div className="row between">
               <h3 className="title">กำหนดการ</h3>
               <span className="pill">
-                {contract.servicePackage === "bait" ? "ทุก 15 วัน (6 ครั้ง)" : "2 ครั้ง / ปี"}
+                {derivePkg(contract) === "bait" ? "ทุก 15 วัน (6 ครั้ง)" : "2 ครั้ง / ปี"}
               </span>
             </div>
 
