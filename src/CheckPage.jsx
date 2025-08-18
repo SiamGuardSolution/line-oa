@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import "./CheckPage.css";
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxvD66P9k2NxFOquKyYMvTXYf5xm-fhu36yZtEWARfyAZ4J7c1-SYMD6U4imW1f5hVC4A/exec";
 
 const pkgLabel = (val) =>
   val === "bait" ? "วางเหยื่อ 5,500 บาท" : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
@@ -65,7 +64,7 @@ export default function CheckPage() {
     setContracts([]); // เคลียร์ผลก่อนหน้า
 
     try {
-      const url = `${GAS_URL}?path=check&phone=${digits}&v=${Date.now()}`; // กันแคช
+      const url = `/api/check-contract?phone=${encodeURIComponent(digits)}&v=${Date.now()}`;
       const res = await fetch(url);
       const text = await res.text();
       let data;
