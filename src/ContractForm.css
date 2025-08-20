@@ -1,5 +1,6 @@
 /* ContractForm.css — Mobile-first, thumb-friendly */
 
+/* ========== Tokens ========== */
 :root{
   --bg:#f6f8fb;
   --card:#ffffff;
@@ -12,29 +13,45 @@
   --shadow:0 6px 20px rgba(2,6,23,.06);
 }
 
+/* ให้ iOS ไม่ซูมอัตโนมัติ และ font อ่านง่ายบนมือถือ */
+html, body { height: 100%; }
 *{ box-sizing:border-box; }
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  -webkit-text-size-adjust:100%;
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Inter,"Noto Sans Thai",sans-serif;
+  line-height:1.45;
+}
 
-body{ background:var(--bg); }
-
+/* ========== Layout container ========== */
 .contract-form-container{
-  max-width:720px; /* ดูในมือถือจะเต็มจอ, tablet/desktop ก็ไม่กว้างเกินไป */
-  margin: clamp(12px, 2vw, 24px) auto;
+  width:100%;
+  max-width:720px;                 /* มือถือ = เต็มจอ / tablet, desktop = ไม่กว้างเกินไป */
+  margin: clamp(8px, 2.5vw, 24px) auto;
   padding: 0 12px;
+  padding-bottom: 80px;            /* กันชนให้ปุ่ม sticky ไม่ทับคอนเทนต์ */
+}
+@supports (padding: max(0px)) {
+  .contract-form-container{
+    padding-bottom: max(80px, env(safe-area-inset-bottom)); /* iPhone safe area */
+  }
 }
 
 .contract-form-container h2{
   margin: 12px 0 16px;
-  font-size: clamp(18px, 2.4vw, 24px);
-  color:var(--text);
+  font-size: clamp(18px, 4.5vw, 22px);
   letter-spacing:.2px;
 }
 
+/* ========== Form grid ========== */
 .contract-form{
   display: grid;
   gap: 12px;
 }
 
-/* --- Card Section --- */
+/* ========== Card ========== */
 .card{
   background:var(--card);
   border:1px solid var(--border);
@@ -42,61 +59,78 @@ body{ background:var(--bg); }
   box-shadow: var(--shadow);
   padding: 14px;
 }
-
 .card h3{
   margin: 0 0 10px;
   font-size: 16px;
-  color: var(--text);
 }
-
 .helper{
-  margin: -4px 0 8px;
+  margin: -2px 0 8px;
   color: var(--muted);
   font-size: 12px;
 }
 
-/* --- Form Controls --- */
+/* ========== Controls ========== */
 .form-group{
   display: grid;
   gap: 6px;
   margin-bottom: 10px;
 }
-
 label{
   font-size: 13px;
   color: var(--muted);
 }
 
+/* ทำ tap-target ให้ใหญ่และกัน iOS zoom (>=16px) */
 input[type="text"],
 input[type="tel"],
 input[type="date"],
 select,
 textarea{
   width: 100%;
-  padding: 12px 14px;               /* ใหญ่พอสำหรับนิ้วโป้ง */
-  font-size: 16px;                  /* >=16px ป้องกัน iOS ซูมอัตโนมัติ */
+  padding: 13px 14px;                 /* นิ้วโป้งสบาย ๆ */
+  font-size: 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--text);
   background: #fff;
   outline: none;
-  transition: border-color .18s ease, box-shadow .18s ease;
-  min-height: 44px;                 /* tap target */
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+  min-height: 48px;                   /* tap target ที่ดีบนมือถือ */
+  -webkit-tap-highlight-color: transparent;
 }
-
 textarea{
   min-height: 96px;
   resize: vertical;
 }
 
+/* โฟกัสชัดเจน (WCAG friendly) */
 input:focus,
 select:focus,
 textarea:focus{
-  border-color: #bfd1ff;
-  box-shadow: 0 0 0 4px rgba(37,99,235,.08);
+  border-color: #a9c3ff;
+  box-shadow: 0 0 0 4px rgba(37,99,235,.10);
 }
 
-/* --- Two-column layout (tablet up) --- */
+/* ลูกศรของ select ให้แตะง่ายขึ้นบนมือถือ */
+select{
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #94a3b8 50%),
+    linear-gradient(135deg, #94a3b8 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 12px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 36px;
+}
+
+/* ขยายพื้นที่แตะปุ่ม calendar บน iOS/Chrome */
+input[type="date"]::-webkit-calendar-picker-indicator{
+  padding: 8px;
+}
+
+/* ========== Two-column (tablet up) ========== */
 @media (min-width: 768px){
   .card.grid-2{
     display: grid;
@@ -105,59 +139,62 @@ textarea:focus{
   }
   .grid-span-2{ grid-column: span 2; }
 }
-
-/* --- Sticky Submit Bar --- */
-.form-actions{
-  position: sticky;
-  bottom: 8px;
-  z-index: 10;
-  margin-top: 6px;
+.row{ display:grid; gap:8px; }
+@media (min-width: 768px){
+  .row.cols-2{ grid-template-columns: 1fr 1fr; }
 }
 
+/* ========== Sticky Submit Bar ========== */
+.form-actions{
+  position: sticky;
+  bottom: 10px;
+  z-index: 20;
+  margin-top: 8px;
+}
 .form-actions .bar{
   background: var(--card);
   border:1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 18px;
   box-shadow: var(--shadow);
   padding: 8px;
   display:flex;
   gap:8px;
 }
-
 button[type="submit"]{
   flex:1;
   border:0;
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--primary);
   color: var(--primary-contrast);
   font-size: 16px;
-  font-weight: 600;
-  padding: 12px 16px;
+  font-weight: 700;
+  padding: 14px 16px;
   cursor: pointer;
-  min-height: 44px;
-  transition: transform .05s ease, filter .15s ease;
+  min-height: 48px;
+  transition: transform .05s ease, filter .15s ease, background .2s ease;
+}
+button[type="submit"]:active{ transform: translateY(1px); }
+button[disabled]{ opacity:.6; cursor: not-allowed; }
+
+@supports (padding: max(0px)) {
+  .form-actions { margin-bottom: env(safe-area-inset-bottom); }
 }
 
-button[disabled]{
-  opacity:.6;
-  cursor: not-allowed;
-}
-
-button[type="submit"]:active{
-  transform: translateY(1px);
-}
-
-/* --- Small utilities --- */
-.row{
-  display:grid;
-  gap:8px;
-}
-
-@media (min-width: 768px){
-  .row.cols-2{
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-/* ลดช่องว่างสุดท้ายในการ์ด */
+/* ========== Micro utilities ========== */
+/* ลดช่องว่างท้ายการ์ด */
 .card > .form-group:last-child { margin-bottom: 0; }
+
+/* ข้อความอธิบายเล็ก ๆ ใต้ช่อง */
+.note{
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ลดแสงเมื่อ disabled/readOnly */
+input[readonly], input:disabled, select:disabled, textarea:disabled{
+  background:#fafafa;
+  color:#475569;
+}
+
+/* ลด bounce เวลาเลื่อนใน iOS */
+.contract-form-container{ overscroll-behavior: contain; }
