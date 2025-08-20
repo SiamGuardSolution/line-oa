@@ -9,7 +9,7 @@ const INITIAL = {
   facebook: "",
   address: "",
   serviceType: "",
-  servicePackage: "",        // 'spray' | 'bait' | 'mix'
+  servicePackage: "",        // '3993' | '5500' | '8500'
   startDate: "",
   endDate: "",
   serviceDate1: "",
@@ -44,38 +44,38 @@ const addMonths = (dateStr, n) => {
 
 export default function ContractForm() {
   const [formData, setFormData] = useState(INITIAL);
-  const [pkg, setPkg] = useState("");         // 'spray' | 'bait' | 'mix' | ""
+  const [pkg, setPkg] = useState("");         // '3993' | '5500' | '8500' | ""
   const [submitting, setSubmitting] = useState(false);
 
   /* ---------- sync & compute ---------- */
   function handlePackageChange(e) {
-    const v = e.target.value; // 'spray' | 'bait' | 'mix'
+    const v = e.target.value; // '3993' | '5500' | '8500'
     setPkg(v);
     setFormData((prev) => {
       const next = { ...prev, servicePackage: v };
 
       // คำนวณวันที่ตามแพ็กเกจ ถ้ามี startDate แล้ว
       if (prev.startDate) {
-        if (v === "spray" || v === "mix") {
+        if (v === "3993" || v === "8500") {
           const s1 = addMonths(prev.startDate, 4);
           const s2 = addMonths(s1, 4);
           const end = addMonths(prev.startDate, 12);
           next.serviceDate1 = s1;
           next.serviceDate2 = s2;
           next.endDate = end;
-        } else if (v === "bait") {
-          // bait: ไม่ใช้ serviceDate1/2 ในฟอร์ม, end = start + 3 เดือน (เป็นข้อมูลอ้างอิง)
+        } else if (v === "5500") {
+          // 5500: ไม่ใช้ serviceDate1/2 ในฟอร์ม, end = start + 3 เดือน (เป็นข้อมูลอ้างอิง)
           next.serviceDate1 = "";
           next.serviceDate2 = "";
           next.endDate = addMonths(prev.startDate, 3);
         }
       } else {
         // ล้างช่องวันที่ให้สะอาดเมื่อยังไม่เลือก startDate
-        if (v === "spray" || v === "mix") {
+        if (v === "3993" || v === "8500") {
           next.serviceDate1 = "";
           next.serviceDate2 = "";
           next.endDate = "";
-        } else if (v === "bait") {
+        } else if (v === "5500") {
           next.serviceDate1 = "";
           next.serviceDate2 = "";
           next.endDate = "";
@@ -89,14 +89,14 @@ export default function ContractForm() {
     const value = e.target.value;
     setFormData((prev) => {
       const next = { ...prev, startDate: value };
-      if (pkg === "spray" || pkg === "mix") {
+      if (pkg === "3993" || pkg === "8500") {
         const s1 = addMonths(value, 4);
         const s2 = addMonths(s1, 4);
         const end = addMonths(value, 12);
         next.serviceDate1 = s1;
         next.serviceDate2 = s2;
         next.endDate = end;
-      } else if (pkg === "bait") {
+      } else if (pkg === "5500") {
         next.serviceDate1 = "";
         next.serviceDate2 = "";
         next.endDate = addMonths(value, 3); // อ้างอิงสิ้นสุด 3 เดือน
@@ -213,9 +213,9 @@ export default function ContractForm() {
         <label>แพ็กเกจ</label>
         <select value={pkg} onChange={handlePackageChange} required>
           <option value="" disabled>— เลือกแพ็กเกจ —</option>
-          <option value="spray">อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี</option>
-          <option value="bait">วางเหยื่อ 5,500 บาท</option>
-          <option value="mix">ผสมผสาน 8,500 บาท/ปี</option>
+          <option value="3993">อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี</option>
+          <option value="5500">วางเหยื่อ 5,500 บาท</option>
+          <option value="8500">ผสมผสาน 8,500 บาท/ปี</option>
         </select>
 
         {/* วันเริ่มสัญญา */}
@@ -229,8 +229,8 @@ export default function ContractForm() {
           required
         />
 
-        {/* เฉพาะ spray & mix: แสดงรอบบริการ 1/2 + สิ้นสุด */}
-        {(pkg === "spray" || pkg === "mix") && (
+        {/* เฉพาะ 3993 & 8500: แสดงรอบบริการ 1/2 + สิ้นสุด */}
+        {(pkg === "3993" || pkg === "8500") && (
           <>
             <label htmlFor="serviceDate1">รอบบริการครั้งที่ 1 (+4 เดือน)</label>
             <input
@@ -261,8 +261,8 @@ export default function ContractForm() {
           </>
         )}
 
-        {/* เฉพาะ bait & mix: ให้ระบุ “วันล่าสุด” เผื่อคำนวณรอบวางเหยื่อในระบบ */}
-        {(pkg === "bait" || pkg === "mix") && (
+        {/* เฉพาะ 5500 & 8500: ให้ระบุ “วันล่าสุด” เผื่อคำนวณรอบวางเหยื่อในระบบ */}
+        {(pkg === "5500" || pkg === "8500") && (
           <>
             <label htmlFor="lastServiceDate">
               วันล่าสุด (ใช้คำนวณรอบวางเหยื่อ)
@@ -275,12 +275,12 @@ export default function ContractForm() {
               onChange={handleChange}
             />
 
-            {/* สิ้นสุดสัญญาอ้างอิงสำหรับ bait: +3 เดือนจากวันเริ่ม */}
-            {pkg === "bait" && (
+            {/* สิ้นสุดสัญญาอ้างอิงสำหรับ 5500: +3 เดือนจากวันเริ่ม */}
+            {pkg === "5500" && (
               <>
-                <label htmlFor="endDateBait">วันที่สิ้นสุดสัญญา (ประมาณ +3 เดือน)</label>
+                <label htmlFor="endDate5500">วันที่สิ้นสุดสัญญา (ประมาณ +3 เดือน)</label>
                 <input
-                  id="endDateBait"
+                  id="endDate5500"
                   type="date"
                   name="endDate"
                   value={formData.endDate}

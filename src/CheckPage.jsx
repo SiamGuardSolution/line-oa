@@ -2,10 +2,18 @@
 import React, { useMemo, useState } from "react";
 import "./CheckPage.css";
 
-const API_BASE =
-  process.env.REACT_APP_API_BASE ||
-  "https://siamguards-proxy.phet67249.workers.dev";
-const api = (p) => `${API_BASE ? API_BASE : ""}${p}`;
+// ==== API endpoints (ลอง same-origin ก่อน ถ้าไม่สำเร็จค่อย fallback ไป workers.dev) ====
+const API_BASES = [
+  "", // same-origin → /api/*
+  (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "")
+];
+
+function buildCheckUrls(digits) {
+  const v = Date.now();
+  return API_BASES.map(
+    base => `${base}/api/check-contract?phone=${encodeURIComponent(digits)}&v=${v}`
+  );
+}
 
 // ===== Helpers =====
 const pkgLabel = (val) => {
@@ -88,33 +96,37 @@ export default function CheckPage() {
       setError("กรุณากรอกเบอร์โทรอย่างน้อย 9 หลัก");
       return;
     }
+
     setLoading(true);
-    setContracts([]); // เคลียร์ผลก่อนหน้า
+    setContracts([]);
 
     try {
-      const url = api(`/api/check-contract?phone=${encodeURIComponent(digits)}&v=${Date.now()}`);
-      const res = await fetch(url, {
-        headers: { Accept: "application/json", "Cache-Control": "no-store" },
-      });
-      const ct = res.headers.get("content-type") || "";
+      const urls = buildCheckUrls(digits);
+      let data = null, lastErr = null;
 
-      let data;
-      if (ct.includes("application/json")) {
-        data = await res.json();
-      } else {
-        const raw = await res.text();
-        console.error("[CHECK] Non-JSON response", res.status, ct, raw.slice(0, 400));
-        setError("เซิร์ฟเวอร์ตอบกลับไม่ใช่ JSON กรุณาลองใหม่");
-        setLoading(false);
-        return;
+      for (const url of urls) {
+        try {
+          console.log("[CHECK] try:", url);
+          const res = await fetch(url, {
+            cache: "no-store",
+            headers: { Accept: "application/json" },
+          });
+
+          const ct = res.headers.get("content-type") || "";
+          if (!ct.includes("application/json")) throw new Error(`BAD_CONTENT_TYPE:${ct}`);
+
+          const body = await res.json();
+          if (!res.ok) throw new Error(`HTTP_${res.status}`);
+
+          data = body; // สำเร็จ ออกจากลูป
+          break;
+        } catch (err) {
+          console.warn("[CHECK] endpoint failed, fallback next →", err);
+          lastErr = err;
+        }
       }
 
-      if (!res.ok) {
-        console.error("[CHECK] HTTP error", res.status, data);
-        setError("ดึงข้อมูลไม่สำเร็จ กรุณาลองใหม่");
-        setLoading(false);
-        return;
-      }
+      if (!data) throw lastErr || new Error("FETCH_FAILED");
 
       if (Array.isArray(data.contracts) && data.contracts.length) {
         setContracts(data.contracts);
@@ -133,6 +145,7 @@ export default function CheckPage() {
       setLoading(false);
     }
   };
+
 
   // กำหนดการตามแพ็กเกจ (รองรับ 3993 / 5500 / 8500)
   const schedule = useMemo(() => {
