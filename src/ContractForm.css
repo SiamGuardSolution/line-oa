@@ -1,55 +1,56 @@
-/* ContractForm.css — Mobile-first, thumb-friendly */
+/* ContractForm.css — Mobile-first / Pro look */
 
-/* ========== Tokens ========== */
+/* ========== Design tokens ========== */
 :root{
-  --bg:#f6f8fb;
+  --bg:#f7f8fb;
   --card:#ffffff;
-  --border:#e6e9ef;
+  --border:#e7eaf2;
   --text:#0f172a;
-  --muted:#64748b;
+  --muted:#6b7280;
+  --ring:#99b8ff;
   --primary:#2563eb;
-  --primary-contrast:#ffffff;
+  --primary-700:#1e4fd6;
+  --success:#10b981;
+  --danger:#ef4444;
+
   --radius:16px;
-  --shadow:0 6px 20px rgba(2,6,23,.06);
+  --radius-sm:12px;
+  --shadow:0 10px 30px rgba(15, 23, 42, .08);
+  --shadow-sm:0 6px 18px rgba(15,23,42,.06);
 }
 
-/* ให้ iOS ไม่ซูมอัตโนมัติ และ font อ่านง่ายบนมือถือ */
 html, body { height: 100%; }
 *{ box-sizing:border-box; }
 body{
   margin:0;
-  background:var(--bg);
   color:var(--text);
+  background:var(--bg);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto,
+               "Noto Sans Thai", "Noto Sans", sans-serif;
   -webkit-text-size-adjust:100%;
-  font-family: system-ui,-apple-system,Segoe UI,Roboto,Inter,"Noto Sans Thai",sans-serif;
-  line-height:1.45;
-}
-
-/* ========== Layout container ========== */
-.contract-form-container{
-  width:100%;
-  max-width:720px;                 /* มือถือ = เต็มจอ / tablet, desktop = ไม่กว้างเกินไป */
-  margin: clamp(8px, 2.5vw, 24px) auto;
-  padding: 0 12px;
-  padding-bottom: 80px;            /* กันชนให้ปุ่ม sticky ไม่ทับคอนเทนต์ */
-}
-@supports (padding: max(0px)) {
-  .contract-form-container{
-    padding-bottom: max(80px, env(safe-area-inset-bottom)); /* iPhone safe area */
-  }
-}
-
-.contract-form-container h2{
-  margin: 12px 0 16px;
-  font-size: clamp(18px, 4.5vw, 22px);
+  line-height:1.5;
   letter-spacing:.2px;
 }
 
-/* ========== Form grid ========== */
-.contract-form{
-  display: grid;
-  gap: 12px;
+/* ========== Container ========== */
+.contract-form-container{
+  width:100%;
+  max-width:720px;
+  margin: clamp(12px, 3vw, 28px) auto;
+  padding: 0 14px;
+  padding-bottom: 88px; /* room for sticky submit */
 }
+@supports (padding: max(0px)){
+  .contract-form-container{ padding-bottom:max(88px, env(safe-area-inset-bottom)); }
+}
+.contract-form-container h2{
+  margin: 6px 0 18px;
+  font-weight: 700;
+  font-size: clamp(20px, 5.2vw, 26px);
+}
+
+/* ========== Grid ========== */
+.contract-form{ display:grid; gap:14px; }
 
 /* ========== Card ========== */
 .card{
@@ -57,144 +58,130 @@ body{
   border:1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 14px;
+  padding:16px;
 }
 .card h3{
-  margin: 0 0 10px;
-  font-size: 16px;
+  margin:0 0 12px;
+  font-size:16px;
+  font-weight:700;
 }
 .helper{
-  margin: -2px 0 8px;
-  color: var(--muted);
-  font-size: 12px;
+  margin:-4px 0 10px;
+  color:var(--muted);
+  font-size:12px;
 }
 
-/* ========== Controls ========== */
-.form-group{
-  display: grid;
-  gap: 6px;
-  margin-bottom: 10px;
-}
+/* ========== Fields ========== */
+.form-group{ display:grid; gap:8px; margin-bottom:12px; }
 label{
-  font-size: 13px;
+  font-size:13px;
   color: var(--muted);
+  font-weight:600;
 }
 
-/* ทำ tap-target ให้ใหญ่และกัน iOS zoom (>=16px) */
+/* Inputs */
 input[type="text"],
 input[type="tel"],
 input[type="date"],
 select,
 textarea{
-  width: 100%;
-  padding: 13px 14px;                 /* นิ้วโป้งสบาย ๆ */
-  font-size: 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  color: var(--text);
-  background: #fff;
+  width:100%;
+  padding:14px 14px;
+  font-size:16px;                /* no iOS zoom */
+  border:1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background:#fff;
+  color:var(--text);
+  min-height:48px;
   outline: none;
-  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
-  min-height: 48px;                   /* tap target ที่ดีบนมือถือ */
+  transition: box-shadow .18s ease, border-color .18s ease, background .18s ease;
   -webkit-tap-highlight-color: transparent;
+  font-feature-settings: "tnum" 1, "lnum" 1; /* ตัวเลขคมกริบ */
 }
-textarea{
-  min-height: 96px;
-  resize: vertical;
+textarea{ min-height:110px; resize:vertical; }
+
+input::placeholder,
+textarea::placeholder{ color:#9aa3b2; }
+
+/* Focus ring มืออาชีพ */
+input:focus, select:focus, textarea:focus{
+  border-color: var(--ring);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, .12);
 }
 
-/* โฟกัสชัดเจน (WCAG friendly) */
-input:focus,
-select:focus,
-textarea:focus{
-  border-color: #a9c3ff;
-  box-shadow: 0 0 0 4px rgba(37,99,235,.10);
-}
-
-/* ลูกศรของ select ให้แตะง่ายขึ้นบนมือถือ */
+/* Select chevron */
 select{
-  appearance: none;
+  appearance:none;
   background-image:
-    linear-gradient(45deg, transparent 50%, #94a3b8 50%),
-    linear-gradient(135deg, #94a3b8 50%, transparent 50%);
+    linear-gradient(45deg, transparent 50%, #9aa3b2 50%),
+    linear-gradient(135deg, #9aa3b2 50%, transparent 50%);
   background-position:
-    calc(100% - 18px) calc(50% - 2px),
-    calc(100% - 12px) calc(50% - 2px);
+    calc(100% - 20px) calc(50% - 2px),
+    calc(100% - 14px) calc(50% - 2px);
   background-size: 6px 6px, 6px 6px;
-  background-repeat: no-repeat;
-  padding-right: 36px;
+  background-repeat:no-repeat;
+  padding-right:40px;
 }
 
-/* ขยายพื้นที่แตะปุ่ม calendar บน iOS/Chrome */
-input[type="date"]::-webkit-calendar-picker-indicator{
-  padding: 8px;
+/* Date picker tap-target ใหญ่ขึ้น */
+input[type="date"]::-webkit-calendar-picker-indicator{ padding:8px; }
+
+/* States (ถ้า JS ใส่คลาสให้) */
+.is-error{ border-color:var(--danger) !important; }
+.is-error:focus{ box-shadow:0 0 0 4px rgba(239,68,68,.15) !important; }
+.is-success{ border-color:var(--success) !important; }
+.is-success:focus{ box-shadow:0 0 0 4px rgba(16,185,129,.15) !important; }
+
+/* Readonly/Disabled look */
+input[readonly], input:disabled, select:disabled, textarea:disabled{
+  background:#fafafa; color:#475569;
 }
 
-/* ========== Two-column (tablet up) ========== */
-@media (min-width: 768px){
-  .card.grid-2{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px 12px;
-  }
+/* ========== 2 columns (tablet up) ========== */
+@media (min-width:768px){
+  .card.grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
   .grid-span-2{ grid-column: span 2; }
 }
-.row{ display:grid; gap:8px; }
-@media (min-width: 768px){
-  .row.cols-2{ grid-template-columns: 1fr 1fr; }
-}
+.row{ display:grid; gap:10px; }
+@media (min-width:768px){ .row.cols-2{ grid-template-columns:1fr 1fr; } }
 
-/* ========== Sticky Submit Bar ========== */
+/* ========== Sticky submit bar ========== */
 .form-actions{
   position: sticky;
   bottom: 10px;
-  z-index: 20;
+  z-index: 50;
   margin-top: 8px;
 }
 .form-actions .bar{
-  background: var(--card);
+  display:flex; gap:10px;
+  background:var(--card);
   border:1px solid var(--border);
   border-radius: 18px;
-  box-shadow: var(--shadow);
-  padding: 8px;
-  display:flex;
-  gap:8px;
+  box-shadow: var(--shadow-sm);
+  padding:10px;
 }
 button[type="submit"]{
   flex:1;
   border:0;
-  border-radius: 12px;
-  background: var(--primary);
-  color: var(--primary-contrast);
-  font-size: 16px;
-  font-weight: 700;
-  padding: 14px 16px;
-  cursor: pointer;
-  min-height: 48px;
-  transition: transform .05s ease, filter .15s ease, background .2s ease;
+  border-radius:12px;
+  min-height:50px;
+  font-size:16px;
+  font-weight:700;
+  color:#fff;
+  background: linear-gradient(180deg, var(--primary) 0%, var(--primary-700) 100%);
+  box-shadow: 0 6px 14px rgba(37, 99, 235, .25);
+  cursor:pointer;
+  transition: transform .06s ease, filter .18s ease, box-shadow .18s ease;
+}
+@media (hover:hover){
+  button[type="submit"]:hover{ filter:brightness(1.03); box-shadow:0 10px 22px rgba(37,99,235,.28); }
 }
 button[type="submit"]:active{ transform: translateY(1px); }
-button[disabled]{ opacity:.6; cursor: not-allowed; }
+button[disabled]{ opacity:.65; cursor:not-allowed; box-shadow:none; }
 
-@supports (padding: max(0px)) {
-  .form-actions { margin-bottom: env(safe-area-inset-bottom); }
-}
+/* ========== Small utilities ========== */
+.card > .form-group:last-child{ margin-bottom:0; }
+.note{ font-size:12px; color:var(--muted); }
 
-/* ========== Micro utilities ========== */
-/* ลดช่องว่างท้ายการ์ด */
-.card > .form-group:last-child { margin-bottom: 0; }
-
-/* ข้อความอธิบายเล็ก ๆ ใต้ช่อง */
-.note{
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* ลดแสงเมื่อ disabled/readOnly */
-input[readonly], input:disabled, select:disabled, textarea:disabled{
-  background:#fafafa;
-  color:#475569;
-}
-
-/* ลด bounce เวลาเลื่อนใน iOS */
+/* ลด bounce ใน iOS */
 .contract-form-container{ overscroll-behavior: contain; }
