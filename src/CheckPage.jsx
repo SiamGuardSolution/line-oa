@@ -72,6 +72,19 @@ const addMonths = (dateStr, n) => {
 };
 const isValidDateStr = (s) => !!s && !isNaN(new Date(s));
 
+// --- helpers for schedule groups ---
+const makeBaitItems = (base, count = 6, stepDays = 20) =>
+  Array.from({ length: count }).map((_, i) => ({
+    kind: "bait",
+    label: `ครั้งที่ ${i + 1}`,
+    date: addDays(base, stepDays * (i + 1)),
+  }));
+
+const makeSprayItems = (start, s1, s2) => [
+  { kind: "spray", label: "ครั้งที่ 1 (+4 เดือน)", date: s1 },
+  { kind: "spray", label: "ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 },
+];
+
 export default function CheckPage() {
   const [phoneInput, setPhoneInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -148,51 +161,65 @@ export default function CheckPage() {
 
 
   // กำหนดการตามแพ็กเกจ (รองรับ 3993 / 5500 / 8500)
-  const schedule = useMemo(() => {
+  const scheduleGroups = useMemo(() => {
     if (!contract) return [];
     const pkg = derivePkg(contract);
-    const start = isValidDateStr(contract.startDate) ? contract.startDate : "";
-    const last  = isValidDateStr(contract.lastServiceDate) ? contract.lastServiceDate : "";
-
-    // spray
-    const makeSpray = () => {
-      const s1 = contract.serviceDate1 || (start ? addMonths(start, 4) : "");
-      const s2 = contract.serviceDate2 || (s1 ? addMonths(s1, 4) : "");
-      const items = [];
-      if (s1) items.push({ label: "Service ครั้งที่ 1 (+4 เดือน)", date: s1 });
-      if (s2) items.push({ label: "Service ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 });
-      return items;
-    };
-
-    // bait (ทุก 20 วัน × 6, end +120 วัน (ยึด start ถ้ามี ไม่งั้น base))
-    const makeBait = () => {
-      const base = last || start;
-      if (!base) return [];
-      const slots = Array.from({ length: 6 }).map((_, i) => ({
-        label: `Service ครั้งที่ ${i + 1}`,
-        date: addDays(base, 20 * (i + 1)),
-      }));
-      const end = addDays(start || base, 120);
-      return [...slots, { label: "สิ้นสุดสัญญา (+120 วัน)", date: end, isEnd: true }];
-    };
+    const start = contract.startDate;
 
     if (pkg === "3993") {
-      const items = makeSpray();
-      const end = start ? addMonths(start, 12) : "";
-      return end ? [...items, { label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] : items;
+      // ฉีดพ่นอย่างเดียว
+      const s1 = contract.serviceDate1 || addMonths(start, 4);
+      const s2 = contract.serviceDate2 || addMonths(s1, 4);
+      const end = contract.endDate || addMonths(start, 12);
+      return [
+        {
+          title: "ฉีดพ่น (2 ครั้ง/ปี)",
+          kind: "spray",
+          items: makeSprayItems(start, s1, s2),
+        },
+        {
+          title: "สิ้นสุดสัญญา",
+          kind: "end",
+          items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }],
+        },
+      ];
     }
 
     if (pkg === "5500") {
-      return makeBait();
+      // วางเหยื่ออย่างเดียว
+      const base = contract.lastServiceDate || start;
+      const end = addMonths(start, 3);
+      return [
+        {
+          title: "วางเหยื่อ (ทุก 20 วัน 6 ครั้ง)",
+          kind: "bait",
+          items: makeBaitItems(base, 6, 20),
+        },
+        {
+          title: "สิ้นสุดสัญญา",
+          kind: "end",
+          items: [{ kind: "end", label: "สิ้นสุดสัญญา (3 เดือน)", date: end, isEnd: true }],
+        },
+      ];
     }
 
-    // 8500 (mix): รวม bait(20×6) + spray(2 ครั้ง), สิ้นสุด +1 ปี
-    const mixSpray = makeSpray();
-    const mixBait  = makeBait().filter(x => !x.isEnd); // ไม่เอา end +120 วันใน mix
-    const merged   = [...mixBait, ...mixSpray].sort((a,b)=> new Date(a.date) - new Date(b.date));
-    const endYear  = start ? addMonths(start, 12) : "";
-    return endYear ? [...merged, { label: "สิ้นสุดสัญญา (+1 ปี)", date: endYear, isEnd: true }] : merged;
+    // mix: เหยื่อ 6 ครั้ง + ฉีดพ่น 2 ครั้ง + สิ้นสุด 1 ปี
+    const base = contract.lastServiceDate || start;
+    const baitItems = makeBaitItems(base, 6, 20);
+
+    const s1 = contract.serviceDate1 || addMonths(start, 4);
+    const s2 = contract.serviceDate2 || addMonths(s1, 4);
+    const sprayItems = makeSprayItems(start, s1, s2);
+
+    const end = contract.endDate || addMonths(start, 12);
+
+    return [
+      { title: "วางเหยื่อ (ทุก 20 วัน 6 ครั้ง)", kind: "bait", items: baitItems },
+      { title: "ฉีดพ่น (2 ครั้ง/ปี)", kind: "spray", items: sprayItems },
+      { title: "สิ้นสุดสัญญา", kind: "end", items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] },
+    ];
   }, [contract]);
+
 
   // สถานะสัญญา (ตามกติกาแต่ละแพ็กเกจ)
   const status = useMemo(() => {
@@ -345,25 +372,35 @@ export default function CheckPage() {
               <h3 className="title">กำหนดการ</h3>
               <span className="pill">
                 {(() => {
-                  const p = derivePkg(contract);
-                  if (p === "5500") return "ทุก 20 วัน (6 ครั้ง)";
-                  if (p === "8500") return "ผสมผสาน: เหยื่อทุก 20 วัน + ฉีดพ่น 2 ครั้ง";
-                  return "2 ครั้ง / ปี";
+                  const pkg = derivePkg(contract);
+                  if (pkg === "5500") return "วางเหยื่อ: ทุก 20 วัน (6 ครั้ง)";
+                  if (pkg === "3993") return "ฉีดพ่น: 2 ครั้ง / ปี";
+                  return "ผสมผสาน: เหยื่อ 6 ครั้ง + ฉีดพ่น 2 ครั้ง";
                 })()}
               </span>
             </div>
 
-            <ol className="timeline">
-              {schedule.map((item, idx) => (
-                <li key={idx} className={item.isEnd ? "end" : ""}>
-                  <div className="dot" />
-                  <div className="meta">
-                    <div className="label">{item.label}</div>
-                    <div className="date">{item.date || "-"}</div>
-                  </div>
-                </li>
-              ))}
-            </ol>
+            {scheduleGroups.map((group, gi) => (
+              <div className="timeline-group" key={gi}>
+                <div className="group-title">
+                  <span className={`chip ${group.kind}`}>{group.title}</span>
+                </div>
+
+                <ol className="timeline">
+                  {group.items.map((item, idx) => (
+                    <li key={idx} className={item.isEnd ? "end" : ""}>
+                      <div className={`dot ${item.kind}`} />
+                      <div className="meta">
+                        <div className="label">
+                          {item.label}
+                        </div>
+                        <div className="date">{item.date || "-"}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ))}
           </section>
         </>
       )}

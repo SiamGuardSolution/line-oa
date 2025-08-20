@@ -199,3 +199,40 @@ body{ background:var(--bg); }
   font-size: 12px;
   margin: 18px 0 8px;
 }
+
+/* === Schedule groups (อ่านง่ายขึ้น) === */
+.timeline-group + .timeline-group{
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border, #e6e9ef);
+}
+
+.group-title{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #e6e9ef);
+  background: #fff;
+  color: #334155;
+}
+
+/* โทนสีแยกประเภทให้ดูออก */
+.chip.bait{   background:#fff7ed; border-color:#fed7aa; color:#9a3412; }
+.chip.spray{  background:#ecfeff; border-color:#a5f3fc; color:#0e7490; }
+.chip.end{    background:#f1f5f9; border-color:#e2e8f0; color:#334155; }
+
+/* จุด timeline แยกสีตามประเภท */
+.timeline .dot.bait{  background:#f97316; }  /* ส้ม */
+.timeline .dot.spray{ background:#06b6d4; }  /* ฟ้าอมเขียว */
+.timeline .dot.end{   background:#64748b; }  /* เทา */
