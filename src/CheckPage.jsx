@@ -1,3 +1,4 @@
+//CheckPage.jsx
 import React, { useMemo, useState } from "react";
 import "./CheckPage.css";
 
@@ -12,17 +13,15 @@ const pkgLabel = (val) =>
 
 // ตีความแพ็กเกจให้ robust จากหลายฟิลด์
 function derivePkg(c) {
-  const t = `${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
-    .toLowerCase();
-  if (
-    t.includes("เหยื่อ") ||
-    t.includes("5500") ||
-    t.includes("วางเหยื่อ") ||
-    t.includes("5,500") ||
-    t.includes("5500")
-  ) {
+  const raw = `${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
+    .toLowerCase()
+    .replace(/[,\s]/g, ""); // "5,500 บาท" -> "5500บาท"
+
+  // ถ้ามีคำหรือราคาเข้าข่าย "วางเหยื่อ" ให้เป็น 5500
+  if (raw.includes("เหยื่อ") || raw.includes("bait") || raw.includes("5500")) {
     return "5500";
   }
+  // นอกนั้นเป็นฉีดพ่น
   return "3993";
 }
 
@@ -128,47 +127,48 @@ export default function CheckPage() {
   };
 
   // กำหนดการตามแพ็กเกจ (ใช้ derivePkg เสมอ)
-  const schedule = useMemo(() => {
-    if (!contract) return [];
-    const pkg = derivePkg(contract);
-    const start = contract.startDate;
+const schedule = useMemo(() => {
+  if (!contract) return [];
+  const pkg = derivePkg(contract);
+  const start = contract.startDate;
 
-    if (pkg === "3993") {
-      const s1 = contract.serviceDate1 || addMonths(start, 4);
-      const s2 = contract.serviceDate2 || addMonths(s1, 4);
-      const end = contract.endDate || addMonths(start, 12);
-      return [
-        { label: "Service ครั้งที่ 1 (+4 เดือน)", date: s1 },
-        { label: "Service ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 },
-        { label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true },
-      ];
-    }
+  if (pkg === "3993") {
+    const s1 = contract.serviceDate1 || addMonths(start, 4);
+    const s2 = contract.serviceDate2 || addMonths(s1, 4);
+    const end = contract.endDate || addMonths(start, 12);
+    return [
+      { label: "Service ครั้งที่ 1 (+4 เดือน)", date: s1 },
+      { label: "Service ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 },
+      { label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true },
+    ];
+  }
 
-    // bait: 6 นัดทุก 15 วัน นับจาก lastServiceDate หรือ start, สิ้นสุด 3 เดือน
-    const base = contract.lastServiceDate || start;
-    const slots = Array.from({ length: 6 }).map((_, i) => ({
-      label: `Service ครั้งที่ ${i + 1}`,
-      date: addDays(base, 15 * (i + 1)),
-    }));
-    const end = addMonths(start, 3);
-    return [...slots, { label: "สิ้นสุดสัญญา (3 เดือน)", date: end, isEnd: true }];
-  }, [contract]);
+  // bait: 6 นัดทุก 20 วัน นับจาก lastServiceDate หรือ start, สิ้นสุด +120 วัน
+  const base = contract.lastServiceDate || start;
+  const slots = Array.from({ length: 6 }).map((_, i) => ({
+    label: `Service ครั้งที่ ${i + 1}`,
+    date: addDays(base, 20 * (i + 1)),
+  }));
+  const end = addDays(start || base, 120); // ยึด start ถ้ามี, ไม่งั้นอิง base
+  return [...slots, { label: "สิ้นสุดสัญญา (+120 วัน)", date: end, isEnd: true }];
+}, [contract]);
 
-  // สถานะสัญญา (ถ้า bait ให้คำนวณ end = start + 3 เดือน)
-  const status = useMemo(() => {
-    if (!contract) return null;
-    const pkg = derivePkg(contract);
-    const assumedEnd =
-      pkg === "5500" ? addMonths(contract.startDate, 3) : (contract.endDate || "");
-    if (!assumedEnd) return null;
-    const today = new Date();
-    const end = new Date(assumedEnd);
-    if (isNaN(end)) return null;
-    if (end < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
-      return { text: "หมดอายุ", tone: "danger" };
-    }
-    return { text: "ใช้งานอยู่", tone: "success" };
-  }, [contract]);
+  // สถานะสัญญา (ถ้า bait ให้สิ้นสุดที่ +120 วัน)
+const status = useMemo(() => {
+  if (!contract) return null;
+  const pkg = derivePkg(contract);
+  const assumedEnd =
+    pkg === "5500"
+      ? addDays(contract.startDate || contract.lastServiceDate, 120)
+      : (contract.endDate || "");
+  if (!assumedEnd) return null;
+
+  const today = new Date();
+  const end = new Date(assumedEnd);
+  if (isNaN(end)) return null;
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return end < todayMid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
+}, [contract]);
 
   return (
     <div className="check-container">
@@ -290,7 +290,7 @@ export default function CheckPage() {
             <div className="row between">
               <h3 className="title">กำหนดการ</h3>
               <span className="pill">
-                {derivePkg(contract) === "5500" ? "ทุก 15 วัน (6 ครั้ง)" : "2 ครั้ง / ปี"}
+                {derivePkg(contract) === "5500" ? "ทุก 20 วัน (6 ครั้ง)" : "2 ครั้ง / ปี"}
               </span>
             </div>
 
