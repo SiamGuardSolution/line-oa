@@ -1,20 +1,21 @@
-// ContractForm.jsx
-import React, { useState, useMemo } from "react";
+// src/ContractForm.jsx
+import React, { useState } from "react";
 import "./ContractForm.css";
 
+/* ================= helpers ================= */
 const INITIAL = {
   name: "",
-  phone: "",
+  phone: "",                 // เก็บเป็นตัวเลขล้วน 0–9
   facebook: "",
   address: "",
   serviceType: "",
-  servicePackage: "",      // เก็บ label/ข้อความเดิมจากผู้ใช้ (ถ้าต้องการ)
+  servicePackage: "",        // 'spray' | 'bait' | 'mix'
   startDate: "",
   endDate: "",
   serviceDate1: "",
   serviceDate2: "",
-  note: "",
-  lastServiceDate: ""      // สำหรับ bait/mix
+  lastServiceDate: "",       // สำหรับวางเหยื่อ/ผสมผสาน (ไว้อ้างอิงกำหนดการ)
+  note: ""
 };
 
 const normalizePhone = (val) => String(val || "").replace(/\D/g, "").slice(0, 10);
@@ -39,27 +40,72 @@ const addMonths = (dateStr, n) => {
   if (d.getDate() < day) d.setDate(0);
   return toYMD(d);
 };
-const addDays = (dateStr, n) => {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (isNaN(d)) return "";
-  d.setDate(d.getDate() + n);
-  return toYMD(d);
-};
-
-// แปะ label ตาม code
-const pkgLabel = (code) =>
-  code === "mix" ? "ผสมผสาน 8,500 บาท/ปี"
-  : code === "bait" ? "วางเหยื่อ 5,500 บาท"
-  : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
+/* =========================================== */
 
 export default function ContractForm() {
   const [formData, setFormData] = useState(INITIAL);
-  const [pkg, setPkg] = useState("spray");           // 'spray' | 'bait' | 'mix'
+  const [pkg, setPkg] = useState("");         // 'spray' | 'bait' | 'mix' | ""
   const [submitting, setSubmitting] = useState(false);
 
-  // auto-calc เมื่อเปลี่ยน startDate
-  const handleChange = (e) => {
+  /* ---------- sync & compute ---------- */
+  function handlePackageChange(e) {
+    const v = e.target.value; // 'spray' | 'bait' | 'mix'
+    setPkg(v);
+    setFormData((prev) => {
+      const next = { ...prev, servicePackage: v };
+
+      // คำนวณวันที่ตามแพ็กเกจ ถ้ามี startDate แล้ว
+      if (prev.startDate) {
+        if (v === "spray" || v === "mix") {
+          const s1 = addMonths(prev.startDate, 4);
+          const s2 = addMonths(s1, 4);
+          const end = addMonths(prev.startDate, 12);
+          next.serviceDate1 = s1;
+          next.serviceDate2 = s2;
+          next.endDate = end;
+        } else if (v === "bait") {
+          // bait: ไม่ใช้ serviceDate1/2 ในฟอร์ม, end = start + 3 เดือน (เป็นข้อมูลอ้างอิง)
+          next.serviceDate1 = "";
+          next.serviceDate2 = "";
+          next.endDate = addMonths(prev.startDate, 3);
+        }
+      } else {
+        // ล้างช่องวันที่ให้สะอาดเมื่อยังไม่เลือก startDate
+        if (v === "spray" || v === "mix") {
+          next.serviceDate1 = "";
+          next.serviceDate2 = "";
+          next.endDate = "";
+        } else if (v === "bait") {
+          next.serviceDate1 = "";
+          next.serviceDate2 = "";
+          next.endDate = "";
+        }
+      }
+      return next;
+    });
+  }
+
+  function handleStartDateChange(e) {
+    const value = e.target.value;
+    setFormData((prev) => {
+      const next = { ...prev, startDate: value };
+      if (pkg === "spray" || pkg === "mix") {
+        const s1 = addMonths(value, 4);
+        const s2 = addMonths(s1, 4);
+        const end = addMonths(value, 12);
+        next.serviceDate1 = s1;
+        next.serviceDate2 = s2;
+        next.endDate = end;
+      } else if (pkg === "bait") {
+        next.serviceDate1 = "";
+        next.serviceDate2 = "";
+        next.endDate = addMonths(value, 3); // อ้างอิงสิ้นสุด 3 เดือน
+      }
+      return next;
+    });
+  }
+
+  function handleChange(e) {
     if (!e?.target) return;
     const { name, value } = e.target;
 
@@ -69,45 +115,22 @@ export default function ContractForm() {
       return;
     }
 
-    if (name === "startDate") {
-      // คำนวณสำหรับ spray/mix
-      const s1 = addMonths(value, 4);
-      const s2 = addMonths(s1, 4);
-      const end = addMonths(value, 12);
-      setFormData((prev) => ({
-        ...prev,
-        startDate: value,
-        serviceDate1: s1,
-        serviceDate2: s2,
-        endDate: end
-      }));
-      return;
-    }
-
     setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  }
 
-  // สรุป preview ของ bait (ทุก 20 วัน × 6) สำหรับ mix/bait
-  const baitPreview = useMemo(() => {
-    const base = formData.lastServiceDate || formData.startDate;
-    if (!base) return [];
-    return Array.from({ length: 6 }).map((_, i) => addDays(base, 20 * (i + 1)));
-  }, [formData.lastServiceDate, formData.startDate]);
-
+  /* ---------- submit ---------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!pkg) {
+      alert("กรุณาเลือกแพ็กเกจ");
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = {
         ...formData,
-        // เก็บ code/label ให้ชัดเจน
-        servicePackageCode: pkg,                 // 'spray' | 'bait' | 'mix'
-        servicePackageLabel: pkgLabel(pkg),
-        package: pkg,                            // เผื่อฝั่ง GAS เดิมใช้ "package"
-        lastServiceDate: formData.lastServiceDate || "",
-
-        // เคส mix/spray: เรามี serviceDate1/2 + endDate (12 เดือน)
-        // เคส bait: ช่องพวกนี้อาจไม่ถูกใช้ที่ฝั่งอ่าน แต่เก็บไม่เสียหาย (เราจะ render ตาม pkg)
+        // เผื่อฝั่ง GAS เดิมใช้คีย์ "package"
+        package: formData.servicePackage
       };
 
       const res = await fetch("/api/submit-contract", {
@@ -127,6 +150,9 @@ export default function ContractForm() {
       }
 
       alert("ส่งข้อมูลสัญญาเรียบร้อยแล้ว!");
+      // รีเซ็ตฟอร์ม
+      setPkg("");
+      setFormData(INITIAL);
     } catch (err) {
       console.error("เกิดข้อผิดพลาด:", err);
       alert("ส่งข้อมูลไม่สำเร็จ");
@@ -135,9 +161,11 @@ export default function ContractForm() {
     }
   };
 
+  /* ---------- render ---------- */
   return (
     <div className="contract-form-container">
       <h2>ฟอร์มกรอกข้อมูลสัญญา</h2>
+
       <form className="contract-form" onSubmit={handleSubmit}>
         <input
           type="text"
@@ -183,23 +211,25 @@ export default function ContractForm() {
 
         {/* แพ็กเกจ */}
         <label>แพ็กเกจ</label>
-        <select value={pkg} onChange={(e) => setPkg(e.target.value)}>
+        <select value={pkg} onChange={handlePackageChange} required>
+          <option value="" disabled>— เลือกแพ็กเกจ —</option>
           <option value="spray">อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี</option>
           <option value="bait">วางเหยื่อ 5,500 บาท</option>
           <option value="mix">ผสมผสาน 8,500 บาท/ปี</option>
         </select>
 
-        {/* วันที่เริ่มสัญญา */}
+        {/* วันเริ่มสัญญา */}
         <label htmlFor="startDate">วันที่เริ่มสัญญา</label>
         <input
           id="startDate"
           type="date"
           name="startDate"
           value={formData.startDate}
-          onChange={handleChange}
+          onChange={handleStartDateChange}
+          required
         />
 
-        {/* ฟิลด์สำหรับ SPRAY และ MIX: แสดงรอบ 1/2 และสิ้นสุด +1 ปี */}
+        {/* เฉพาะ spray & mix: แสดงรอบบริการ 1/2 + สิ้นสุด */}
         {(pkg === "spray" || pkg === "mix") && (
           <>
             <label htmlFor="serviceDate1">รอบบริการครั้งที่ 1 (+4 เดือน)</label>
@@ -231,26 +261,33 @@ export default function ContractForm() {
           </>
         )}
 
-        {/* ฟิลด์สำหรับ BAIT และ MIX: วันล่าสุด + preview ทุก 20 วัน × 6 */}
+        {/* เฉพาะ bait & mix: ให้ระบุ “วันล่าสุด” เผื่อคำนวณรอบวางเหยื่อในระบบ */}
         {(pkg === "bait" || pkg === "mix") && (
           <>
-            <label>วันล่าสุด (ใช้คำนวณรอบบริการสำหรับวางเหยื่อ)</label>
+            <label htmlFor="lastServiceDate">
+              วันล่าสุด (ใช้คำนวณรอบวางเหยื่อ)
+            </label>
             <input
+              id="lastServiceDate"
               type="date"
               name="lastServiceDate"
               value={formData.lastServiceDate}
               onChange={handleChange}
             />
-            <div className="hint">
-              รอบบริการวางเหยื่อ: ทุก 20 วัน จำนวน 6 ครั้ง
-              {baitPreview.length ? (
-                <ul style={{ marginTop: 6 }}>
-                  {baitPreview.map((d, i) => (
-                    <li key={i}>ครั้งที่ {i + 1}: {d}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
+
+            {/* สิ้นสุดสัญญาอ้างอิงสำหรับ bait: +3 เดือนจากวันเริ่ม */}
+            {pkg === "bait" && (
+              <>
+                <label htmlFor="endDateBait">วันที่สิ้นสุดสัญญา (ประมาณ +3 เดือน)</label>
+                <input
+                  id="endDateBait"
+                  type="date"
+                  name="endDate"
+                  value={formData.endDate}
+                  readOnly
+                />
+              </>
+            )}
           </>
         )}
 
