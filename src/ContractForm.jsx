@@ -69,7 +69,7 @@ export default function ContractForm() {
     } else {
       // bait
       const base = lastServiceDate || startDate;
-      const next = addDays(base, 15);
+      const next = addDays(base, 20);
       const end = startDate ? addMonths(startDate, 3) : "";
       setFormData((prev) => ({
         ...prev,
@@ -332,7 +332,7 @@ export default function ContractForm() {
         {pkg === "5500" && (
           <>
             <div className="form-group">
-              <label>รอบบริการครั้งถัดไป (+15 วัน)</label>
+              <label>รอบบริการครั้งถัดไป (+20 วัน)</label>
               <input
                 id="serviceDate1"
                 type="date"
