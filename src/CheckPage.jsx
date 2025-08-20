@@ -1,4 +1,4 @@
-//CheckPage.jsx
+// CheckPage.jsx
 import React, { useMemo, useState } from "react";
 import "./CheckPage.css";
 
@@ -8,21 +8,28 @@ const API_BASE =
 const api = (p) => `${API_BASE ? API_BASE : ""}${p}`;
 
 // ===== Helpers =====
-const pkgLabel = (val) =>
-  val === "5500" ? "วางเหยื่อ 5,500 บาท" : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
+const pkgLabel = (val) => {
+  const v = String(val || "").toLowerCase();
+  if (v.includes("8500") || v.includes("ผสม") || v.includes("mix") || v.includes("combo")) {
+    return "ผสมผสาน 8,500 บาท/ปี";
+  }
+  if (v.includes("5500") || v.includes("เหยื่อ") || v.includes("bait")) {
+    return "วางเหยื่อ 5,500 บาท";
+  }
+  return "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
+};
 
-// ตีความแพ็กเกจให้ robust จากหลายฟิลด์
 function derivePkg(c) {
   const raw = `${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
     .toLowerCase()
-    .replace(/[,\s]/g, ""); // "5,500 บาท" -> "5500บาท"
-
-  // ถ้ามีคำหรือราคาเข้าข่าย "วางเหยื่อ" ให้เป็น 5500
-  if (raw.includes("เหยื่อ") || raw.includes("bait") || raw.includes("5500")) {
-    return "5500";
+    .replace(/[,\s]/g, "");
+  if (raw.includes("8500") || raw.includes("ผสม") || raw.includes("mix") || raw.includes("combo")) {
+    return "8500"; // mix
   }
-  // นอกนั้นเป็นฉีดพ่น
-  return "3993";
+  if (raw.includes("เหยื่อ") || raw.includes("bait") || raw.includes("5500")) {
+    return "5500"; // bait
+  }
+  return "3993";   // spray
 }
 
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
@@ -55,6 +62,7 @@ const addMonths = (dateStr, n) => {
   if (d.getDate() < day) d.setDate(0);
   return toYMD(d);
 };
+const isValidDateStr = (s) => !!s && !isNaN(new Date(s));
 
 export default function CheckPage() {
   const [phoneInput, setPhoneInput] = useState("");
@@ -85,9 +93,9 @@ export default function CheckPage() {
 
     try {
       const url = api(`/api/check-contract?phone=${encodeURIComponent(digits)}&v=${Date.now()}`);
-      console.log("[CHECK] url:", url);
-
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      const res = await fetch(url, {
+        headers: { Accept: "application/json", "Cache-Control": "no-store" },
+      });
       const ct = res.headers.get("content-type") || "";
 
       let data;
@@ -126,49 +134,74 @@ export default function CheckPage() {
     }
   };
 
-  // กำหนดการตามแพ็กเกจ (ใช้ derivePkg เสมอ)
-const schedule = useMemo(() => {
-  if (!contract) return [];
-  const pkg = derivePkg(contract);
-  const start = contract.startDate;
+  // กำหนดการตามแพ็กเกจ (รองรับ 3993 / 5500 / 8500)
+  const schedule = useMemo(() => {
+    if (!contract) return [];
+    const pkg = derivePkg(contract);
+    const start = isValidDateStr(contract.startDate) ? contract.startDate : "";
+    const last  = isValidDateStr(contract.lastServiceDate) ? contract.lastServiceDate : "";
 
-  if (pkg === "3993") {
-    const s1 = contract.serviceDate1 || addMonths(start, 4);
-    const s2 = contract.serviceDate2 || addMonths(s1, 4);
-    const end = contract.endDate || addMonths(start, 12);
-    return [
-      { label: "Service ครั้งที่ 1 (+4 เดือน)", date: s1 },
-      { label: "Service ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 },
-      { label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true },
-    ];
-  }
+    // spray
+    const makeSpray = () => {
+      const s1 = contract.serviceDate1 || (start ? addMonths(start, 4) : "");
+      const s2 = contract.serviceDate2 || (s1 ? addMonths(s1, 4) : "");
+      const items = [];
+      if (s1) items.push({ label: "Service ครั้งที่ 1 (+4 เดือน)", date: s1 });
+      if (s2) items.push({ label: "Service ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 });
+      return items;
+    };
 
-  // bait: 6 นัดทุก 20 วัน นับจาก lastServiceDate หรือ start, สิ้นสุด +120 วัน
-  const base = contract.lastServiceDate || start;
-  const slots = Array.from({ length: 6 }).map((_, i) => ({
-    label: `Service ครั้งที่ ${i + 1}`,
-    date: addDays(base, 20 * (i + 1)),
-  }));
-  const end = addDays(start || base, 120); // ยึด start ถ้ามี, ไม่งั้นอิง base
-  return [...slots, { label: "สิ้นสุดสัญญา (+120 วัน)", date: end, isEnd: true }];
-}, [contract]);
+    // bait (ทุก 20 วัน × 6, end +120 วัน (ยึด start ถ้ามี ไม่งั้น base))
+    const makeBait = () => {
+      const base = last || start;
+      if (!base) return [];
+      const slots = Array.from({ length: 6 }).map((_, i) => ({
+        label: `Service ครั้งที่ ${i + 1}`,
+        date: addDays(base, 20 * (i + 1)),
+      }));
+      const end = addDays(start || base, 120);
+      return [...slots, { label: "สิ้นสุดสัญญา (+120 วัน)", date: end, isEnd: true }];
+    };
 
-  // สถานะสัญญา (ถ้า bait ให้สิ้นสุดที่ +120 วัน)
-const status = useMemo(() => {
-  if (!contract) return null;
-  const pkg = derivePkg(contract);
-  const assumedEnd =
-    pkg === "5500"
-      ? addDays(contract.startDate || contract.lastServiceDate, 120)
-      : (contract.endDate || "");
-  if (!assumedEnd) return null;
+    if (pkg === "3993") {
+      const items = makeSpray();
+      const end = start ? addMonths(start, 12) : "";
+      return end ? [...items, { label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] : items;
+    }
 
-  const today = new Date();
-  const end = new Date(assumedEnd);
-  if (isNaN(end)) return null;
-  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  return end < todayMid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
-}, [contract]);
+    if (pkg === "5500") {
+      return makeBait();
+    }
+
+    // 8500 (mix): รวม bait(20×6) + spray(2 ครั้ง), สิ้นสุด +1 ปี
+    const mixSpray = makeSpray();
+    const mixBait  = makeBait().filter(x => !x.isEnd); // ไม่เอา end +120 วันใน mix
+    const merged   = [...mixBait, ...mixSpray].sort((a,b)=> new Date(a.date) - new Date(b.date));
+    const endYear  = start ? addMonths(start, 12) : "";
+    return endYear ? [...merged, { label: "สิ้นสุดสัญญา (+1 ปี)", date: endYear, isEnd: true }] : merged;
+  }, [contract]);
+
+  // สถานะสัญญา (ตามกติกาแต่ละแพ็กเกจ)
+  const status = useMemo(() => {
+    if (!contract) return null;
+    const pkg = derivePkg(contract);
+    let assumedEnd = "";
+
+    if (pkg === "5500") {
+      const base = isValidDateStr(contract.startDate) ? contract.startDate : contract.lastServiceDate;
+      if (base) assumedEnd = addDays(base, 120);
+    } else {
+      // 3993 และ 8500 = สิ้นสุด +1 ปี (ใช้ start หรือ end เดิม)
+      assumedEnd = contract.endDate || (isValidDateStr(contract.startDate) ? addMonths(contract.startDate, 12) : "");
+    }
+    if (!assumedEnd) return null;
+
+    const end = new Date(assumedEnd);
+    if (isNaN(end)) return null;
+    const today = new Date();
+    const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return end < todayMid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
+  }, [contract]);
 
   return (
     <div className="check-container">
@@ -217,7 +250,9 @@ const status = useMemo(() => {
                   }}
                   title={c.servicePackageLabel || pkgLabel(p)}
                 >
-                  {(c.startDate || "ไม่ทราบวันเริ่ม")} · {p === "5500" ? "เหยื่อ" : "ฉีดพ่น"}
+                  {(c.startDate || "ไม่ทราบวันเริ่ม")} · {
+                    p === "5500" ? "เหยื่อ" : p === "8500" ? "ผสมผสาน" : "ฉีดพ่น"
+                  }
                 </button>
               );
             })}
@@ -264,9 +299,15 @@ const status = useMemo(() => {
               <div className="field">
                 <label>สิ้นสุดสัญญา</label>
                 <div className="value">
-                  {derivePkg(contract) === "5500"
-                    ? addMonths(contract.startDate, 3) || "-"
-                    : (contract.endDate || "-")}
+                  {(() => {
+                    const p = derivePkg(contract);
+                    if (p === "5500") {
+                      const base = contract.startDate || contract.lastServiceDate;
+                      return base ? addDays(base, 120) : "-";
+                    }
+                    // 3993 / 8500
+                    return contract.endDate || (contract.startDate ? addMonths(contract.startDate, 12) : "-");
+                  })()}
                 </div>
               </div>
 
@@ -290,7 +331,12 @@ const status = useMemo(() => {
             <div className="row between">
               <h3 className="title">กำหนดการ</h3>
               <span className="pill">
-                {derivePkg(contract) === "5500" ? "ทุก 20 วัน (6 ครั้ง)" : "2 ครั้ง / ปี"}
+                {(() => {
+                  const p = derivePkg(contract);
+                  if (p === "5500") return "ทุก 20 วัน (6 ครั้ง)";
+                  if (p === "8500") return "ผสมผสาน: เหยื่อทุก 20 วัน + ฉีดพ่น 2 ครั้ง";
+                  return "2 ครั้ง / ปี";
+                })()}
               </span>
             </div>
 
