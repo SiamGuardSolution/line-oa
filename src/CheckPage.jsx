@@ -188,7 +188,7 @@ export default function CheckPage() {
     if (pkg === "5500") {
       // วางเหยื่ออย่างเดียว
       const base = contract.lastServiceDate || start;
-      const end = addMonths(start, 3);
+      const end = addMonths(start, 12);
       return [
         {
           title: "วางเหยื่อ (ทุก 20 วัน 6 ครั้ง)",
@@ -198,7 +198,7 @@ export default function CheckPage() {
         {
           title: "สิ้นสุดสัญญา",
           kind: "end",
-          items: [{ kind: "end", label: "สิ้นสุดสัญญา (3 เดือน)", date: end, isEnd: true }],
+          items: [{ kind: "end", label: "สิ้นสุดสัญญา (1 ปี)", date: end, isEnd: true }],
         },
       ];
     }
