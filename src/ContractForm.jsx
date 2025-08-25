@@ -1,7 +1,9 @@
-import React, { useState } from "react";
-import "./ContractForm.css";
+// ContractForm.jsx — with auto schedule calculation
+import React, { useEffect, useState } from "react";
+import "./ContractForm.css"; // ถ้าไม่ได้ใช้ CSS นี้ ลบบรรทัดนี้ได้
 
-const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxvD66P9k2NxFOquKyYMvTXYf5xm-fhu36yZtEWARfyAZ4J7c1-SYMD6U4imW1f5hVC4A/exec"; // ใส่ของคุณ
+// ใส่ URL เว็บแอป Apps Script ของคุณ
+const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxvD66P9k2NxFOquKyYMvTXYf5xm-fhu36yZtEWARfyAZ4J7c1-SYMD6U4imW1f5hVC4A/exec";
 
 const PACKAGES = {
   spray: {
@@ -46,7 +48,76 @@ const emptyForm = {
   tech: "",
   note: "",
   status: "ใช้งานอยู่",
+
+  // service fields จะถูกเติมให้อัตโนมัติจาก useEffect
 };
+
+// ===== helpers สำหรับคำนวณวันที่ =====
+const pad2 = (n) => String(n).padStart(2, "0");
+const toISO = (d) => {
+  // คืนค่า yyyy-mm-dd (แก้ timezone offset ให้ไม่เพี้ยน)
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return `${local.getUTCFullYear()}-${pad2(local.getUTCMonth() + 1)}-${pad2(local.getUTCDate())}`;
+};
+const daysInMonth = (y, m0) => new Date(y, m0 + 1, 0).getDate();
+const addMonths = (d, m) => {
+  const y = d.getFullYear();
+  const m0 = d.getMonth() + m;
+  const ty = Math.floor(y + m0 / 12);
+  const tm = ((m0 % 12) + 12) % 12;
+  const last = daysInMonth(ty, tm);
+  const day = Math.min(d.getDate(), last);
+  return new Date(ty, tm, day);
+};
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const addYears = (d, n) => addMonths(d, n * 12);
+
+// คำนวณตารางบริการตามแพ็กเกจ
+function computeSchedule(pkg, startStr) {
+  if (!startStr) return {};
+  const start = new Date(startStr);
+  if (isNaN(start)) return {};
+
+  const out = {};
+  // วันสิ้นสุดสัญญา = +1 ปี
+  out.endDate = toISO(addYears(start, 1));
+
+  if (pkg === "spray") {
+    const s1 = addMonths(start, 4);
+    const s2 = addMonths(s1, 4);
+    out.service1 = toISO(s1);
+    out.service2 = toISO(s2);
+  } else if (pkg === "bait") {
+    const b1 = addDays(start, 20);
+    const b2 = addDays(b1, 20);
+    const b3 = addDays(b2, 20);
+    const b4 = addDays(b3, 20);
+    const b5 = addDays(b4, 20);
+    out.service1 = toISO(b1);
+    out.service2 = toISO(b2);
+    out.service3 = toISO(b3);
+    out.service4 = toISO(b4);
+    out.service5 = toISO(b5);
+  } else if (pkg === "mix") {
+    // Spray part
+    const s1 = addMonths(start, 4);
+    const s2 = addMonths(s1, 4);
+    out.serviceSpray1 = toISO(s1);
+    out.serviceSpray2 = toISO(s2);
+    // Bait part (เริ่มนับจาก start เช่นเดียวกับแพ็กเกจ Bait)
+    const b1 = addDays(start, 20);
+    const b2 = addDays(b1, 20);
+    const b3 = addDays(b2, 20);
+    const b4 = addDays(b3, 20);
+    const b5 = addDays(b4, 20);
+    out.serviceBait1 = toISO(b1);
+    out.serviceBait2 = toISO(b2);
+    out.serviceBait3 = toISO(b3);
+    out.serviceBait4 = toISO(b4);
+    out.serviceBait5 = toISO(b5);
+  }
+  return out;
+}
 
 export default function ContractForm() {
   const [form, setForm] = useState(emptyForm);
@@ -56,6 +127,13 @@ export default function ContractForm() {
   const pkgConf = PACKAGES[form.package];
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
   const phoneDigits = (s) => String(s || "").replace(/\D/g, "");
+
+  // === คำนวณอัตโนมัติเมื่อ startDate หรือ package เปลี่ยน ===
+  useEffect(() => {
+    if (!form.startDate) return;
+    const auto = computeSchedule(form.package, form.startDate);
+    if (Object.keys(auto).length) setForm((s) => ({ ...s, ...auto }));
+  }, [form.package, form.startDate]);
 
   const validate = () => {
     if (!form.name.trim()) return "กรุณากรอกชื่อลูกค้า";
@@ -84,13 +162,14 @@ export default function ContractForm() {
       note: form.note,
       status: form.status || "ใช้งานอยู่",
     };
+    // เติมช่อง service ให้ครบตามแพ็กเกจ
     pkgConf.fields.forEach(({ key }) => (payload[key] = form[key] || ""));
 
     try {
       setLoading(true);
       const res = await fetch(`${GAS_WEBAPP_URL}?path=submit`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "text/plain;charset=utf-8" }, // กัน CORS preflight
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
@@ -110,19 +189,15 @@ export default function ContractForm() {
   return (
     <div className="cf">
       <div className="cf__card">
-        <div className="cf__chip">บันทึกสัญญาลูกค้า</div>
-        <h2 className="cf__title">ฟอร์มสัญญา</h2>
-        <p className="cf__subtitle">กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ</p>
+        <div className="cf__chip">ฟอร์มสัญญา</div>
+        <h2 className="cf__title">บันทึกสัญญาลูกค้า</h2>
+        <p className="cf__subtitle">กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ ระบบจะคำนวณให้อัตโนมัติ</p>
 
         <form onSubmit={handleSubmit} className="cf__form">
-          {/* เลือกแพ็กเกจ */}
+          {/* แพ็กเกจ */}
           <div className="cf__field">
             <label className="cf__label">แพ็กเกจ</label>
-            <select
-              className="cf__select"
-              value={form.package}
-              onChange={(e) => setVal("package", e.target.value)}
-            >
+            <select className="cf__select" value={form.package} onChange={(e) => setVal("package", e.target.value)}>
               {Object.entries(PACKAGES).map(([k, v]) => (
                 <option key={k} value={k}>{v.label}</option>
               ))}
@@ -151,17 +226,18 @@ export default function ContractForm() {
               <label className="cf__label">ทีมที่รับผิดชอบ (เบอร์/รหัสทีม)</label>
               <input className="cf__input" value={form.tech} onChange={(e) => setVal("tech", e.target.value)} />
             </div>
+
             <div className="cf__field">
               <label className="cf__label">วันที่เริ่มสัญญา</label>
               <input type="date" className="cf__input" value={form.startDate} onChange={(e) => setVal("startDate", e.target.value)} />
             </div>
             <div className="cf__field">
-              <label className="cf__label">วันสิ้นสุดสัญญา</label>
+              <label className="cf__label">วันสิ้นสุดสัญญา (อัตโนมัติ +1 ปี)</label>
               <input type="date" className="cf__input" value={form.endDate} onChange={(e) => setVal("endDate", e.target.value)} />
             </div>
           </div>
 
-          {/* วันที่บริการ ตามแพ็กเกจ */}
+          {/* ตารางบริการ */}
           <fieldset className="cf__fieldset">
             <legend className="cf__legend">กำหนดการบริการ</legend>
             <div className="cf__services">
@@ -196,9 +272,7 @@ export default function ContractForm() {
             </button>
           </div>
 
-          {msg.text && (
-            <p className={`cf__msg ${msg.ok ? "cf__msg--ok" : "cf__msg--err"}`}>{msg.text}</p>
-          )}
+          {msg.text && <p className={`cf__msg ${msg.ok ? "cf__msg--ok" : "cf__msg--err"}`}>{msg.text}</p>}
         </form>
       </div>
     </div>
