@@ -174,13 +174,13 @@ export default function ContractForm() {
       });
       const json = await res.json().catch(() => ({}));
       if (json?.ok) {
-        setMsg({ text: "บันทึกสำเร็จ ✅", ok: true });
+        setMsg({ text: "บันทึกสำเร็จ", ok: true });
         setForm({ ...emptyForm, package: form.package });
       } else {
-        setMsg({ text: `บันทึกไม่สำเร็จ ❌ ${json?.error || ""}`, ok: false });
+        setMsg({ text: `บันทึกไม่สำเร็จ${json?.error || ""}`, ok: false });
       }
     } catch (err2) {
-      setMsg({ text: `บันทึกไม่สำเร็จ ❌ ${err2?.message || err2}`, ok: false });
+      setMsg({ text: `บันทึกไม่สำเร็จ${err2?.message || err2}`, ok: false });
     } finally {
       setLoading(false);
     }
@@ -211,7 +211,7 @@ export default function ContractForm() {
               <input className="cf__input" value={form.name} onChange={(e) => setVal("name", e.target.value)} />
             </div>
             <div className="cf__field">
-              <label className="cf__label">Facebook</label>
+              <label className="cf__label">Facebook/Line</label>
               <input className="cf__input" value={form.facebook} onChange={(e) => setVal("facebook", e.target.value)} />
             </div>
             <div className="cf__field" style={{ gridColumn: "1 / -1" }}>
