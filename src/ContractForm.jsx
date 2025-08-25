@@ -1,9 +1,10 @@
+//
 // ContractForm.jsx — with auto schedule calculation
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css"; // ถ้าไม่ได้ใช้ CSS นี้ ลบบรรทัดนี้ได้
 
 // ใส่ URL เว็บแอป Apps Script ของคุณ
-const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxvD66P9k2NxFOquKyYMvTXYf5xm-fhu36yZtEWARfyAZ4J7c1-SYMD6U4imW1f5hVC4A/exec";
+const API_URL = "/api/submit-contract";
 
 const PACKAGES = {
   spray: {
@@ -167,12 +168,14 @@ export default function ContractForm() {
 
     try {
       setLoading(true);
-      const res = await fetch(`${GAS_WEBAPP_URL}?path=submit`, {
+      const res = await fetch(API_URL, {
         method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" }, // กัน CORS preflight
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = await res.json().catch(() => ({}));
+      const text = await res.text();
+      let json;
+      try { json = JSON.parse(text); } catch { json = { ok:false, error:`NON_JSON: ${text.slice(0,200)}` }; }
       if (json?.ok) {
         setMsg({ text: "บันทึกสำเร็จ", ok: true });
         setForm({ ...emptyForm, package: form.package });
