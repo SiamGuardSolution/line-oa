@@ -1,310 +1,206 @@
-// src/ContractForm.jsx
 import React, { useState } from "react";
 import "./ContractForm.css";
 
-/* ================= helpers ================= */
-const INITIAL = {
+const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxvD66P9k2NxFOquKyYMvTXYf5xm-fhu36yZtEWARfyAZ4J7c1-SYMD6U4imW1f5hVC4A/exec"; // ใส่ของคุณ
+
+const PACKAGES = {
+  spray: {
+    label: "ฉีดพ่น (Spray)",
+    fields: [
+      { key: "service1", label: "Service รอบที่ 1" },
+      { key: "service2", label: "Service รอบที่ 2" },
+    ],
+  },
+  bait: {
+    label: "วางเหยื่อ (Bait)",
+    fields: [
+      { key: "service1", label: "Service รอบที่ 1" },
+      { key: "service2", label: "Service รอบที่ 2" },
+      { key: "service3", label: "Service รอบที่ 3" },
+      { key: "service4", label: "Service รอบที่ 4" },
+      { key: "service5", label: "Service รอบที่ 5" },
+    ],
+  },
+  mix: {
+    label: "ผสมผสาน (Mix)",
+    fields: [
+      { key: "serviceSpray1", label: "Service Spray รอบที่ 1" },
+      { key: "serviceSpray2", label: "Service Spray รอบที่ 2" },
+      { key: "serviceBait1", label: "Service Bait รอบที่ 1" },
+      { key: "serviceBait2", label: "Service Bait รอบที่ 2" },
+      { key: "serviceBait3", label: "Service Bait รอบที่ 3" },
+      { key: "serviceBait4", label: "Service Bait รอบที่ 4" },
+      { key: "serviceBait5", label: "Service Bait รอบที่ 5" },
+    ],
+  },
+};
+
+const emptyForm = {
+  package: "spray",
   name: "",
-  phone: "",                 // เก็บเป็นตัวเลขล้วน 0–9
-  facebook: "",
   address: "",
-  serviceType: "",
-  servicePackage: "",        // '3993' | '5500' | '8500'
+  facebook: "",
+  phone: "",
   startDate: "",
   endDate: "",
-  serviceDate1: "",
-  serviceDate2: "",
-  lastServiceDate: "",       // สำหรับวางเหยื่อ/ผสมผสาน (ไว้อ้างอิงกำหนดการ)
-  note: ""
+  tech: "",
+  note: "",
+  status: "ใช้งานอยู่",
 };
-
-const normalizePhone = (val) => String(val || "").replace(/\D/g, "").slice(0, 10);
-const formatThaiPhone = (digits) => {
-  if (!digits) return "";
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `${digits.slice(0,3)}-${digits.slice(3)}`;
-  return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
-};
-const toYMD = (d) => {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-};
-const addMonths = (dateStr, n) => {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (isNaN(d)) return "";
-  const day = d.getDate();
-  d.setMonth(d.getMonth() + n);
-  if (d.getDate() < day) d.setDate(0);
-  return toYMD(d);
-};
-/* =========================================== */
 
 export default function ContractForm() {
-  const [formData, setFormData] = useState(INITIAL);
-  const [pkg, setPkg] = useState("");         // '3993' | '5500' | '8500' | ""
-  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState({ text: "", ok: false });
 
-  /* ---------- sync & compute ---------- */
-  function handlePackageChange(e) {
-    const v = e.target.value; // '3993' | '5500' | '8500'
-    setPkg(v);
-    setFormData((prev) => {
-      const next = { ...prev, servicePackage: v };
+  const pkgConf = PACKAGES[form.package];
+  const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+  const phoneDigits = (s) => String(s || "").replace(/\D/g, "");
 
-      // คำนวณวันที่ตามแพ็กเกจ ถ้ามี startDate แล้ว
-      if (prev.startDate) {
-        if (v === "3993" || v === "8500") {
-          const s1 = addMonths(prev.startDate, 4);
-          const s2 = addMonths(s1, 4);
-          const end = addMonths(prev.startDate, 12);
-          next.serviceDate1 = s1;
-          next.serviceDate2 = s2;
-          next.endDate = end;
-        } else if (v === "5500") {
-          // 5500: ไม่ใช้ serviceDate1/2 ในฟอร์ม, end = start + 3 เดือน (เป็นข้อมูลอ้างอิง)
-          next.serviceDate1 = "";
-          next.serviceDate2 = "";
-          next.endDate = addMonths(prev.startDate, 3);
-        }
-      } else {
-        // ล้างช่องวันที่ให้สะอาดเมื่อยังไม่เลือก startDate
-        if (v === "3993" || v === "8500") {
-          next.serviceDate1 = "";
-          next.serviceDate2 = "";
-          next.endDate = "";
-        } else if (v === "5500") {
-          next.serviceDate1 = "";
-          next.serviceDate2 = "";
-          next.endDate = "";
-        }
-      }
-      return next;
-    });
-  }
+  const validate = () => {
+    if (!form.name.trim()) return "กรุณากรอกชื่อลูกค้า";
+    if (phoneDigits(form.phone).length < 9) return "กรุณากรอกเบอร์โทรให้ถูกต้อง";
+    if (!form.startDate) return "กรุณาเลือกวันที่เริ่มสัญญา";
+    if (!form.endDate) return "กรุณาเลือกวันสิ้นสุดสัญญา";
+    return "";
+  };
 
-  function handleStartDateChange(e) {
-    const value = e.target.value;
-    setFormData((prev) => {
-      const next = { ...prev, startDate: value };
-      if (pkg === "3993" || pkg === "8500") {
-        const s1 = addMonths(value, 4);
-        const s2 = addMonths(s1, 4);
-        const end = addMonths(value, 12);
-        next.serviceDate1 = s1;
-        next.serviceDate2 = s2;
-        next.endDate = end;
-      } else if (pkg === "5500") {
-        next.serviceDate1 = "";
-        next.serviceDate2 = "";
-        next.endDate = addMonths(value, 3); // อ้างอิงสิ้นสุด 3 เดือน
-      }
-      return next;
-    });
-  }
-
-  function handleChange(e) {
-    if (!e?.target) return;
-    const { name, value } = e.target;
-
-    if (name === "phone") {
-      const digits = normalizePhone(value);
-      setFormData((prev) => ({ ...prev, phone: digits }));
-      return;
-    }
-
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  }
-
-  /* ---------- submit ---------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!pkg) {
-      alert("กรุณาเลือกแพ็กเกจ");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const payload = {
-        ...formData,
-        // เผื่อฝั่ง GAS เดิมใช้คีย์ "package"
-        package: formData.servicePackage
-      };
+    setMsg({ text: "", ok: false });
 
-      const res = await fetch("/api/submit-contract", {
+    const err = validate();
+    if (err) return setMsg({ text: err, ok: false });
+
+    const payload = {
+      package: form.package,
+      name: form.name,
+      address: form.address,
+      facebook: form.facebook,
+      phone: phoneDigits(form.phone),
+      startDate: form.startDate,
+      endDate: form.endDate,
+      tech: form.tech,
+      note: form.note,
+      status: form.status || "ใช้งานอยู่",
+    };
+    pkgConf.fields.forEach(({ key }) => (payload[key] = form[key] || ""));
+
+    try {
+      setLoading(true);
+      const res = await fetch(`${GAS_WEBAPP_URL}?path=submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      const text = await res.text();
-
-      let data;
-      try { data = JSON.parse(text); } catch { /* not JSON */ }
-
-      if (!res.ok || data?.result !== "success") {
-        console.error("Server response:", text);
-        alert("ส่งข้อมูลไม่สำเร็จ: " + (data?.message || text || `HTTP ${res.status}`));
-        return;
+      const json = await res.json().catch(() => ({}));
+      if (json?.ok) {
+        setMsg({ text: "บันทึกสำเร็จ ✅", ok: true });
+        setForm({ ...emptyForm, package: form.package });
+      } else {
+        setMsg({ text: `บันทึกไม่สำเร็จ ❌ ${json?.error || ""}`, ok: false });
       }
-
-      alert("ส่งข้อมูลสัญญาเรียบร้อยแล้ว!");
-      // รีเซ็ตฟอร์ม
-      setPkg("");
-      setFormData(INITIAL);
-    } catch (err) {
-      console.error("เกิดข้อผิดพลาด:", err);
-      alert("ส่งข้อมูลไม่สำเร็จ");
+    } catch (err2) {
+      setMsg({ text: `บันทึกไม่สำเร็จ ❌ ${err2?.message || err2}`, ok: false });
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  /* ---------- render ---------- */
   return (
-    <div className="contract-form-container">
-      <h2>ฟอร์มกรอกข้อมูลสัญญา</h2>
+    <div className="cf">
+      <div className="cf__card">
+        <div className="cf__chip">บันทึกสัญญาลูกค้า</div>
+        <h2 className="cf__title">ฟอร์มสัญญา</h2>
+        <p className="cf__subtitle">กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ</p>
 
-      <form className="contract-form" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          name="name"
-          placeholder="ชื่อ-นามสกุล"
-          value={formData.name}
-          onChange={handleChange}
-          required
-        />
+        <form onSubmit={handleSubmit} className="cf__form">
+          {/* เลือกแพ็กเกจ */}
+          <div className="cf__field">
+            <label className="cf__label">แพ็กเกจ</label>
+            <select
+              className="cf__select"
+              value={form.package}
+              onChange={(e) => setVal("package", e.target.value)}
+            >
+              {Object.entries(PACKAGES).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+          </div>
 
-        <input
-          type="tel"
-          name="phone"
-          placeholder="เบอร์โทร (0xx-xxx-xxxx)"
-          value={formatThaiPhone(formData.phone)}
-          onChange={handleChange}
-          required
-        />
+          {/* ข้อมูลลูกค้า */}
+          <div className="cf__grid">
+            <div className="cf__field">
+              <label className="cf__label">ชื่อลูกค้า</label>
+              <input className="cf__input" value={form.name} onChange={(e) => setVal("name", e.target.value)} />
+            </div>
+            <div className="cf__field">
+              <label className="cf__label">Facebook</label>
+              <input className="cf__input" value={form.facebook} onChange={(e) => setVal("facebook", e.target.value)} />
+            </div>
+            <div className="cf__field" style={{ gridColumn: "1 / -1" }}>
+              <label className="cf__label">ที่อยู่</label>
+              <input className="cf__input" value={form.address} onChange={(e) => setVal("address", e.target.value)} />
+            </div>
+            <div className="cf__field">
+              <label className="cf__label">เบอร์โทร</label>
+              <input className="cf__input" value={form.phone} onChange={(e) => setVal("phone", e.target.value)} placeholder="0xx-xxx-xxxx" />
+            </div>
+            <div className="cf__field">
+              <label className="cf__label">ทีมที่รับผิดชอบ (เบอร์/รหัสทีม)</label>
+              <input className="cf__input" value={form.tech} onChange={(e) => setVal("tech", e.target.value)} />
+            </div>
+            <div className="cf__field">
+              <label className="cf__label">วันที่เริ่มสัญญา</label>
+              <input type="date" className="cf__input" value={form.startDate} onChange={(e) => setVal("startDate", e.target.value)} />
+            </div>
+            <div className="cf__field">
+              <label className="cf__label">วันสิ้นสุดสัญญา</label>
+              <input type="date" className="cf__input" value={form.endDate} onChange={(e) => setVal("endDate", e.target.value)} />
+            </div>
+          </div>
 
-        <input
-          type="text"
-          name="facebook"
-          placeholder="Facebook ลูกค้า"
-          value={formData.facebook}
-          onChange={handleChange}
-        />
+          {/* วันที่บริการ ตามแพ็กเกจ */}
+          <fieldset className="cf__fieldset">
+            <legend className="cf__legend">กำหนดการบริการ</legend>
+            <div className="cf__services">
+              {pkgConf.fields.map(({ key, label }) => (
+                <div className="cf__field" key={key}>
+                  <label className="cf__label">{label}</label>
+                  <input type="date" className="cf__input" value={form[key] || ""} onChange={(e) => setVal(key, e.target.value)} />
+                </div>
+              ))}
+            </div>
+          </fieldset>
 
-        <textarea
-          name="address"
-          placeholder="ที่อยู่ลูกค้า"
-          rows="3"
-          value={formData.address}
-          onChange={handleChange}
-        />
+          {/* หมายเหตุ + สถานะ */}
+          <div className="cf__field" style={{ marginTop: 12 }}>
+            <label className="cf__label">หมายเหตุ</label>
+            <textarea className="cf__textarea" value={form.note} onChange={(e) => setVal("note", e.target.value)} />
+          </div>
+          <div className="cf__field" style={{ marginTop: 8 }}>
+            <label className="cf__label">สถานะ</label>
+            <select className="cf__select" value={form.status} onChange={(e) => setVal("status", e.target.value)}>
+              <option>ใช้งานอยู่</option>
+              <option>หมดอายุ</option>
+            </select>
+          </div>
 
-        <input
-          type="text"
-          name="serviceType"
-          placeholder="ประเภทบริการ"
-          value={formData.serviceType}
-          onChange={handleChange}
-        />
+          <div className="cf__actions">
+            <button type="submit" className="cf__btn cf__btn--primary" disabled={loading}>
+              {loading ? "กำลังบันทึก..." : "บันทึกข้อมูลสัญญา"}
+            </button>
+            <button type="button" className="cf__btn cf__btn--ghost" onClick={() => setForm({ ...emptyForm, package: form.package })}>
+              ล้างฟอร์ม
+            </button>
+          </div>
 
-        {/* แพ็กเกจ */}
-        <label>แพ็กเกจ</label>
-        <select value={pkg} onChange={handlePackageChange} required>
-          <option value="" disabled>— เลือกแพ็กเกจ —</option>
-          <option value="3993">อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี</option>
-          <option value="5500">วางเหยื่อ 5,500 บาท</option>
-          <option value="8500">ผสมผสาน 8,500 บาท/ปี</option>
-        </select>
-
-        {/* วันเริ่มสัญญา */}
-        <label htmlFor="startDate">วันที่เริ่มสัญญา</label>
-        <input
-          id="startDate"
-          type="date"
-          name="startDate"
-          value={formData.startDate}
-          onChange={handleStartDateChange}
-          required
-        />
-
-        {/* เฉพาะ 3993 & 8500: แสดงรอบบริการ 1/2 + สิ้นสุด */}
-        {(pkg === "3993" || pkg === "8500") && (
-          <>
-            <label htmlFor="serviceDate1">รอบบริการครั้งที่ 1 (+4 เดือน)</label>
-            <input
-              id="serviceDate1"
-              type="date"
-              name="serviceDate1"
-              value={formData.serviceDate1}
-              readOnly
-            />
-
-            <label htmlFor="serviceDate2">รอบบริการครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)</label>
-            <input
-              id="serviceDate2"
-              type="date"
-              name="serviceDate2"
-              value={formData.serviceDate2}
-              readOnly
-            />
-
-            <label htmlFor="endDate">วันที่สิ้นสุดสัญญา (+1 ปี)</label>
-            <input
-              id="endDate"
-              type="date"
-              name="endDate"
-              value={formData.endDate}
-              readOnly
-            />
-          </>
-        )}
-
-        {/* เฉพาะ 5500 & 8500: ให้ระบุ “วันล่าสุด” เผื่อคำนวณรอบวางเหยื่อในระบบ */}
-        {(pkg === "5500" || pkg === "8500") && (
-          <>
-            <label htmlFor="lastServiceDate">
-              วันล่าสุด (ใช้คำนวณรอบวางเหยื่อ)
-            </label>
-            <input
-              id="lastServiceDate"
-              type="date"
-              name="lastServiceDate"
-              value={formData.lastServiceDate}
-              onChange={handleChange}
-            />
-
-            {/* สิ้นสุดสัญญาอ้างอิงสำหรับ 5500: +3 เดือนจากวันเริ่ม */}
-            {pkg === "5500" && (
-              <>
-                <label htmlFor="endDate5500">วันที่สิ้นสุดสัญญา (ประมาณ +3 เดือน)</label>
-                <input
-                  id="endDate5500"
-                  type="date"
-                  name="endDate"
-                  value={formData.endDate}
-                  readOnly
-                />
-              </>
-            )}
-          </>
-        )}
-
-        <label htmlFor="note">หมายเหตุ</label>
-        <textarea
-          id="note"
-          name="note"
-          value={formData.note}
-          onChange={handleChange}
-          rows="3"
-          placeholder="เช่น ลูกค้าต้องการช่างคนเดิม"
-        />
-
-        <button type="submit" disabled={submitting}>
-          {submitting ? "กำลังส่ง..." : "ส่งข้อมูล"}
-        </button>
-      </form>
+          {msg.text && (
+            <p className={`cf__msg ${msg.ok ? "cf__msg--ok" : "cf__msg--err"}`}>{msg.text}</p>
+          )}
+        </form>
+      </div>
     </div>
   );
 }
