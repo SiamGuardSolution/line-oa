@@ -23,7 +23,6 @@ const labelFromContract = (c) => {
                        "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี");
 };
 
-
 function derivePkg(c) {
   if (!c) return "3993";
   if (c.pkg) {                      // <- ใช้ค่าจาก API ก่อน
@@ -82,6 +81,16 @@ const makeSprayItems = (start, s1, s2) => [
   { kind: "spray", label: "ครั้งที่ 1 (+4 เดือน)", date: s1 },
   { kind: "spray", label: "ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 },
 ];
+
+const priceTextFrom = (c) => {
+  if (!c) return "-";
+  if (c.priceText) return c.priceText;       // ใช้จาก API ก่อน
+  const code = derivePkg(c);                 // fallback ถ้า API เก่ายังไม่ส่ง
+  if (code === "8500") return "8,500 บาท/ปี";
+  if (code === "5500") return "5,500 บาท";
+  return "3,993 บาท/ปี";
+};
+
 
 export default function CheckPage() {
   const [phoneInput, setPhoneInput] = useState("");
@@ -299,6 +308,10 @@ export default function CheckPage() {
                 <div className="value">
                   {labelFromContract(contract)}
                 </div>
+              </div>
+              <div className="field">
+                <label>ราคาแพ็กเกจ</label>
+                <div className="value">{priceTextFrom(contract)}</div>
               </div>
               <div className="field">
                 <label>ประเภทบริการ</label>
