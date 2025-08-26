@@ -302,7 +302,7 @@ export default function CheckPage() {
               </div>
               <div className="field">
                 <label>ประเภทบริการ</label>
-                <div className="value">{contract.serviceType || "-"}</div>
+                <div className="value">{contract.serviceType || "กำจัดปลวก"}</div>
               </div>
 
               <div className="field">
