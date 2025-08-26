@@ -15,29 +15,28 @@ function buildCheckUrls(digits) {
   );
 }
 
-// ===== Helpers =====
-const pkgLabel = (val) => {
-  const v = String(val || "").toLowerCase();
-  if (v.includes("8500") || v.includes("ผสม") || v.includes("mix") || v.includes("combo")) {
-    return "ผสมผสาน 8,500 บาท/ปี";
-  }
-  if (v.includes("5500") || v.includes("เหยื่อ") || v.includes("bait")) {
-    return "วางเหยื่อ 5,500 บาท";
-  }
-  return "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี";
+const labelFromContract = (c) => {
+  const code = derivePkg(c);
+  return c?.packageLabel ||
+    (code === "8500" ? "ผสมผสาน 8,500 บาท/ปี" :
+     code === "5500" ? "วางเหยื่อ 5,500 บาท" :
+                       "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี");
 };
 
+
 function derivePkg(c) {
+  if (!c) return "3993";
+  if (c.pkg) {                      // <- ใช้ค่าจาก API ก่อน
+    if (c.pkg === "mix")  return "8500";
+    if (c.pkg === "bait") return "5500";
+    return "3993";                 // spray
+  }
+  // fallback: กรณี API เก่า
   const raw = `${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
-    .toLowerCase()
-    .replace(/[,\s]/g, "");
-  if (raw.includes("8500") || raw.includes("ผสม") || raw.includes("mix") || raw.includes("combo")) {
-    return "8500"; // mix
-  }
-  if (raw.includes("เหยื่อ") || raw.includes("bait") || raw.includes("5500")) {
-    return "5500"; // bait
-  }
-  return "3993";   // spray
+    .toLowerCase().replace(/[,\s]/g, "");
+  if (raw.includes("8500") || raw.includes("ผสม") || raw.includes("mix") || raw.includes("combo")) return "8500";
+  if (raw.includes("เหยื่อ") || raw.includes("bait") || raw.includes("5500"))                         return "5500";
+  return "3993";
 }
 
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
@@ -70,10 +69,9 @@ const addMonths = (dateStr, n) => {
   if (d.getDate() < day) d.setDate(0);
   return toYMD(d);
 };
-const isValidDateStr = (s) => !!s && !isNaN(new Date(s));
 
 // --- helpers for schedule groups ---
-const makeBaitItems = (base, count = 6, stepDays = 20) =>
+const makeBaitItems = (base, count = 5, stepDays = 20) =>
   Array.from({ length: count }).map((_, i) => ({
     kind: "bait",
     label: `ครั้งที่ ${i + 1}`,
@@ -159,88 +157,72 @@ export default function CheckPage() {
     }
   };
 
-
-  // กำหนดการตามแพ็กเกจ (รองรับ 3993 / 5500 / 8500)
+  // ===== กำหนดการตามแพ็กเกจ =====
   const scheduleGroups = useMemo(() => {
     if (!contract) return [];
-    const pkg = derivePkg(contract);
-    const start = contract.startDate;
+    const pkg   = derivePkg(contract);
+    const start = contract.startDate || "";
 
-    if (pkg === "3993") {
-      // ฉีดพ่นอย่างเดียว
-      const s1 = contract.serviceDate1 || addMonths(start, 4);
-      const s2 = contract.serviceDate2 || addMonths(s1, 4);
-      const end = contract.endDate || addMonths(start, 12);
+    // ดึงวันจาก services ถ้ามี (รองรับไทย/อังกฤษ)
+    const findServiceDate = (regex) => {
+      const arr = contract?.services || [];
+      const hit = arr.find(s => regex.test((s.label || "").toLowerCase()));
+      return hit?.date || "";
+    };
+
+    const sprayS1 = findServiceDate(/spray.*รอบที่\s*1|^service\s*รอบที่\s*1/i)
+                || (start ? addMonths(start, 4) : "");
+    const sprayS2 = findServiceDate(/spray.*รอบที่\s*2|^service\s*รอบที่\s*2/i)
+                || (sprayS1 ? addMonths(sprayS1, 4) : (start ? addMonths(start, 8) : ""));
+
+    const baitDates = (contract?.services || [])
+      .filter(s => /(bait|เหยื่อ)/i.test(s.label || "") && s.date)
+      .map(s => s.date);
+
+    // วันสิ้นสุด: ใช้ endDate ก่อน ถ้าไม่มีให้ +1 ปี (ทุกแพ็กเกจ)
+    const end = contract.endDate || (start ? addMonths(start, 12) : "");
+
+    if (pkg === "3993") { // Spray
       return [
-        {
-          title: "ฉีดพ่น (2 ครั้ง/ปี)",
-          kind: "spray",
-          items: makeSprayItems(start, s1, s2),
-        },
-        {
-          title: "สิ้นสุดสัญญา",
-          kind: "end",
-          items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }],
-        },
+        { title: "ฉีดพ่น (2 ครั้ง/ปี)", kind: "spray", items: makeSprayItems(start, sprayS1, sprayS2) },
+        { title: "สิ้นสุดสัญญา",        kind: "end",   items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] },
       ];
     }
 
-    if (pkg === "5500") {
-      // วางเหยื่ออย่างเดียว
-      const base = contract.lastServiceDate || start;
-      const end = addMonths(start, 12);
+    if (pkg === "5500") { // Bait (5 ครั้ง)
+      const items = baitDates.length
+        ? baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i + 1}`, date: d }))
+        : makeBaitItems(start, 5, 20);
       return [
-        {
-          title: "วางเหยื่อ (ทุก 20 วัน 6 ครั้ง)",
-          kind: "bait",
-          items: makeBaitItems(base, 6, 20),
-        },
-        {
-          title: "สิ้นสุดสัญญา",
-          kind: "end",
-          items: [{ kind: "end", label: "สิ้นสุดสัญญา (1 ปี)", date: end, isEnd: true }],
-        },
+        { title: "วางเหยื่อ (ทุก 20 วัน 5 ครั้ง)", kind: "bait", items },
+        { title: "สิ้นสุดสัญญา",                    kind: "end",  items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] },
       ];
     }
 
-    // mix: เหยื่อ 6 ครั้ง + ฉีดพ่น 2 ครั้ง + สิ้นสุด 1 ปี
-    const base = contract.lastServiceDate || start;
-    const baitItems = makeBaitItems(base, 6, 20);
-
-    const s1 = contract.serviceDate1 || addMonths(start, 4);
-    const s2 = contract.serviceDate2 || addMonths(s1, 4);
-    const sprayItems = makeSprayItems(start, s1, s2);
-
-    const end = contract.endDate || addMonths(start, 12);
+    // Mix = Bait 5 ครั้ง + Spray 2 ครั้ง
+    const baitItems = baitDates.length
+      ? baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i + 1}`, date: d }))
+      : makeBaitItems(start, 5, 20);
 
     return [
-      { title: "วางเหยื่อ (ทุก 20 วัน 6 ครั้ง)", kind: "bait", items: baitItems },
-      { title: "ฉีดพ่น (2 ครั้ง/ปี)", kind: "spray", items: sprayItems },
-      { title: "สิ้นสุดสัญญา", kind: "end", items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] },
+      { title: "วางเหยื่อ (ทุก 20 วัน 5 ครั้ง)", kind: "bait",  items: baitItems },
+      { title: "ฉีดพ่น (2 ครั้ง/ปี)",            kind: "spray", items: makeSprayItems(start, sprayS1, sprayS2) },
+      { title: "สิ้นสุดสัญญา",                  kind: "end",   items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] },
     ];
   }, [contract]);
 
-
-  // สถานะสัญญา (ตามกติกาแต่ละแพ็กเกจ)
-  const status = useMemo(() => {
+  const contractStatus = useMemo(() => {
     if (!contract) return null;
-    const pkg = derivePkg(contract);
-    let assumedEnd = "";
-
-    if (pkg === "5500") {
-      const base = isValidDateStr(contract.startDate) ? contract.startDate : contract.lastServiceDate;
-      if (base) assumedEnd = addDays(base, 120);
-    } else {
-      // 3993 และ 8500 = สิ้นสุด +1 ปี (ใช้ start หรือ end เดิม)
-      assumedEnd = contract.endDate || (isValidDateStr(contract.startDate) ? addMonths(contract.startDate, 12) : "");
-    }
+    const assumedEnd =
+      contract.endDate || (contract.startDate ? addMonths(contract.startDate, 12) : "");
     if (!assumedEnd) return null;
 
     const end = new Date(assumedEnd);
     if (isNaN(end)) return null;
+
     const today = new Date();
-    const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    return end < todayMid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
+    const mid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return end < mid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
   }, [contract]);
 
   return (
@@ -271,44 +253,35 @@ export default function CheckPage() {
         </div>
       )}
 
-      {contracts.length > 1 && !loading && (
-        <div className="card" style={{ padding: 10 }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {contracts.map((c, i) => {
-              const p = derivePkg(c);
-              return (
-                <button
-                  key={i}
-                  onClick={() => setActiveIdx(i)}
-                  style={{
-                    border: "1px solid #e6eef7",
-                    borderRadius: 999,
-                    padding: "8px 12px",
-                    background: i === activeIdx ? "#e8f1ff" : "#fff",
-                    fontWeight: i === activeIdx ? 700 : 500,
-                    cursor: "pointer",
-                  }}
-                  title={c.servicePackageLabel || pkgLabel(p)}
-                >
-                  {(c.startDate || "ไม่ทราบวันเริ่ม")} · {
-                    p === "5500" ? "เหยื่อ" : p === "8500" ? "ผสมผสาน" : "ฉีดพ่น"
-                  }
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ marginTop: 6, fontSize: 12, color: "#64748b" }}>
-            พบ {contracts.length} สัญญา — กดเพื่อสลับดูรายละเอียด
-          </div>
-        </div>
-      )}
+      {contracts.map((c, i) => {
+        const p = derivePkg(c); // ใช้จริง
+        return (
+          <button
+            key={i}
+            onClick={() => setActiveIdx(i)}
+            style={{
+              border: "1px solid #e6eef7",
+              borderRadius: 999,
+              padding: "8px 12px",
+              background: i === activeIdx ? "#e8f1ff" : "#fff",
+              fontWeight: i === activeIdx ? 700 : 500,
+              cursor: "pointer",
+            }}
+            title={labelFromContract(c)}
+          >
+            {(c.startDate || "ไม่ทราบวันเริ่ม")} · {p === "5500" ? "เหยื่อ" : p === "8500" ? "ผสมผสาน" : "ฉีดพ่น"}
+          </button>
+        );
+      })}
 
       {contract && (
         <>
           <section className="card">
             <div className="row between">
               <h2 className="title">สัญญาของคุณ</h2>
-              {status && <span className={`badge ${status.tone}`}>{status.text}</span>}
+              {contractStatus && (
+                <span className={`badge ${contractStatus.tone}`}>{contractStatus.text}</span>
+              )}
             </div>
 
             <div className="grid two">
@@ -324,7 +297,7 @@ export default function CheckPage() {
               <div className="field">
                 <label>แพ็กเกจ</label>
                 <div className="value">
-                  {contract.servicePackageLabel || pkgLabel(derivePkg(contract))}
+                  {labelFromContract(contract)}
                 </div>
               </div>
               <div className="field">
@@ -339,15 +312,7 @@ export default function CheckPage() {
               <div className="field">
                 <label>สิ้นสุดสัญญา</label>
                 <div className="value">
-                  {(() => {
-                    const p = derivePkg(contract);
-                    if (p === "5500") {
-                      const base = contract.startDate || contract.lastServiceDate;
-                      return base ? addDays(base, 120) : "-";
-                    }
-                    // 3993 / 8500
-                    return contract.endDate || (contract.startDate ? addMonths(contract.startDate, 12) : "-");
-                  })()}
+                  {contract.endDate || (contract.startDate ? addMonths(contract.startDate, 12) : "-")}
                 </div>
               </div>
 
@@ -373,9 +338,9 @@ export default function CheckPage() {
               <span className="pill">
                 {(() => {
                   const pkg = derivePkg(contract);
-                  if (pkg === "5500") return "วางเหยื่อ: ทุก 20 วัน (6 ครั้ง)";
+                  if (pkg === "5500") return "วางเหยื่อ: ทุก 20 วัน (5 ครั้ง)";
                   if (pkg === "3993") return "ฉีดพ่น: 2 ครั้ง / ปี";
-                  return "ผสมผสาน: เหยื่อ 6 ครั้ง + ฉีดพ่น 2 ครั้ง";
+                  return "ผสมผสาน: เหยื่อ 5 ครั้ง + ฉีดพ่น 2 ครั้ง";
                 })()}
               </span>
             </div>
