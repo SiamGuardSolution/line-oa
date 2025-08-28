@@ -226,7 +226,7 @@ export default function ContractForm() {
               <input className="cf__input" value={form.phone} onChange={(e) => setVal("phone", e.target.value)} placeholder="0xx-xxx-xxxx" />
             </div>
             <div className="cf__field">
-              <label className="cf__label">ทีมที่รับผิดชอบ (เบอร์/รหัสทีม)</label>
+              <label className="cf__label">ผู้รับผิดชอบในการติดต่อลูกค้า</label>
               <input className="cf__input" value={form.tech} onChange={(e) => setVal("tech", e.target.value)} />
             </div>
 
