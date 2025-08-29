@@ -1,6 +1,11 @@
 // src/lib/generateQuotationPDF.js
 import { jsPDF } from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
+import '../fonts/THSarabun';
+
+const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+doc.setFont('THSarabun', 'normal'); // ชื่อต้องตรงกับใน THSarabun.js
+doc.setFontSize(12);
 
 // ---- ช่วยโหลดฟอนต์จาก public/fonts แล้วแปลงเป็น base64 ----
 const toBase64 = (ab) => {
@@ -33,7 +38,7 @@ async function ensureSarabun(doc) {
     }
   } catch (_) {}
 
-  doc.setFont("Sarabun", "normal");
+  doc.setFont("THSarabun", "normal");
 }
 
 // ---- ยูทิลเดิมของคุณ (คงไว้) ----
@@ -56,7 +61,7 @@ const priceOf = (serviceType = "", pkg = "") => {
 
 // ---- ฟังก์ชันหลัก: เปลี่ยนเป็น async เพื่อรอโหลดฟอนต์ ----
 export async function generateQuotationPDF(form) {
-  const doc = new jsPDF({ unit: "pt" });
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
 
   // โหลด/ลงทะเบียนฟอนต์ Sarabun ก่อนพิมพ์
   await ensureSarabun(doc);
@@ -68,11 +73,11 @@ export async function generateQuotationPDF(form) {
     `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}.pdf`;
 
   // Header
-  doc.setFont("Sarabun", "bold");
+  doc.setFont("THSarabun", "bold");
   doc.setFontSize(16);
   doc.text("ใบเสนอราคา (Quotation)", 40, 40);
 
-  doc.setFont("Sarabun", "normal");
+  doc.setFont("THSarabun", "normal");
   doc.setFontSize(11);
   doc.text(companyName, 40, 60);
 
@@ -100,29 +105,28 @@ export async function generateQuotationPDF(form) {
   // Items table
   const unitPrice = priceOf(form.serviceType, form.package);
   const rows = [[`${form.serviceType || ""} - ${form.package || ""}`, 1, unitPrice.toLocaleString(), unitPrice.toLocaleString()]];
-  doc.autoTable({
+  autoTable(doc, {
     head: [["รายการ", "จำนวน", "ราคาต่อหน่วย (บาท)", "ราคารวม (บาท)"]],
     body: rows,
     startY: svcY + 110,
-    styles: { font: "Sarabun", fontStyle: "normal", fontSize: 10, cellPadding: 6 },
-    headStyles: { fillColor: [230, 230, 230], font: "Sarabun", fontStyle: "bold" },
+    styles: { font: "THSarabun", fontStyle: "normal", fontSize: 10, cellPadding: 6 },
+    headStyles: { fillColor: [230, 230, 230], font: "THSarabun", fontStyle: "bold" },
   });
 
   // Summary
-  const endY = doc.lastAutoTable.finalY || svcY + 110;
-  const subtotal = unitPrice;
+  const endY = (doc.lastAutoTable?.finalY ?? (svcY + 110));  const subtotal = unitPrice;
   const vat = 0;
   const total = subtotal + vat;
 
   doc.setFontSize(11);
   doc.text(`ราคารวมย่อย: ${subtotal.toLocaleString()} บาท`, 320, endY + 24);
   doc.text(`ภาษีมูลค่าเพิ่ม: ${vat.toLocaleString()} บาท`, 320, endY + 42);
-  doc.setFont("Sarabun", "bold");
+  doc.setFont("THSarabun", "bold");
   doc.setFontSize(12);
   doc.text(`รวมทั้งสิ้น: ${total.toLocaleString()} บาท`, 320, endY + 64);
 
   // Notes
-  doc.setFont("Sarabun", "normal");
+  doc.setFont("THSarabun", "normal");
   doc.setFontSize(10);
   doc.text("เงื่อนไข:", 40, endY + 24);
   doc.text("- ใบเสนอราคามีอายุ 7 วันนับจากวันที่ออกเอกสาร", 40, endY + 40);

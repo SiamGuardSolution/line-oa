@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
 import { generateQuotationPDF } from "./lib/generateQuotationPDF";
+import './fonts/THSarabun';
+
 
 // ใส่ URL เว็บแอป/พร็อกซีของคุณ (ชี้ไป Apps Script หรือ API ของคุณ)
 const API_URL = "/api/submit-contract";
