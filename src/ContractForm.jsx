@@ -181,15 +181,18 @@ export default function ContractForm() {
         throw new Error(json?.error || "save-failed");
       }
 
-      // ✅ บันทึกสำเร็จ → สร้าง PDF ใบเสนอราคาและดาวน์โหลดทันที
-      const pdfData = {
-        ...payload,
-        // ให้ PDF อ่านง่ายขึ้น: ใส่ชื่อประเภทบริการจาก label ของแพ็กเกจ
-        serviceType: PACKAGES[form.package]?.label || form.package,
-      };
-      await generateQuotationPDF(pdfData);
-
+      // ✅ บันทึกสำเร็จ
       setMsg({ text: "บันทึกสำเร็จ", ok: true });
+      
+      // ➜ พยายามสร้าง PDF แยกต่างหาก (ถ้าพังจะไม่กระทบสถานะบันทึก)
+      try {
+        const pdfData = { ...payload, serviceType: PACKAGES[form.package]?.label || form.package };
+         await generateQuotationPDF(pdfData);
+       } catch (pdfErr) {
+         console.warn("PDF generation failed:", pdfErr);
+         setMsg({ text: "บันทึกสำเร็จ แต่สร้าง PDF ไม่สำเร็จ (" + (pdfErr?.message || pdfErr) + ")", ok: true });
+       }
+
       // ล้างฟอร์ม แต่คงแพ็กเกจเดิมไว้ให้ผู้ใช้
       setForm({ ...emptyForm, package: form.package });
     } catch (err2) {
