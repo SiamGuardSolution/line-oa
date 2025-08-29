@@ -1,9 +1,8 @@
-//
-// ContractForm.jsx — with auto schedule calculation
 import React, { useEffect, useState } from "react";
-import "./ContractForm.css"; // ถ้าไม่ได้ใช้ CSS นี้ ลบบรรทัดนี้ได้
+import "./ContractForm.css";
+import { generateQuotationPDF } from "./lib/generateQuotationPDF";
 
-// ใส่ URL เว็บแอป Apps Script ของคุณ
+// ใส่ URL เว็บแอป/พร็อกซีของคุณ (ชี้ไป Apps Script หรือ API ของคุณ)
 const API_URL = "/api/submit-contract";
 
 const PACKAGES = {
@@ -49,7 +48,6 @@ const emptyForm = {
   tech: "",
   note: "",
   status: "ใช้งานอยู่",
-
   // service fields จะถูกเติมให้อัตโนมัติจาก useEffect
 };
 
@@ -105,7 +103,7 @@ function computeSchedule(pkg, startStr) {
     const s2 = addMonths(s1, 4);
     out.serviceSpray1 = toISO(s1);
     out.serviceSpray2 = toISO(s2);
-    // Bait part (เริ่มนับจาก start เช่นเดียวกับแพ็กเกจ Bait)
+    // Bait part
     const b1 = addDays(start, 20);
     const b2 = addDays(b1, 20);
     const b3 = addDays(b2, 20);
@@ -121,11 +119,11 @@ function computeSchedule(pkg, startStr) {
 }
 
 export default function ContractForm() {
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState({ ...emptyForm });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", ok: false });
 
-  const pkgConf = PACKAGES[form.package];
+  const pkgConf = PACKAGES[form.package] || PACKAGES["spray"];
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
   const phoneDigits = (s) => String(s || "").replace(/\D/g, "");
 
@@ -164,7 +162,7 @@ export default function ContractForm() {
       status: form.status || "ใช้งานอยู่",
     };
     // เติมช่อง service ให้ครบตามแพ็กเกจ
-    pkgConf.fields.forEach(({ key }) => (payload[key] = form[key] || ""));
+    (pkgConf.fields || []).forEach(({ key }) => (payload[key] = form[key] || ""));
 
     try {
       setLoading(true);
@@ -173,17 +171,29 @@ export default function ContractForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const text = await res.text();
+
+      // พยายามอ่าน JSON หากไม่ได้เป็น JSON จะเก็บข้อความดิบไว้ช่วยดีบัก
+      const raw = await res.text();
       let json;
-      try { json = JSON.parse(text); } catch { json = { ok:false, error:`NON_JSON: ${text.slice(0,200)}` }; }
-      if (json?.ok) {
-        setMsg({ text: "บันทึกสำเร็จ", ok: true });
-        setForm({ ...emptyForm, package: form.package });
-      } else {
-        setMsg({ text: `บันทึกไม่สำเร็จ${json?.error || ""}`, ok: false });
+      try { json = JSON.parse(raw); } catch { json = { ok: res.ok, raw }; }
+
+      if (!res.ok || json?.ok === false) {
+        throw new Error(json?.error || "save-failed");
       }
+
+      // ✅ บันทึกสำเร็จ → สร้าง PDF ใบเสนอราคาและดาวน์โหลดทันที
+      const pdfData = {
+        ...payload,
+        // ให้ PDF อ่านง่ายขึ้น: ใส่ชื่อประเภทบริการจาก label ของแพ็กเกจ
+        serviceType: PACKAGES[form.package]?.label || form.package,
+      };
+      await generateQuotationPDF(pdfData);
+
+      setMsg({ text: "บันทึกสำเร็จ", ok: true });
+      // ล้างฟอร์ม แต่คงแพ็กเกจเดิมไว้ให้ผู้ใช้
+      setForm({ ...emptyForm, package: form.package });
     } catch (err2) {
-      setMsg({ text: `บันทึกไม่สำเร็จ${err2?.message || err2}`, ok: false });
+      setMsg({ text: `บันทึกไม่สำเร็จ ${err2?.message || err2}`, ok: false });
     } finally {
       setLoading(false);
     }
@@ -200,7 +210,11 @@ export default function ContractForm() {
           {/* แพ็กเกจ */}
           <div className="cf__field">
             <label className="cf__label">แพ็กเกจ</label>
-            <select className="cf__select" value={form.package} onChange={(e) => setVal("package", e.target.value)}>
+            <select
+              className="cf__select"
+              value={form.package}
+              onChange={(e) => setVal("package", e.target.value)}
+            >
               {Object.entries(PACKAGES).map(([k, v]) => (
                 <option key={k} value={k}>{v.label}</option>
               ))}
@@ -247,7 +261,12 @@ export default function ContractForm() {
               {pkgConf.fields.map(({ key, label }) => (
                 <div className="cf__field" key={key}>
                   <label className="cf__label">{label}</label>
-                  <input type="date" className="cf__input" value={form[key] || ""} onChange={(e) => setVal(key, e.target.value)} />
+                  <input
+                    type="date"
+                    className="cf__input"
+                    value={form[key] || ""}
+                    onChange={(e) => setVal(key, e.target.value)}
+                  />
                 </div>
               ))}
             </div>
@@ -268,14 +287,22 @@ export default function ContractForm() {
 
           <div className="cf__actions">
             <button type="submit" className="cf__btn cf__btn--primary" disabled={loading}>
-              {loading ? "กำลังบันทึก..." : "บันทึกข้อมูลสัญญา"}
+              {loading ? "กำลังบันทึก..." : "บันทึกและสร้างสัญญา"}
             </button>
-            <button type="button" className="cf__btn cf__btn--ghost" onClick={() => setForm({ ...emptyForm, package: form.package })}>
+            <button
+              type="button"
+              className="cf__btn cf__btn--ghost"
+              onClick={() => setForm({ ...emptyForm, package: form.package })}
+            >
               ล้างฟอร์ม
             </button>
           </div>
 
-          {msg.text && <p className={`cf__msg ${msg.ok ? "cf__msg--ok" : "cf__msg--err"}`}>{msg.text}</p>}
+          {msg.text && (
+            <p className={`cf__msg ${msg.ok ? "cf__msg--ok" : "cf__msg--err"}`}>
+              {msg.text}
+            </p>
+          )}
         </form>
       </div>
     </div>
