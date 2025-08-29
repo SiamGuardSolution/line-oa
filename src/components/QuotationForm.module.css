@@ -1,0 +1,23 @@
+.quotationContainer { display:flex; justify-content:center; padding:24px; }
+.quotationCard { width:100%; max-width:900px; background:#0f172a; color:#e5e7eb; border-radius:16px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,.3); }
+.header { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.section { margin-top:16px; padding-top:12px; border-top:1px dashed #334155; }
+.row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.label { font-size:13px; opacity:.9; margin-bottom:6px; }
+.input, .select, .textarea { background:#111827; border:1px solid #374151; color:#e5e7eb; border-radius:10px; padding:10px 12px; width:100%; }
+.textarea { min-height:80px; }
+.itemsTable { width:100%; border-collapse:separate; border-spacing:0 8px; }
+.itemsHead th { text-align:left; font-size:12px; opacity:.7; }
+.itemRow td { }
+.itemInput { width:100%; background:#0b1220; border:1px solid #334155; color:#e5e7eb; border-radius:10px; padding:8px 10px; }
+.controls { display:flex; gap:8px; flex-wrap:wrap; }
+.button { border:0; border-radius:999px; padding:10px 16px; cursor:pointer; font-weight:600; }
+.blue { background:#2563eb; color:white; }
+.gray { background:#1f2937; color:#e5e7eb; }
+.lightgray { background:#374151; color:#e5e7eb; }
+.calc { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; }
+.totals { margin-left:auto; width:300px; }
+.totalRow { display:flex; justify-content:space-between; margin:6px 0; }
+.signatureWrap { display:flex; gap:12px; flex-wrap:wrap; }
+.signBox { background:#0b1220; border:1px dashed #334155; padding:8px; border-radius:12px; }
+@media (max-width:600px) { .row { grid-template-columns:1fr; } .totals { width:100%; } }

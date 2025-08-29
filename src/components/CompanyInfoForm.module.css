@@ -1,0 +1,25 @@
+.companyFormContainer { display:flex; justify-content:center; padding:24px; }
+.companyForm { width:100%; max-width:780px; background:#0f172a; color:#e5e7eb; border-radius:16px; padding:24px; box-shadow:0 8px 24px rgba(0,0,0,.3); }
+.formTitle { margin:0 0 8px; font-size:28px; }
+.formDesc { margin:0 0 16px; opacity:.8 }
+.field { margin-bottom:14px; display:flex; flex-direction:column; }
+.label { font-size:14px; margin-bottom:6px; opacity:.9 }
+.input, .textarea, .select { background:#111827; border:1px solid #374151; color:#e5e7eb; border-radius:10px; padding:10px 12px; }
+.textarea { min-height:96px; }
+.row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.hint { font-size:12px; opacity:.7; margin-top:4px }
+.switchRow { display:flex; align-items:center; gap:10px; margin:10px 0 16px; }
+.buttonBar { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; flex-wrap:wrap; }
+.button { border:0; border-radius:999px; padding:10px 16px; cursor:pointer; font-weight:600; }
+.button.primary { background:#2563eb; color:white; }
+.button.secondary { background:#1f2937; color:#e5e7eb; }
+.card { background:#0b1220; border:1px solid #1f2937; padding:12px; border-radius:12px; }
+.bankRow { display:grid; grid-template-columns:1.2fr 1fr 1fr auto; gap:8px; margin-bottom:8px; align-items:center; }
+.addBtn { background:#065f46; color:#ecfdf5; }
+.delBtn { background:#7f1d1d; color:#fee2e2; }
+.centeredButton { text-align:right; }
+@media (max-width: 600px) {
+  .row { grid-template-columns:1fr; }
+  .bankRow { grid-template-columns:1fr; }
+  .centeredButton { text-align:stretch; }
+}
