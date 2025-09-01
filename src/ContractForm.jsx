@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
 import { generateQuotationPDF } from "./lib/generateQuotationPDF";
-import './fonts/THSarabun';
 
 // ใส่ URL เว็บแอป/พร็อกซีของคุณ (ชี้ไป Apps Script หรือ API ของคุณ)
 const API_URL = "/api/submit-contract";
@@ -223,7 +222,8 @@ export default function ContractForm() {
           total: price,
         };
 
-        await generateQuotationPDF(pdfData); // ต้อง await เพื่อรอฝังฟอนต์ให้เสร็จ
+        console.log('[PDF] generateQuotationPDF payload:', pdfData);
+        await generateQuotationPDF(pdfData);
       } catch (pdfErr) {
         console.warn("PDF generation failed:", pdfErr);
         setMsg({
