@@ -1,11 +1,19 @@
 // components/QuotationForm.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import registerTHSarabun from '../fonts/THSarabun';
 import { useRouter } from 'next/router';
 import SignatureCanvas from 'react-signature-canvas';
 import styles from './QuotationForm.module.css';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+async function addFontFromPublic(doc, publicPath, name, style = 'normal') {
+  const res = await fetch(publicPath);
+  const buf = await res.arrayBuffer();
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const vfsName = `${name}-${style}.ttf`;
+  doc.addFileToVFS(vfsName, base64);
+  doc.addFont(vfsName, name, style);
+}
 
 export default function QuotationForm() {
   const router = useRouter();
@@ -78,111 +86,121 @@ export default function QuotationForm() {
     setNotes(['ราคานี้รวมค่าเดินทางแล้ว']);
   };
 
-  const generatePDF = () => {
-    if (!company) {
-      alert('กรุณากรอกข้อมูลบริษัทก่อน');
-      return;
-    }
-    const doc = new jsPDF({ unit: 'pt', format:'a4' });
+  const generatePDF = async () => {
+  if (!company) {
+    alert('กรุณากรอกข้อมูลบริษัทก่อน');
+    return;
+  }
 
-    // Try register THSarabun (no-op by default unless you swap fonts file)
-    try { registerTHSarabun(); } catch {}
-    // If THSarabun is registered, use it; otherwise helvetica
-    const fonts = doc.getFontList ? Object.keys(doc.getFontList()) : [];
-    const useTH = fonts.map(f=>f.toLowerCase()).includes('thsarabun');
-    if (useTH) doc.setFont('THSarabun'); else doc.setFont('helvetica');
-    doc.setFontSize(12);
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
 
-    // Header
-    const marginX = 36;
-    let y = 40;
-    if (company.logoUrl) {
-      // draw image if possible (must be CORS-permitted dataURL)
-      // We'll skip fetch here to avoid CORS; user can paste dataURL directly
-      if (company.logoUrl.startsWith('data:image')) {
-        try { doc.addImage(company.logoUrl, 'PNG', marginX, y-8, 120, 40); } catch {}
-      }
-    }
+  // ฝัง TH Sarabun จาก public/
+  await addFontFromPublic(doc, '/fonts/THSarabunNew.ttf', 'THSarabunNew', 'normal');
+  await addFontFromPublic(doc, '/fonts/THSarabunNew-Bold.ttf', 'THSarabunNew', 'bold');
 
-    doc.setFontSize(20);
-    doc.text(docType, 560, y, { align:'right' });
-    doc.setFontSize(12);
+  // ตั้งค่าฟอนต์และบรรทัดฐาน
+  doc.setFont('THSarabunNew', 'normal');
+  doc.setFontSize(12);
+  doc.setLineHeightFactor(1.35);
 
-    // Company Block
-    y += 12;
-    doc.text(company.name || '', marginX, y);
-    y += 16;
-    const compLines = [company.address, `โทร: ${company.phone||''}  อีเมล: ${company.email||''}`];
-    if (company.showTaxIdInPdf && company.taxId) compLines.push(`เลขผู้เสียภาษี: ${company.taxId}`);
-    compLines.forEach(line=>{ if (line) { doc.text(String(line), marginX, y); y+=14; } });
+  // ==== เนื้อหาเดิมของคุณ (แก้เฉพาะจุดที่เกี่ยวกับฟอนต์) ====
 
-    // Meta
-    y = 96;
-    doc.text(`เลขที่เอกสาร: ${docNo}`, 560, y, { align:'right' });
-    y += 16;
-    doc.text(`วันที่: ${docDate}`, 560, y, { align:'right' });
+  // Header
+  const marginX = 36;
+  let y = 40;
 
-    // Client Block
-    y += 28;
-    doc.setFontSize(14); doc.text('ลูกค้า', marginX, y); doc.setFontSize(12);
-    y += 16;
-    const clientLines = [clientName, clientAddress, clientPhone && `โทร: ${clientPhone}`].filter(Boolean);
-    clientLines.forEach(line=>{ doc.text(String(line), marginX, y); y+=14; });
+  if (company.logoUrl && company.logoUrl.startsWith('data:image')) {
+    try { doc.addImage(company.logoUrl, 'PNG', marginX, y - 8, 120, 40); } catch {}
+  }
 
-    // Items table
-    const body = items.map((it, i)=>[i+1, it.name, String(it.quantity||0), String(it.price||0), (Number(it.quantity||0)*Number(it.price||0)).toFixed(2)]);
-    autoTable(doc, {
-      startY: y + 8,
-      head: [['#','รายการ','จำนวน','ราคา/หน่วย','ราคารวม']],
-      body,
-      styles:{ font: useTH ? 'THSarabun' : undefined, fontSize: 12 },
-      headStyles:{ fillColor:[37,99,235], textColor:255 },
-      columnStyles:{ 0:{cellWidth:24}, 2:{cellWidth:64, halign:'right'}, 3:{cellWidth:80, halign:'right'}, 4:{cellWidth:90, halign:'right'} },
-      margin:{ left: marginX, right: marginX },
+  doc.setFont('THSarabunNew', 'bold');
+  doc.setFontSize(20);
+  doc.text(docType, 560, y, { align: 'right' });
+  doc.setFont('THSarabunNew', 'normal');
+  doc.setFontSize(12);
+
+  // Company Block
+  y += 12;
+  doc.text(company.name || '', marginX, y);
+  y += 16;
+  const compLines = [company.address, `โทร: ${company.phone || ''}  อีเมล: ${company.email || ''}`];
+  if (company.showTaxIdInPdf && company.taxId) compLines.push(`เลขผู้เสียภาษี: ${company.taxId}`);
+  compLines.forEach(line => { if (line) { doc.text(String(line), marginX, y); y += 14; } });
+
+  // Meta
+  y = 96;
+  doc.text(`เลขที่เอกสาร: ${docNo}`, 560, y, { align: 'right' });
+  y += 16;
+  doc.text(`วันที่: ${docDate}`, 560, y, { align: 'right' });
+
+  // Client Block
+  y += 28;
+  doc.setFontSize(14); doc.text('ลูกค้า', marginX, y); doc.setFontSize(12);
+  y += 16;
+  const clientLines = [clientName, clientAddress, clientPhone && `โทร: ${clientPhone}`].filter(Boolean);
+  clientLines.forEach(line => { doc.text(String(line), marginX, y); y += 14; });
+
+  // Items table
+  const body = items.map((it, i) => [
+    i + 1,
+    it.name,
+    String(it.quantity || 0),
+    String(it.price || 0),
+    (Number(it.quantity || 0) * Number(it.price || 0)).toFixed(2),
+  ]);
+
+  autoTable(doc, {
+    startY: y + 8,
+    head: [['#', 'รายการ', 'จำนวน', 'ราคา/หน่วย', 'ราคารวม']],
+    body,
+    styles: { font: 'THSarabunNew', fontStyle: 'normal', fontSize: 12, lineHeight: 1.35 },
+    headStyles: { font: 'THSarabunNew', fontStyle: 'bold', fontSize: 12, fillColor: [37, 99, 235], textColor: 255 },
+    columnStyles: { 0: { cellWidth: 24 }, 2: { cellWidth: 64, halign: 'right' }, 3: { cellWidth: 80, halign: 'right' }, 4: { cellWidth: 90, halign: 'right' } },
+    margin: { left: marginX, right: marginX },
+  });
+  let tableY = doc.lastAutoTable ? doc.lastAutoTable.finalY : (y + 80);
+
+  // Totals
+  const tX = 360, tW = 200;
+  doc.text('รวมย่อย', tX, tableY + 24);
+  doc.text(subTotal.toFixed(2), tX + tW, tableY + 24, { align: 'right' });
+  if (vatEnabled) {
+    doc.text(`VAT ${vatRate}%`, tX, tableY + 24 + 16);
+    doc.text(vatAmount.toFixed(2), tX + tW, tableY + 24 + 16, { align: 'right' });
+  }
+  doc.setFontSize(14);
+  doc.text('ยอดสุทธิ', tX, tableY + 24 + (vatEnabled ? 32 : 16));
+  doc.text(grandTotal.toFixed(2), tX + tW, tableY + 24 + (vatEnabled ? 32 : 16), { align: 'right' });
+  doc.setFontSize(12);
+
+  // Notes
+  let ny = tableY + 24 + (vatEnabled ? 48 : 32) + 18;
+  doc.text('หมายเหตุ', marginX, ny);
+  ny += 8;
+  notes.filter(Boolean).forEach((n, i) => { doc.text(`• ${n}`, marginX, ny + i * 14); });
+  ny += notes.length * 14 + 12;
+
+  // Signature
+  doc.text('ลายเซ็นลูกค้า', marginX, ny);
+  const sigData = (signRef.current && !signRef.current.isEmpty()) ? signRef.current.getTrimmedCanvas().toDataURL('image/png') : null;
+  if (sigData) {
+    try { doc.addImage(sigData, 'PNG', marginX, ny + 6, 160, 60); } catch {}
+  } else {
+    doc.text('(ยังไม่ลงนาม)', marginX, ny + 40);
+  }
+
+  // Footer bank accounts
+  ny += 90;
+  if (company.bankAccounts && company.bankAccounts.length) {
+    doc.text('บัญชีรับโอน', marginX, ny);
+    company.bankAccounts.forEach((b, i) => {
+      const line = [b.bank, b.accountNo, b.accountName].filter(Boolean).join(' • ');
+      if (line) doc.text(`- ${line}`, marginX, ny + 16 + i * 14);
     });
-    let tableY = doc.lastAutoTable ? doc.lastAutoTable.finalY : (y+80);
+  }
 
-    // Totals
-    const tX = 360, tW = 200;
-    doc.text('รวมย่อย', tX, tableY + 24);
-    doc.text(subTotal.toFixed(2), tX + tW, tableY + 24, { align:'right' });
-    if (vatEnabled) {
-      doc.text(`VAT ${vatRate}%`, tX, tableY + 24 + 16);
-      doc.text(vatAmount.toFixed(2), tX + tW, tableY + 24 + 16, { align:'right' });
-    }
-    doc.setFontSize(14);
-    doc.text('ยอดสุทธิ', tX, tableY + 24 + (vatEnabled? 32:16));
-    doc.text(grandTotal.toFixed(2), tX + tW, tableY + 24 + (vatEnabled? 32:16), { align:'right' });
-    doc.setFontSize(12);
-
-    // Notes
-    let ny = tableY + 24 + (vatEnabled? 48:32) + 18;
-    doc.text('หมายเหตุ', marginX, ny);
-    ny += 8;
-    notes.filter(Boolean).forEach((n,i)=>{ doc.text(`• ${n}`, marginX, ny + i*14); });
-    ny += notes.length*14 + 12;
-
-    // Signature
-    doc.text('ลายเซ็นลูกค้า', marginX, ny);
-    const sigData = (signRef.current && !signRef.current.isEmpty()) ? signRef.current.getTrimmedCanvas().toDataURL('image/png') : null;
-    if (sigData) {
-      try { doc.addImage(sigData, 'PNG', marginX, ny+6, 160, 60); } catch {}
-    } else {
-      doc.text('(ยังไม่ลงนาม)', marginX, ny+40);
-    }
-
-    // Footer bank accounts
-    ny += 90;
-    if (company.bankAccounts && company.bankAccounts.length) {
-      doc.text('บัญชีรับโอน', marginX, ny);
-      company.bankAccounts.forEach((b, i)=>{
-        const line = [b.bank, b.accountNo, b.accountName].filter(Boolean).join(' • ');
-        if (line) doc.text(`- ${line}`, marginX, ny + 16 + i*14);
-      });
-    }
-
-    doc.save(`${docNo}.pdf`);
-  };
+  doc.save(`${docNo}.pdf`);
+};
 
   return (
     <div className={styles.quotationContainer}>
