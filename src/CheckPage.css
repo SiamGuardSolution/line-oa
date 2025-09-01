@@ -237,21 +237,22 @@ body{ background:var(--bg); }
 .timeline .dot.spray{ background:#06b6d4; }  /* ฟ้าอมเขียว */
 .timeline .dot.end{   background:#64748b; }  /* เทา */
 
-/* --- NotesFlex (ฟลิก) --- */
+/* --- NotesFlex: Black & White / Formal --- */
 .notes-flex{
   display:flex;
   flex-direction:column;
   gap:12px;
-  background:#f4f9ff;             /* ฟ้าสว่าง */
-  border:1px solid #d7e8ff;       /* เส้นอ่อน */
-  border-radius:16px;
-  padding:14px;
+  background:#ffffff;
+  border:1px solid #e6e6e6;
+  border-radius:12px;
+  padding:16px;
 }
 
 .notes-flex__header{
   font-weight:700;
-  font-size:1.05rem;
-  color:#0b4ea2;                  /* ฟ้าเข้มอ่านง่าย */
+  font-size:1.0625rem; /* ~17px */
+  color:#111111;
+  letter-spacing:.2px;
 }
 
 .notes-flex__list{
@@ -261,16 +262,23 @@ body{ background:var(--bg); }
   display:flex;
   flex-direction:column;
   gap:10px;
+  color:#222222;
 }
 
 .notes-flex__list li{
   display:flex;
   align-items:flex-start;
   gap:12px;
-  line-height:1.5;
-  color:#0b1a2b;                  /* เกือบดำ เพื่อคอนทราสต์ดี */
+  line-height:1.55;
 }
 
+/* เส้นแบ่งเนื้อหาแบบสุภาพ */
+.notes-flex__list li + li{
+  border-top:1px solid #f0f0f0;
+  padding-top:10px;
+}
+
+/* ป้ายตัวเลขแบบขาวดำ คอนทราสต์สูง */
 .notes-flex__list .badge{
   flex:0 0 auto;
   width:28px; height:28px;
@@ -279,19 +287,31 @@ body{ background:var(--bg); }
   align-items:center;
   justify-content:center;
   font-weight:700;
-  background:#28a745;             /* เขียวแบรนด์ */
-  color:#fff;
+  background:#000000;
+  color:#ffffff;
   font-size:.95rem;
-  box-shadow:0 1px 0 rgba(0,0,0,.05);
+  line-height:1;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
-/* เน้นตัวเลข 5,000 บาท ให้เด่น */
+/* ข้อความเน้นด้วยน้ำหนัก ไม่ใช้สีสด */
 .notes-flex strong{
-  color:#c62828;                   /* แดงสำหรับเน้น */
   font-weight:800;
+  color:#000000;
 }
 
-/* มือถือเล็กมาก */
+/* หน้าจอเล็กมาก */
 @media (max-width: 360px){
+  .notes-flex{ padding:14px; }
   .notes-flex__list .badge{ width:26px; height:26px; font-size:.9rem; }
+}
+
+/* สำหรับพิมพ์เอกสารให้คมชัด */
+@media print{
+  .notes-flex{
+    border-color:#000000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
