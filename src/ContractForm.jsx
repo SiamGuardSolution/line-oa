@@ -3,9 +3,16 @@ import "./ContractForm.css";
 import { generateQuotationPDF } from "./lib/generateQuotationPDF";
 import './fonts/THSarabun';
 
-
 // ใส่ URL เว็บแอป/พร็อกซีของคุณ (ชี้ไป Apps Script หรือ API ของคุณ)
 const API_URL = "/api/submit-contract";
+
+const QUOTE_PRICE = {
+  spray: 2882,    // ฉีดพ่นรายปี
+  bait: 5500,     // วางเหยื่อ
+  mix: 8500,      // ผสมผสาน
+};
+const getPriceByPackage = (pkg) => Number(QUOTE_PRICE[pkg] ?? 0);
+const toISODate = (d = new Date()) => new Date(d).toISOString().slice(0,10);
 
 const PACKAGES = {
   spray: {
@@ -185,15 +192,45 @@ export default function ContractForm() {
 
       // ✅ บันทึกสำเร็จ
       setMsg({ text: "บันทึกสำเร็จ", ok: true });
-      
-      // ➜ พยายามสร้าง PDF แยกต่างหาก (ถ้าพังจะไม่กระทบสถานะบันทึก)
+
+      // ✅ เตรียมข้อมูลสำหรับ PDF แล้วสร้าง (ถ้าพังจะไม่กระทบผลบันทึก)
       try {
-        const pdfData = { ...payload, serviceType: PACKAGES[form.package]?.label || form.package };
-         await generateQuotationPDF(pdfData);
-       } catch (pdfErr) {
-         console.warn("PDF generation failed:", pdfErr);
-         setMsg({ text: "บันทึกสำเร็จ แต่สร้าง PDF ไม่สำเร็จ (" + (pdfErr?.message || pdfErr) + ")", ok: true });
-       }
+        const serviceLabel = PACKAGES[form.package]?.label || form.package;
+        const price = getPriceByPackage(form.package);
+
+        const pdfData = {
+          // ส่วนหัวลูกค้า
+          customerName: payload.name,
+          phone: payload.phone,
+          address: payload.address,
+          facebook: payload.facebook,
+
+          // รายละเอียดสัญญา
+          serviceType: serviceLabel,     // เช่น "ฉีดพ่น (Spray)"
+          package: payload.package,      // ใช้ key raw ไว้เผื่อ logic อื่น
+          startDate: payload.startDate,
+          endDate: payload.endDate,
+          status: payload.status,
+          note: payload.note,
+
+          // วันที่ออกเอกสาร
+          issueDate: toISODate(),
+
+          // ตารางรายการ + ยอดรวม (รูปแบบที่ generateQuotationPDF ต้องการ)
+          items: [
+            { name: `${serviceLabel}`, qty: 1, price },
+          ],
+          total: price,
+        };
+
+        await generateQuotationPDF(pdfData); // ต้อง await เพื่อรอฝังฟอนต์ให้เสร็จ
+      } catch (pdfErr) {
+        console.warn("PDF generation failed:", pdfErr);
+        setMsg({
+          text: "บันทึกสำเร็จ แต่สร้าง PDF ไม่สำเร็จ (" + (pdfErr?.message || pdfErr) + ")",
+          ok: true,
+        });
+      }
 
       // ล้างฟอร์ม แต่คงแพ็กเกจเดิมไว้ให้ผู้ใช้
       setForm({ ...emptyForm, package: form.package });
