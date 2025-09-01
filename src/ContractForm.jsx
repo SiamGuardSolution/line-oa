@@ -1,17 +1,18 @@
+// src/ContractForm.jsx
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
-import { generateQuotationPDF } from "./lib/generateQuotationPDF";
 
-// ใส่ URL เว็บแอป/พร็อกซีของคุณ (ชี้ไป Apps Script หรือ API ของคุณ)
+// ===== API endpoint (proxy ไป Apps Script หรือ API ของคุณ) =====
 const API_URL = "/api/submit-contract";
 
+// ===== ราคา/แพ็กเกจ =====
 const QUOTE_PRICE = {
-  spray: 3993,    // ฉีดพ่นรายปี
-  bait: 5500,     // วางเหยื่อ
-  mix: 8500,      // ผสมผสาน
+  spray: 3993, // ฉีดพ่นรายปี
+  bait: 5500,  // วางเหยื่อ
+  mix: 8500,   // ผสมผสาน
 };
 const getPriceByPackage = (pkg) => Number(QUOTE_PRICE[pkg] ?? 0);
-const toISODate = (d = new Date()) => new Date(d).toISOString().slice(0,10);
+const toISODate = (d = new Date()) => new Date(d).toISOString().slice(0, 10);
 
 const PACKAGES = {
   spray: {
@@ -56,13 +57,11 @@ const emptyForm = {
   tech: "",
   note: "",
   status: "ใช้งานอยู่",
-  // service fields จะถูกเติมให้อัตโนมัติจาก useEffect
 };
 
-// ===== helpers สำหรับคำนวณวันที่ =====
+// ===== helpers วันที่ =====
 const pad2 = (n) => String(n).padStart(2, "0");
 const toISO = (d) => {
-  // คืนค่า yyyy-mm-dd (แก้ timezone offset ให้ไม่เพี้ยน)
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
   return `${local.getUTCFullYear()}-${pad2(local.getUTCMonth() + 1)}-${pad2(local.getUTCDate())}`;
 };
@@ -86,8 +85,7 @@ function computeSchedule(pkg, startStr) {
   if (isNaN(start)) return {};
 
   const out = {};
-  // วันสิ้นสุดสัญญา = +1 ปี
-  out.endDate = toISO(addYears(start, 1));
+  out.endDate = toISO(addYears(start, 1)); // +1 ปี
 
   if (pkg === "spray") {
     const s1 = addMonths(start, 4);
@@ -106,12 +104,11 @@ function computeSchedule(pkg, startStr) {
     out.service4 = toISO(b4);
     out.service5 = toISO(b5);
   } else if (pkg === "mix") {
-    // Spray part
     const s1 = addMonths(start, 4);
     const s2 = addMonths(s1, 4);
     out.serviceSpray1 = toISO(s1);
     out.serviceSpray2 = toISO(s2);
-    // Bait part
+
     const b1 = addDays(start, 20);
     const b2 = addDays(b1, 20);
     const b3 = addDays(b2, 20);
@@ -135,7 +132,7 @@ export default function ContractForm() {
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
   const phoneDigits = (s) => String(s || "").replace(/\D/g, "");
 
-  // === คำนวณอัตโนมัติเมื่อ startDate หรือ package เปลี่ยน ===
+  // auto-compute schedule เมื่อเปลี่ยน startDate/package
   useEffect(() => {
     if (!form.startDate) return;
     const auto = computeSchedule(form.package, form.startDate);
@@ -180,7 +177,7 @@ export default function ContractForm() {
         body: JSON.stringify(payload),
       });
 
-      // พยายามอ่าน JSON หากไม่ได้เป็น JSON จะเก็บข้อความดิบไว้ช่วยดีบัก
+      // อ่าน JSON; ถ้าไม่ใช่ JSON เก็บ raw ช่วยดีบัก
       const raw = await res.text();
       let json;
       try { json = JSON.parse(raw); } catch { json = { ok: res.ok, raw }; }
@@ -192,47 +189,43 @@ export default function ContractForm() {
       // ✅ บันทึกสำเร็จ
       setMsg({ text: "บันทึกสำเร็จ", ok: true });
 
-      // ✅ เตรียมข้อมูลสำหรับ PDF แล้วสร้าง (ถ้าพังจะไม่กระทบผลบันทึก)
+      // ✅ เปิด fastform เพื่อให้เว็บตัวจริงสร้าง PDF อัตโนมัติ (เหมือนเว็บเป๊ะ)
       try {
         const serviceLabel = PACKAGES[form.package]?.label || form.package;
         const price = getPriceByPackage(form.package);
 
-        const pdfData = {
-          // ส่วนหัวลูกค้า
-          customerName: payload.name,
-          phone: payload.phone,
-          address: payload.address,
-          facebook: payload.facebook,
-
-          // รายละเอียดสัญญา
-          serviceType: serviceLabel,     // เช่น "ฉีดพ่น (Spray)"
-          package: payload.package,      // ใช้ key raw ไว้เผื่อ logic อื่น
+        // ข้อมูลที่ส่งไป fastform
+        const share = {
+          docType: "ใบเสนอราคา",
+          docDate: toISODate(),
+          clientName: payload.name,
+          clientPhone: payload.phone,
+          clientAddress: payload.address,
+          items: [{ name: serviceLabel, quantity: 1, price }],
+          vatEnabled: false,
+          vatRate: 7,
+          notes: payload.note ? [payload.note] : [],
           startDate: payload.startDate,
           endDate: payload.endDate,
-          status: payload.status,
-          note: payload.note,
-
-          // วันที่ออกเอกสาร
-          issueDate: toISODate(),
-
-          // ตารางรายการ + ยอดรวม (รูปแบบที่ generateQuotationPDF ต้องการ)
-          items: [
-            { name: `${serviceLabel}`, qty: 1, price },
-          ],
-          total: price,
         };
 
-        console.log('[PDF] generateQuotationPDF payload:', pdfData);
-        await generateQuotationPDF(pdfData);
-      } catch (pdfErr) {
-        console.warn("PDF generation failed:", pdfErr);
-        setMsg({
-          text: "บันทึกสำเร็จ แต่สร้าง PDF ไม่สำเร็จ (" + (pdfErr?.message || pdfErr) + ")",
-          ok: true,
-        });
+        // base64 ที่รองรับยูนิโค้ด
+        const dataB64 = btoa(unescape(encodeURIComponent(JSON.stringify(share))));
+        const dlname = `Contract_${payload.phone || "NA"}`;
+        const url =
+          `https://fastform.siamguards.com/quotation-form` +
+          `?preset=siamguard` +        // ใช้ข้อมูลบริษัทแบบ preset
+          `&auto=1` +                  // สร้าง/ดาวน์โหลดอัตโนมัติ
+          `&return=close` +            // ให้แท็บปิดเองหลัง save (ถ้าบราวเซอร์อนุญาต)
+          `&dlname=${encodeURIComponent(dlname)}` +
+          `&data=${encodeURIComponent(dataB64)}`;
+
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch (navErr) {
+        console.warn("Open fastform failed:", navErr);
       }
 
-      // ล้างฟอร์ม แต่คงแพ็กเกจเดิมไว้ให้ผู้ใช้
+      // ล้างฟอร์ม (คงแพ็กเกจเดิมไว้)
       setForm({ ...emptyForm, package: form.package });
     } catch (err2) {
       setMsg({ text: `บันทึกไม่สำเร็จ ${err2?.message || err2}`, ok: false });
@@ -246,7 +239,9 @@ export default function ContractForm() {
       <div className="cf__card">
         <div className="cf__chip">ฟอร์มสัญญา</div>
         <h2 className="cf__title">บันทึกสัญญาลูกค้า</h2>
-        <p className="cf__subtitle">กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ ระบบจะคำนวณให้อัตโนมัติ</p>
+        <p className="cf__subtitle">
+          กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ ระบบจะคำนวณให้อัตโนมัติ
+        </p>
 
         <form onSubmit={handleSubmit} className="cf__form">
           {/* แพ็กเกจ */}
@@ -258,7 +253,9 @@ export default function ContractForm() {
               onChange={(e) => setVal("package", e.target.value)}
             >
               {Object.entries(PACKAGES).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
+                <option key={k} value={k}>
+                  {v.label}
+                </option>
               ))}
             </select>
           </div>
@@ -267,32 +264,63 @@ export default function ContractForm() {
           <div className="cf__grid">
             <div className="cf__field">
               <label className="cf__label">ชื่อลูกค้า</label>
-              <input className="cf__input" value={form.name} onChange={(e) => setVal("name", e.target.value)} />
+              <input
+                className="cf__input"
+                value={form.name}
+                onChange={(e) => setVal("name", e.target.value)}
+              />
             </div>
             <div className="cf__field">
               <label className="cf__label">Facebook/Line</label>
-              <input className="cf__input" value={form.facebook} onChange={(e) => setVal("facebook", e.target.value)} />
+              <input
+                className="cf__input"
+                value={form.facebook}
+                onChange={(e) => setVal("facebook", e.target.value)}
+              />
             </div>
             <div className="cf__field" style={{ gridColumn: "1 / -1" }}>
               <label className="cf__label">ที่อยู่</label>
-              <input className="cf__input" value={form.address} onChange={(e) => setVal("address", e.target.value)} />
+              <input
+                className="cf__input"
+                value={form.address}
+                onChange={(e) => setVal("address", e.target.value)}
+              />
             </div>
             <div className="cf__field">
               <label className="cf__label">เบอร์โทร</label>
-              <input className="cf__input" value={form.phone} onChange={(e) => setVal("phone", e.target.value)} placeholder="0xx-xxx-xxxx" />
+              <input
+                className="cf__input"
+                value={form.phone}
+                onChange={(e) => setVal("phone", e.target.value)}
+                placeholder="0xx-xxx-xxxx"
+              />
             </div>
             <div className="cf__field">
               <label className="cf__label">ผู้รับผิดชอบในการติดต่อลูกค้า</label>
-              <input className="cf__input" value={form.tech} onChange={(e) => setVal("tech", e.target.value)} />
+              <input
+                className="cf__input"
+                value={form.tech}
+                onChange={(e) => setVal("tech", e.target.value)}
+              />
             </div>
 
             <div className="cf__field">
               <label className="cf__label">วันที่เริ่มสัญญา</label>
-              <input type="date" className="cf__input" value={form.startDate} onChange={(e) => setVal("startDate", e.target.value)} />
+              <input
+                type="date"
+                className="cf__input"
+                value={form.startDate}
+                onChange={(e) => setVal("startDate", e.target.value)}
+              />
             </div>
             <div className="cf__field">
               <label className="cf__label">วันสิ้นสุดสัญญา (อัตโนมัติ +1 ปี)</label>
-              <input type="date" className="cf__input" value={form.endDate} onChange={(e) => setVal("endDate", e.target.value)} />
+              <input
+                type="date"
+                className="cf__input"
+                value={form.endDate}
+                onChange={(e) => setVal("endDate", e.target.value)}
+              />
             </div>
           </div>
 
@@ -317,11 +345,19 @@ export default function ContractForm() {
           {/* หมายเหตุ + สถานะ */}
           <div className="cf__field" style={{ marginTop: 12 }}>
             <label className="cf__label">หมายเหตุ</label>
-            <textarea className="cf__textarea" value={form.note} onChange={(e) => setVal("note", e.target.value)} />
+            <textarea
+              className="cf__textarea"
+              value={form.note}
+              onChange={(e) => setVal("note", e.target.value)}
+            />
           </div>
           <div className="cf__field" style={{ marginTop: 8 }}>
             <label className="cf__label">สถานะ</label>
-            <select className="cf__select" value={form.status} onChange={(e) => setVal("status", e.target.value)}>
+            <select
+              className="cf__select"
+              value={form.status}
+              onChange={(e) => setVal("status", e.target.value)}
+            >
               <option>ใช้งานอยู่</option>
               <option>หมดอายุ</option>
             </select>
