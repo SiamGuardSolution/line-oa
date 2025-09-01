@@ -315,3 +315,8 @@ body{ background:var(--bg); }
     print-color-adjust: exact;
   }
 }
+
+.notes-flex{
+  width: min(100%, 960px);
+  margin-inline: auto;
+}
