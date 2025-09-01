@@ -257,7 +257,7 @@ body{ background:var(--bg); }
 .notes-flex__header{
   font-weight:700;
   font-size:1.0625rem; /* ~17px */
-  color:#fff9a6;
+  color:#111111;
   letter-spacing:.2px;
 }
 
@@ -293,7 +293,7 @@ body{ background:var(--bg); }
   align-items:center;
   justify-content:center;
   font-weight:700;
-  background:#000000;
+  background:#fff9a6;
   color:#ffffff;
   font-size:.95rem;
   line-height:1;
