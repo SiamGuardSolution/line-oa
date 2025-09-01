@@ -244,7 +244,7 @@ body{ background:var(--bg); }
   gap:12px;
   background:#ffffff;
   border:1px solid #e6e6e6;
-  border-radius:12px;
+  border-radius:15px;
   padding:16px;
 }
 
