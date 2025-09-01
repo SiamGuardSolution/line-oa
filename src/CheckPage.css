@@ -236,3 +236,62 @@ body{ background:var(--bg); }
 .timeline .dot.bait{  background:#f97316; }  /* ส้ม */
 .timeline .dot.spray{ background:#06b6d4; }  /* ฟ้าอมเขียว */
 .timeline .dot.end{   background:#64748b; }  /* เทา */
+
+/* --- NotesFlex (ฟลิก) --- */
+.notes-flex{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  background:#f4f9ff;             /* ฟ้าสว่าง */
+  border:1px solid #d7e8ff;       /* เส้นอ่อน */
+  border-radius:16px;
+  padding:14px;
+}
+
+.notes-flex__header{
+  font-weight:700;
+  font-size:1.05rem;
+  color:#0b4ea2;                  /* ฟ้าเข้มอ่านง่าย */
+}
+
+.notes-flex__list{
+  list-style:none;
+  margin:0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.notes-flex__list li{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  line-height:1.5;
+  color:#0b1a2b;                  /* เกือบดำ เพื่อคอนทราสต์ดี */
+}
+
+.notes-flex__list .badge{
+  flex:0 0 auto;
+  width:28px; height:28px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  background:#28a745;             /* เขียวแบรนด์ */
+  color:#fff;
+  font-size:.95rem;
+  box-shadow:0 1px 0 rgba(0,0,0,.05);
+}
+
+/* เน้นตัวเลข 5,000 บาท ให้เด่น */
+.notes-flex strong{
+  color:#c62828;                   /* แดงสำหรับเน้น */
+  font-weight:800;
+}
+
+/* มือถือเล็กมาก */
+@media (max-width: 360px){
+  .notes-flex__list .badge{ width:26px; height:26px; font-size:.9rem; }
+}
