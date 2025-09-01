@@ -1,4 +1,4 @@
-// /api/flex-check.js
+// /api/flex-check.js ของฉันไม่มี PB_PSID
 module.exports = (req, res) => {
   const flexMessage = {
     type: "bubble",

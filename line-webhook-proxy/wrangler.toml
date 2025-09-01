@@ -1,0 +1,3 @@
+name = "line-webhook-proxy"
+main = "src/worker.js"
+compatibility_date = "2025-08-28"
