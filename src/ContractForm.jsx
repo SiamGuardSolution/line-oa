@@ -7,7 +7,7 @@ import './fonts/THSarabun';
 const API_URL = "/api/submit-contract";
 
 const QUOTE_PRICE = {
-  spray: 2882,    // ฉีดพ่นรายปี
+  spray: 3993,    // ฉีดพ่นรายปี
   bait: 5500,     // วางเหยื่อ
   mix: 8500,      // ผสมผสาน
 };

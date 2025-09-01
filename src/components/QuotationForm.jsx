@@ -7,8 +7,13 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 async function addFontFromPublic(doc, publicPath, name, style = 'normal') {
-  const res = await fetch(publicPath);
+  // กัน cache บน dev server/production
+  const res = await fetch(publicPath, { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error(`Font not found: ${publicPath} (HTTP ${res.status})`);
+  }
   const buf = await res.arrayBuffer();
+  console.log(`[PDF] Loaded ${publicPath} (${buf.byteLength} bytes)`);
   const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
   const vfsName = `${name}-${style}.ttf`;
   doc.addFileToVFS(vfsName, base64);
@@ -102,12 +107,21 @@ export default function QuotationForm() {
   doc.setFont('THSarabunNew', 'normal');
   doc.setFontSize(12);
   doc.setLineHeightFactor(1.35);
+  console.log('[PDF] Fonts available:', Object.keys(doc.getFontList?.() || {}));
 
   // ==== เนื้อหาเดิมของคุณ (แก้เฉพาะจุดที่เกี่ยวกับฟอนต์) ====
 
   // Header
   const marginX = 36;
   let y = 40;
+
+  // ทดสอบฟอนต์ (เห็นชัดว่าเปลี่ยนจริง)
+  doc.setFont('THSarabunNew', 'bold');
+  doc.setFontSize(22);
+  doc.text('ทดสอบ TH Sarabun (Bold)', marginX, y);
+  doc.setFont('THSarabunNew', 'normal');
+  doc.setFontSize(12);
+  y += 12;
 
   if (company.logoUrl && company.logoUrl.startsWith('data:image')) {
     try { doc.addImage(company.logoUrl, 'PNG', marginX, y - 8, 120, 40); } catch {}
@@ -199,7 +213,7 @@ export default function QuotationForm() {
     });
   }
 
-  doc.save(`${docNo}.pdf`);
+  doc.save(`${docNo}_${Date.now()}.pdf`);
 };
 
   return (
