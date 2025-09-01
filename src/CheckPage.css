@@ -246,6 +246,12 @@ body{ background:var(--bg); }
   border:1px solid #e6e6e6;
   border-radius:15px;
   padding:16px;
+
+  /* ยืดความกว้างให้เต็มพื้นที่ และคุมเพดานความกว้าง */
+  width:100%;
+  max-width:1200px;       /* ปรับค่าได้ตามต้องการ เช่น 1100/1200/1280 */
+  margin-inline:auto;
+  box-sizing:border-box;
 }
 
 .notes-flex__header{
@@ -316,7 +322,3 @@ body{ background:var(--bg); }
   }
 }
 
-.notes-flex{
-  width: min(100%, 960px);
-  margin-inline: auto;
-}
