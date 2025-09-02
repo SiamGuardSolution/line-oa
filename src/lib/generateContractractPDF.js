@@ -6,6 +6,25 @@ import jsPDF from 'jspdf';
 
 const A4 = { w: 210, h: 297 };
 
+const priceLine =
+  `ราคาสุทธิ ${formatBaht(netPrice)} (รวมภาษีแล้ว)` +
+  (discountValue > 0
+    ? (discountType === 'percent'
+        ? ` – ส่วนลด ${discountValue}%`
+        : ` – ส่วนลด ${formatBaht(discountValue)}`)
+    : '');
+
+const contractForPDF = {
+  ...contract,
+  packageName: (PACKAGES?.[selectedPackage]?.label || selectedPackage),
+  priceText: priceLine,
+};
+
+generateContractPDF(
+  { company, customer, contract: contractForPDF, signatures },
+  { qrDataUrl }
+);
+
 export function generateContractPDF(data, options = {}) {
   const {
     company = { name: 'Siam Guard Solution', address: '—', phone: '—', taxId: '—' },

@@ -1,5 +1,5 @@
 // CheckPage.jsx
-import React, { useMemo, useState } from "react";
+import React, { useState, useMemo } from 'react';
 import "./CheckPage.css";
 
 // ==== API endpoints (ลอง same-origin ก่อน ถ้าไม่สำเร็จค่อย fallback ไป workers.dev) ====
@@ -125,6 +125,23 @@ const NotesFlex = () => (
           บริษัทฯ จะรับผิดชอบซ่อมแซมให้ลูกค้าสูงสุด <strong>5,000 บาท</strong>
           โดยสามารถหักจากค่าบริการที่ลูกค้าต้องชำระได้เลย
           และบริษัทฯ จะจ่ายในส่วนที่เหลือ
+        </div>
+      </li>
+      <li>
+        <span className="badge">5</span>
+        <div>
+          ลูกค้าสามารถเลือกชำระค่าบริการได้ผ่าน 3 ช่องทาง ดังนี้
+          <ol className="notes-flex__sublist">
+            <li>เงินสด/โอน ณ วันที่ให้บริการ</li>
+            <li>
+              บัตรเครดิต รองรับการผ่อนชำระ 0% 6 เดือน
+              <span className="muted"> (service charge 3%)</span>
+            </li>
+            <li>
+              เครดิตจากบริษัท สามารถใช้บริการก่อนและชำระภายหลัง
+              <span className="muted"> (ไม่มีค่าธรรมเนียม)</span>
+            </li>
+          </ol>
         </div>
       </li>
     </ol>

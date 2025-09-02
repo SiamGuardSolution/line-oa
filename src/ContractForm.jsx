@@ -2,17 +2,15 @@
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
 
+// ราคาสุทธิ (รวม VAT แล้ว)
+const PACKAGE_NET_PRICE = {
+  spray: 3993,
+  bait: 5500,
+  hybrid: 8500,
+};
+
 // ===== API endpoint (proxy ไป Apps Script หรือ API ของคุณ) =====
 const API_URL = "/api/submit-contract";
-
-// ===== ราคา/แพ็กเกจ =====
-const QUOTE_PRICE = {
-  spray: 3993, // ฉีดพ่นรายปี
-  bait: 5500,  // วางเหยื่อ
-  mix: 8500,   // ผสมผสาน
-};
-const getPriceByPackage = (pkg) => Number(QUOTE_PRICE[pkg] ?? 0);
-const toISODate = (d = new Date()) => new Date(d).toISOString().slice(0, 10);
 
 const PACKAGES = {
   spray: {
@@ -189,42 +187,6 @@ export default function ContractForm() {
       // ✅ บันทึกสำเร็จ
       setMsg({ text: "บันทึกสำเร็จ", ok: true });
 
-      // ✅ เปิด fastform เพื่อให้เว็บตัวจริงสร้าง PDF อัตโนมัติ (เหมือนเว็บเป๊ะ)
-      try {
-        const serviceLabel = PACKAGES[form.package]?.label || form.package;
-        const price = getPriceByPackage(form.package);
-
-        // ข้อมูลที่ส่งไป fastform
-        const share = {
-          docType: "ใบเสนอราคา",
-          docDate: toISODate(),
-          clientName: payload.name,
-          clientPhone: payload.phone,
-          clientAddress: payload.address,
-          items: [{ name: serviceLabel, quantity: 1, price }],
-          vatEnabled: false,
-          vatRate: 7,
-          notes: payload.note ? [payload.note] : [],
-          startDate: payload.startDate,
-          endDate: payload.endDate,
-        };
-
-        // base64 ที่รองรับยูนิโค้ด
-        const dataB64 = btoa(unescape(encodeURIComponent(JSON.stringify(share))));
-        const dlname = `Contract_${payload.phone || "NA"}`;
-        const url =
-          `https://fastform.siamguards.com/quotation-form` +
-          `?preset=siamguard` +        // ใช้ข้อมูลบริษัทแบบ preset
-          `&auto=1` +                  // สร้าง/ดาวน์โหลดอัตโนมัติ
-          `&return=close` +            // ให้แท็บปิดเองหลัง save (ถ้าบราวเซอร์อนุญาต)
-          `&dlname=${encodeURIComponent(dlname)}` +
-          `&data=${encodeURIComponent(dataB64)}`;
-
-        window.open(url, "_blank", "noopener,noreferrer");
-      } catch (navErr) {
-        console.warn("Open fastform failed:", navErr);
-      }
-
       // ล้างฟอร์ม (คงแพ็กเกจเดิมไว้)
       setForm({ ...emptyForm, package: form.package });
     } catch (err2) {
@@ -233,6 +195,26 @@ export default function ContractForm() {
       setLoading(false);
     }
   };
+
+  const [selectedPackage, setSelectedPackage] = React.useState('spray');
+  const [basePrice, setBasePrice] = React.useState(PACKAGE_NET_PRICE['spray'] || 0);
+  const [discountType, setDiscountType] = React.useState('amount'); // 'amount' | 'percent'
+  const [discountValue, setDiscountValue] = React.useState(0);
+
+  const netPrice = React.useMemo(() => {
+    const b = Number(basePrice) || 0;
+    const v = Number(discountValue) || 0;
+    const after = discountType === 'percent' ? b - (b * v) / 100 : b - v;
+    return Math.max(0, Math.round(after));
+  }, [basePrice, discountType, discountValue]);
+
+  function formatBaht(n) {
+    return (Number(n) || 0).toLocaleString('th-TH', {
+      style: 'currency',
+      currency: 'THB',
+      maximumFractionDigits: 0,
+    });
+  }
 
   return (
     <div className="cf">
@@ -259,6 +241,65 @@ export default function ContractForm() {
               ))}
             </select>
           </div>
+
+          <section className="price-block" style={{marginTop:12}}>
+            <h4 style={{margin:'0 0 8px'}}>ราคาและส่วนลด</h4>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+              <label>
+                แพ็กเกจ
+                <select
+                  value={selectedPackage}
+                  onChange={(e) => {
+                    const p = e.target.value;
+                    setSelectedPackage(p);
+                    setBasePrice(PACKAGE_NET_PRICE[p] ?? 0);
+                    // ถ้ามี state contract และอยาก sync ชื่อแพ็กเกจ ค่อยไปผูกทีหลัง
+                    // (อย่าเรียก setContract ที่นี่ถ้าไม่ได้ประกาศ)
+                  }}
+                >
+                  <option value="spray">ฉีดพ่น (Spray)</option>
+                  <option value="bait">วางเหยื่อ (Bait)</option>
+                  <option value="hybrid">ผสมผสาน (Hybrid)</option>
+                </select>
+              </label>
+
+              <label>
+                ราคาสุทธิของแพ็กเกจ (บาท)
+                <input
+                  type="number"
+                  value={basePrice}
+                  onChange={(e) => setBasePrice(Number(e.target.value))}
+                />
+              </label>
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12, marginTop:8}}>
+              <label>
+                ประเภทส่วนลด
+                <select
+                  value={discountType}
+                  onChange={(e) => setDiscountType(e.target.value)}
+                >
+                  <option value="amount">บาท</option>
+                  <option value="percent">เปอร์เซ็นต์ (%)</option>
+                </select>
+              </label>
+
+              <label>
+                มูลค่าส่วนลด
+                <input
+                  type="number"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(Number(e.target.value))}
+                />
+              </label>
+            </div>
+
+            <div style={{marginTop:10, background:'#f8fafc', border:'1px solid #e5e7eb', padding:10, borderRadius:8}}>
+              ราคาสุทธิที่ต้องชำระ: <strong>{formatBaht(netPrice)}</strong>
+            </div>
+          </section>
 
           {/* ข้อมูลลูกค้า */}
           <div className="cf__grid">
