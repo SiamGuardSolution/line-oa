@@ -335,3 +335,37 @@ body{ background:var(--bg); }
 }
 .muted{ color:#666; }
 
+/* ให้กริดหลักยอมหด ไม่ดันล้นกรอบ */
+.grid.two{
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+  column-gap: 16px;
+}
+
+/* ===== Stack field: label (บน) + value (ล่าง) ===== */
+.field.stack{
+  display: grid;
+  grid-template-rows: auto auto;
+  row-gap: 4px;
+  min-width: 0;                  /* สำคัญเวลาอยู่ใน Grid */
+}
+
+.field.stack > label{
+  margin: 0;
+  font-size: .875rem;
+  color: #64748b;
+  white-space: nowrap;           /* คง 1 บรรทัด */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.field.stack > .value{
+  font-weight: 600;
+  white-space: nowrap;           /* คง 1 บรรทัด เหมือนในภาพ */
+  overflow: hidden;              /* ถ้าพื้นที่ไม่พอให้ตัดด้วย … */
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ระยะของแต่ละแถวให้เนียน */
+.grid.two .field.stack{ margin: 2px 0 10px; }

@@ -357,16 +357,15 @@ export default function CheckPage() {
                 <label>ชื่อลูกค้า</label>
                 <div className="value">{contract.name || "-"}</div>
               </div>
-              <div className="field">
+              <div className="field stack">
                 <label>เบอร์โทร</label>
                 <div className="value">{formatThaiPhone(normalizePhone(contract.phone))}</div>
               </div>
-
               <div className="field">
                 <label>แพ็กเกจ</label>
                 <div className="value">{labelFromContract(contract)}</div>
               </div>
-              <div className="field">
+              <div className="field stack">
                 <label>ราคาแพ็กเกจ</label>
                 <div className="value">{priceTextFrom(contract)}</div>
               </div>
@@ -374,8 +373,7 @@ export default function CheckPage() {
                 <label>ประเภทบริการ</label>
                 <div className="value">{contract.serviceType || "กำจัดปลวก"}</div>
               </div>
-
-              <div className="field">
+              <div className="field stack">
                 <label>วันที่เริ่ม</label>
                 <div className="value">{contract.startDate || "-"}</div>
               </div>
