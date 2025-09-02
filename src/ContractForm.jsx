@@ -123,6 +123,8 @@ export default function ContractForm() {
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
   const phoneDigits = (s) => String(s || "").replace(/\D/g, "");
 
+  const [discountValue, setDiscountValue] = React.useState(0);
+
   // auto-compute schedule เมื่อเปลี่ยน startDate/package
   useEffect(() => {
     if (!form.startDate) return;
@@ -214,6 +216,21 @@ export default function ContractForm() {
               ))}
             </select>
           </div>
+
+          <section className="cf-section">
+            <div className="cf-field" style={{ maxWidth: 360 }}>
+              <label>ส่วนลด</label>
+              <div className="cf-input-inline">
+                <input
+                  type="number"
+                  className="cf-input"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(Number(e.target.value || 0))}
+                />
+                <span className="cf-unit">บาท</span>
+              </div>
+            </div>
+          </section>
 
           {/* ข้อมูลลูกค้า */}
           <div className="cf__grid">
