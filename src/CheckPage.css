@@ -334,3 +334,26 @@ body{ background:var(--bg); }
   font-weight: 700;          /* ทำเลขย่อยให้ชัดขึ้น (รองรับเบราว์เซอร์หลัก) */
 }
 .muted{ color:#666; }
+
+/* inline row: label ←→ value อยู่บรรทัดเดียว */
+.field.inline{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.field.inline > label{
+  margin: 0;
+  white-space: nowrap;       /* กัน label ลงบรรทัดใหม่ */
+  flex: 0 0 auto;
+}
+.field.inline > .value{
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;       /* กันค่าลงบรรทัดใหม่ */
+  overflow: hidden;          /* ถ้ายาวเกิน ก็ตัดด้วย … */
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums; /* ตัวเลขสวยขึ้น */
+}
+
+/* ถ้าในบางธีม .field มี margin-bottom มากเกินไป สามารถปรับได้ */
+.grid.two .field.inline{ margin-bottom: 8px; }
