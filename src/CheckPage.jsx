@@ -51,46 +51,71 @@ const priceTextFrom = (c) => {
 // ตัดคอมมา/คำว่า บาท ฯลฯ → ตัวเลข
 const toNumberSafe = (v) => {
   if (v == null) return 0;
-  if (typeof v === "number") return isFinite(v) ? v : 0;
-  const s = String(v).replace(/[,\s]/g, "").replace(/[^\d.-]/g, "");
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  const s = String(v).replace(/[,\s]/g, '').replace(/[^\d.-]/g, '');
   const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 };
 
+// normalize ชื่อคีย์หัวคอลัมน์ให้เทียบง่าย
+const normKey = (s) =>
+  String(s || '')
+    .toLowerCase()
+    .replace(/\u00a0/g, ' ')         // NBSP -> space
+    .replace(/\s+/g, '')             // ลบช่องว่างทั้งหมด
+    .replace(/[/|_.\-()]/g, '');     // ลบตัวคั่นยอดฮิต
+
+// ดึงค่าตามชุด alias ของชื่อหัวคอลัมน์
+const pickByAliases = (obj, aliases) => {
+  if (!obj) return undefined;
+  const want = new Set(aliases.map(normKey));
+  for (const k of Object.keys(obj)) {
+    if (want.has(normKey(k))) return obj[k];
+  }
+  return undefined;
+};
+
+// ราคา base ตามแพ็กเกจ (พยายามอ่านจากข้อความก่อน)
 const basePriceFrom = (c) => {
-  // พยายามอ่านจากข้อความราคาก่อน (เช่น "3,993 บาท/ปี")
   const fromText = toNumberSafe(priceTextFrom(c));
   if (fromText > 0) return fromText;
-  // ไม่เจอ/อ่านไม่ได้ → ใช้ mapping ตามแพ็กเกจ
   const code = derivePkg(c);
   if (code === '8500') return 8500;
   if (code === '5500') return 5500;
   return 3993;
 };
 
-// ดึง "ส่วนลด" รองรับหลายคอลัมน์
+// ✅ ส่วนลด: รองรับชื่อคอลัมน์หลากหลาย + เว้นวรรค/วงเล็บ/สัญลักษณ์
 const discountFrom = (c) => {
-  const cand =
+  // เคสตรง ๆ ก่อน
+  const direct =
     c?.discount ??
-    c?.["ส่วนลด"] ??
-    c?.["ส่วนลดบาท"] ??
-    c?.["ส่วนลด (บาท)"] ??
-    c?.["ส่วนลด(บาท)"] ??
     c?.discountBaht ??
-    c?.["Discount(Baht)"] ??
-    c?.["discount (baht)"];
-  return toNumberSafe(cand);
+    c?.['ส่วนลด'] ??
+    c?.['ส่วนลดบาท'] ??
+    c?.['ส่วนลด (บาท)'] ??
+    c?.['ส่วนลด(บาท)'] ??
+    c?.['Discount(Baht)'] ??
+    c?.['discount (baht)'];
+  if (direct != null && direct !== '') return toNumberSafe(direct);
+
+  // เคสหัวคอลัมน์สะกดแปลก/มีเว้นวรรค/สัญลักษณ์
+  const val = pickByAliases(c, [
+    'ส่วนลด', 'ส่วนลด บาท', 'ส่วนลด(บาท)', 'ส่วนลด (บาท)', 'ส่วนลดบาท',
+    'discount', 'discount baht', 'discount(baht)', 'discount (baht)', 'discountbaht'
+  ]);
+  return toNumberSafe(val);
 };
 
-// ราคาสุทธิ (ข้อความพร้อมหน่วย)
+// ราคาสุทธิ (ข้อความ)
 const netPriceTextFrom = (c) => {
-  if (!c) return "-";
+  if (!c) return '-';
   const base = basePriceFrom(c);
   const disc = discountFrom(c);
-  const net = Math.max(0, Math.round(base - disc));
+  const net  = Math.max(0, Math.round(base - disc));
   const code = derivePkg(c);
-  const suffix = code === "5500" ? "" : "/ปี";
-  return `${net.toLocaleString("th-TH")} บาท${suffix}`;
+  const suffix = code === '5500' ? '' : '/ปี';
+  return `${net.toLocaleString('th-TH')} บาท${suffix}`;
 };
 
 /** ==== utils ==== */
