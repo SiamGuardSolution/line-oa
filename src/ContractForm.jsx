@@ -2,13 +2,6 @@
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
 
-// ราคาสุทธิ (รวม VAT แล้ว)
-const PACKAGE_NET_PRICE = {
-  spray: 3993,
-  bait: 5500,
-  hybrid: 8500,
-};
-
 // ===== API endpoint (proxy ไป Apps Script หรือ API ของคุณ) =====
 const API_URL = "/api/submit-contract";
 
@@ -196,26 +189,6 @@ export default function ContractForm() {
     }
   };
 
-  const [selectedPackage, setSelectedPackage] = React.useState('spray');
-  const [basePrice, setBasePrice] = React.useState(PACKAGE_NET_PRICE['spray'] || 0);
-  const [discountType, setDiscountType] = React.useState('amount'); // 'amount' | 'percent'
-  const [discountValue, setDiscountValue] = React.useState(0);
-
-  const netPrice = React.useMemo(() => {
-    const b = Number(basePrice) || 0;
-    const v = Number(discountValue) || 0;
-    const after = discountType === 'percent' ? b - (b * v) / 100 : b - v;
-    return Math.max(0, Math.round(after));
-  }, [basePrice, discountType, discountValue]);
-
-  function formatBaht(n) {
-    return (Number(n) || 0).toLocaleString('th-TH', {
-      style: 'currency',
-      currency: 'THB',
-      maximumFractionDigits: 0,
-    });
-  }
-
   return (
     <div className="cf">
       <div className="cf__card">
@@ -241,44 +214,6 @@ export default function ContractForm() {
               ))}
             </select>
           </div>
-
-          <section className="price-block" style={{marginTop:12}}>
-            <h4 style={{margin:'0 0 8px'}}>ราคาและส่วนลด</h4>
-              <label>
-                ราคาสุทธิของแพ็กเกจ (บาท)
-                <input
-                  type="number"
-                  value={basePrice}
-                  onChange={(e) => setBasePrice(Number(e.target.value))}
-                />
-              </label>
-
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12, marginTop:8}}>
-              <label>
-                ประเภทส่วนลด
-                <select
-                  value={discountType}
-                  onChange={(e) => setDiscountType(e.target.value)}
-                >
-                  <option value="amount">บาท</option>
-                  <option value="percent">เปอร์เซ็นต์ (%)</option>
-                </select>
-              </label>
-
-              <label>
-                มูลค่าส่วนลด
-                <input
-                  type="number"
-                  value={discountValue}
-                  onChange={(e) => setDiscountValue(Number(e.target.value))}
-                />
-              </label>
-            </div>
-
-            <div style={{marginTop:10, background:'#f8fafc', border:'1px solid #e5e7eb', padding:10, borderRadius:8}}>
-              ราคาสุทธิที่ต้องชำระ: <strong>{formatBaht(netPrice)}</strong>
-            </div>
-          </section>
 
           {/* ข้อมูลลูกค้า */}
           <div className="cf__grid">
