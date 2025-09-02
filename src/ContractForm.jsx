@@ -244,26 +244,6 @@ export default function ContractForm() {
 
           <section className="price-block" style={{marginTop:12}}>
             <h4 style={{margin:'0 0 8px'}}>ราคาและส่วนลด</h4>
-
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <label>
-                แพ็กเกจ
-                <select
-                  value={selectedPackage}
-                  onChange={(e) => {
-                    const p = e.target.value;
-                    setSelectedPackage(p);
-                    setBasePrice(PACKAGE_NET_PRICE[p] ?? 0);
-                    // ถ้ามี state contract และอยาก sync ชื่อแพ็กเกจ ค่อยไปผูกทีหลัง
-                    // (อย่าเรียก setContract ที่นี่ถ้าไม่ได้ประกาศ)
-                  }}
-                >
-                  <option value="spray">ฉีดพ่น (Spray)</option>
-                  <option value="bait">วางเหยื่อ (Bait)</option>
-                  <option value="hybrid">ผสมผสาน (Hybrid)</option>
-                </select>
-              </label>
-
               <label>
                 ราคาสุทธิของแพ็กเกจ (บาท)
                 <input
@@ -272,7 +252,6 @@ export default function ContractForm() {
                   onChange={(e) => setBasePrice(Number(e.target.value))}
                 />
               </label>
-            </div>
 
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12, marginTop:8}}>
               <label>

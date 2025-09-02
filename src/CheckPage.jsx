@@ -1,8 +1,7 @@
-// CheckPage.jsx
 import React, { useState, useMemo } from 'react';
 import "./CheckPage.css";
 
-// ==== API endpoints (ลอง same-origin ก่อน ถ้าไม่สำเร็จค่อย fallback ไป workers.dev) ====
+/** ==== API endpoints (ลอง same-origin ก่อน ถ้าไม่สำเร็จค่อย fallback ไป workers.dev) ==== */
 const API_BASES = [
   "", // same-origin → /api/*
   (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "")
@@ -15,29 +14,41 @@ function buildCheckUrls(digits) {
   );
 }
 
-const labelFromContract = (c) => {
-  const code = derivePkg(c);
-  return c?.packageLabel ||
-    (code === "8500" ? "ผสมผสาน 8,500 บาท/ปี" :
-     code === "5500" ? "วางเหยื่อ 5,500 บาท" :
-                       "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี");
-};
-
+/** ==== Package helpers (label/price) ==== */
 function derivePkg(c) {
   if (!c) return "3993";
-  if (c.pkg) {                      // <- ใช้ค่าจาก API ก่อน
+  // ค่าแบบใหม่จาก API
+  if (c.pkg) {
     if (c.pkg === "mix")  return "8500";
     if (c.pkg === "bait") return "5500";
-    return "3993";                 // spray
+    return "3993";
   }
-  // fallback: กรณี API เก่า
+  // fallback: API เก่า
   const raw = `${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
     .toLowerCase().replace(/[,\s]/g, "");
   if (raw.includes("8500") || raw.includes("ผสม") || raw.includes("mix") || raw.includes("combo")) return "8500";
-  if (raw.includes("เหยื่อ") || raw.includes("bait") || raw.includes("5500"))                         return "5500";
+  if (raw.includes("เหยื่อ") || raw.includes("bait") || raw.includes("5500")) return "5500";
   return "3993";
 }
 
+const labelFromContract = (c) => {
+  const code = derivePkg(c);
+  return c?.packageLabel ||
+    (code === "8500" ? "ผสมผสาน 8,500 บาท/ปี"
+      : code === "5500" ? "วางเหยื่อ 5,500 บาท"
+      : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี");
+};
+
+const priceTextFrom = (c) => {
+  if (!c) return "-";
+  if (c.priceText) return c.priceText; // จาก API ถ้ามี
+  const code = derivePkg(c);
+  if (code === "8500") return "8,500 บาท/ปี";
+  if (code === "5500") return "5,500 บาท";
+  return "3,993 บาท/ปี";
+};
+
+/** ==== utils ==== */
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
 const formatThaiPhone = (digits) => {
   if (!digits) return "";
@@ -69,7 +80,7 @@ const addMonths = (dateStr, n) => {
   return toYMD(d);
 };
 
-// --- helpers for schedule groups ---
+/** --- schedule helpers --- */
 const makeBaitItems = (base, count = 5, stepDays = 20) =>
   Array.from({ length: count }).map((_, i) => ({
     kind: "bait",
@@ -82,16 +93,7 @@ const makeSprayItems = (start, s1, s2) => [
   { kind: "spray", label: "ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 },
 ];
 
-const priceTextFrom = (c) => {
-  if (!c) return "-";
-  if (c.priceText) return c.priceText;       // ใช้จาก API ก่อน
-  const code = derivePkg(c);                 // fallback ถ้า API เก่ายังไม่ส่ง
-  if (code === "8500") return "8,500 บาท/ปี";
-  if (code === "5500") return "5,500 บาท";
-  return "3,993 บาท/ปี";
-};
-
-// --- Add this component in CheckPage.jsx ---
+/** --- Notes (หมายเหตุ) --- */
 const NotesFlex = () => (
   <section className="notes-flex" aria-label="หมายเหตุการให้บริการ">
     <header className="notes-flex__header">หมายเหตุ</header>
@@ -163,7 +165,7 @@ export default function CheckPage() {
     [contracts, activeIdx]
   );
 
-  // ค้นหาจากเบอร์
+  /** ค้นหาจากเบอร์ */
   const onSearch = async (e) => {
     e?.preventDefault?.();
     setError("");
@@ -182,7 +184,6 @@ export default function CheckPage() {
 
       for (const url of urls) {
         try {
-          console.log("[CHECK] try:", url);
           const res = await fetch(url, {
             cache: "no-store",
             headers: { Accept: "application/json" },
@@ -222,7 +223,7 @@ export default function CheckPage() {
     }
   };
 
-  // ===== กำหนดการตามแพ็กเกจ =====
+  /** ===== กำหนดการตามแพ็กเกจ ===== */
   const scheduleGroups = useMemo(() => {
     if (!contract) return [];
     const pkg   = derivePkg(contract);
@@ -331,6 +332,8 @@ export default function CheckPage() {
               background: i === activeIdx ? "#e8f1ff" : "#fff",
               fontWeight: i === activeIdx ? 700 : 500,
               cursor: "pointer",
+              marginRight: 8,
+              marginBottom: 8,
             }}
             title={labelFromContract(c)}
           >
@@ -361,9 +364,7 @@ export default function CheckPage() {
 
               <div className="field">
                 <label>แพ็กเกจ</label>
-                <div className="value">
-                  {labelFromContract(contract)}
-                </div>
+                <div className="value">{labelFromContract(contract)}</div>
               </div>
               <div className="field">
                 <label>ราคาแพ็กเกจ</label>
@@ -420,9 +421,7 @@ export default function CheckPage() {
                     <li key={idx} className={item.isEnd ? "end" : ""}>
                       <div className={`dot ${item.kind}`} />
                       <div className="meta">
-                        <div className="label">
-                          {item.label}
-                        </div>
+                        <div className="label">{item.label}</div>
                         <div className="date">{item.date || "-"}</div>
                       </div>
                     </li>
