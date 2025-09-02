@@ -224,11 +224,20 @@ export default function ContractForm() {
                 <input
                   type="number"
                   className="cf-input"
+                  placeholder="0"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
                   value={discountValue}
-                  onChange={(e) => setDiscountValue(Number(e.target.value || 0))}
+                  onChange={(e) => {
+                    const v = Math.max(0, Number(e.target.value || 0)); // ห้ามติดลบ
+                    setDiscountValue(v);
+                  }}
+                  onWheel={(e) => e.currentTarget.blur()} // กัน scroll เปลี่ยนค่า
                 />
                 <span className="cf-unit">บาท</span>
               </div>
+              <div className="cf-hint">กรอกจำนวนเงินส่วนลด (บาท)</div>
             </div>
           </section>
 
