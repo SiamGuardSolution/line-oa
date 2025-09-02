@@ -48,34 +48,49 @@ const priceTextFrom = (c) => {
   return "3,993 บาท/ปี";
 };
 
-// คืนราคาฐานตามแพ็กเกจ (ตัวเลข)
-const basePriceFrom = (c) => {
-  const code = derivePkg(c);         // "3993" | "5500" | "8500"
-  if (code === "8500") return 8500;
-  if (code === "5500") return 5500;
-  return 3993;
-};
-
-// ดึงส่วนลดจากสัญญา (รองรับหลายคีย์)
-const discountFrom = (c) => {
-  const raw = c?.discount ?? c?.['ส่วนลด'] ?? c?.discountBaht ?? 0;
-  const n = Number(raw);
+// ตัดคอมมา/คำว่า บาท ฯลฯ → ตัวเลข
+const toNumberSafe = (v) => {
+  if (v == null) return 0;
+  if (typeof v === "number") return isFinite(v) ? v : 0;
+  const s = String(v).replace(/[,\s]/g, "").replace(/[^\d.-]/g, "");
+  const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 };
 
-// ราคาสุทธิ (เป็นข้อความพร้อมหน่วย "บาท" และ "/ปี" สำหรับแพ็กเกจที่เป็นรายปี)
+const basePriceFrom = (c) => {
+  // พยายามอ่านจากข้อความราคาก่อน (เช่น "3,993 บาท/ปี")
+  const fromText = toNumberSafe(priceTextFrom(c));
+  if (fromText > 0) return fromText;
+  // ไม่เจอ/อ่านไม่ได้ → ใช้ mapping ตามแพ็กเกจ
+  const code = derivePkg(c);
+  if (code === '8500') return 8500;
+  if (code === '5500') return 5500;
+  return 3993;
+};
+
+// ดึง "ส่วนลด" รองรับหลายคอลัมน์
+const discountFrom = (c) => {
+  const cand =
+    c?.discount ??
+    c?.["ส่วนลด"] ??
+    c?.["ส่วนลดบาท"] ??
+    c?.["ส่วนลด (บาท)"] ??
+    c?.["ส่วนลด(บาท)"] ??
+    c?.discountBaht ??
+    c?.["Discount(Baht)"] ??
+    c?.["discount (baht)"];
+  return toNumberSafe(cand);
+};
+
+// ราคาสุทธิ (ข้อความพร้อมหน่วย)
 const netPriceTextFrom = (c) => {
   if (!c) return "-";
   const base = basePriceFrom(c);
   const disc = discountFrom(c);
   const net = Math.max(0, Math.round(base - disc));
   const code = derivePkg(c);
-  const suffix = code === "5500" ? "" : "/ปี"; // bait ไม่มี /ปี
-
-  // มีส่วนลด → แสดงราคาสุทธิ; ไม่มีส่วนลด → ใช้ราคาเดิม
-  return disc > 0
-    ? `${net.toLocaleString('th-TH')} บาท${suffix}`
-    : priceTextFrom(c);
+  const suffix = code === "5500" ? "" : "/ปี";
+  return `${net.toLocaleString("th-TH")} บาท${suffix}`;
 };
 
 /** ==== utils ==== */
