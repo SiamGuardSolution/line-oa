@@ -372,6 +372,8 @@ export default function CheckPage() {
     return end < mid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
   }, [contract]);
 
+  console.log('keys', Object.keys(contract)); console.log('disc', discountFrom(contract), contract);
+
   return (
     <div className="check-container">
       <header className="top">
