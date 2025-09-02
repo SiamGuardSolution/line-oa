@@ -248,7 +248,7 @@ body{ background:var(--bg); }
   padding:16px;
 
   /* ยืดความกว้างให้เต็มพื้นที่ และคุมเพดานความกว้าง */
-  width:125%;
+  width:150%;
   max-width:960px;       /* ปรับค่าได้ตามต้องการ เช่น 1100/1200/1280 */
   margin-inline:auto;
   box-sizing:border-box;
@@ -339,7 +339,7 @@ body{ background:var(--bg); }
 .grid.two{
   display: grid;
   grid-template-columns: minmax(0,1fr) minmax(0,1fr);
-  column-gap: 16px;
+  column-gap: 24px;
 }
 
 /* ===== Stack field: label (บน) + value (ล่าง) ===== */
