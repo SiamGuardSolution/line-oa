@@ -48,6 +48,36 @@ const priceTextFrom = (c) => {
   return "3,993 บาท/ปี";
 };
 
+// คืนราคาฐานตามแพ็กเกจ (ตัวเลข)
+const basePriceFrom = (c) => {
+  const code = derivePkg(c);         // "3993" | "5500" | "8500"
+  if (code === "8500") return 8500;
+  if (code === "5500") return 5500;
+  return 3993;
+};
+
+// ดึงส่วนลดจากสัญญา (รองรับหลายคีย์)
+const discountFrom = (c) => {
+  const raw = c?.discount ?? c?.['ส่วนลด'] ?? c?.discountBaht ?? 0;
+  const n = Number(raw);
+  return isNaN(n) ? 0 : n;
+};
+
+// ราคาสุทธิ (เป็นข้อความพร้อมหน่วย "บาท" และ "/ปี" สำหรับแพ็กเกจที่เป็นรายปี)
+const netPriceTextFrom = (c) => {
+  if (!c) return "-";
+  const base = basePriceFrom(c);
+  const disc = discountFrom(c);
+  const net = Math.max(0, Math.round(base - disc));
+  const code = derivePkg(c);
+  const suffix = code === "5500" ? "" : "/ปี"; // bait ไม่มี /ปี
+
+  // มีส่วนลด → แสดงราคาสุทธิ; ไม่มีส่วนลด → ใช้ราคาเดิม
+  return disc > 0
+    ? `${net.toLocaleString('th-TH')} บาท${suffix}`
+    : priceTextFrom(c);
+};
+
 /** ==== utils ==== */
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
 const formatThaiPhone = (digits) => {
@@ -366,8 +396,8 @@ export default function CheckPage() {
                 <div className="value">{labelFromContract(contract)}</div>
               </div>
               <div className="field stack">
-                <label>ราคาแพ็กเกจ</label>
-                <div className="value">{priceTextFrom(contract)}</div>
+                <label>ราคาสุทธิ</label>
+                <div className="value">{netPriceTextFrom(contract)}</div>
               </div>
               <div className="field">
                 <label>ประเภทบริการ</label>
