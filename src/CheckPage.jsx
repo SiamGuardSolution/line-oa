@@ -426,14 +426,20 @@ export default function CheckPage() {
   // >>> เพิ่มใน CheckPage component
   const contractRef = useMemo(() => {
     if (!contract) return "";
-    return firstNonEmpty(
-      contract.number,
-      contract.contractNumber,
-      contract.ref,
-      contract.quotationNumber,
-      contract.invoiceNumber,
-      contract.contract_no
-    ) || "";
+      const ref = firstNonEmpty(
+        contract.number,
+        contract.contractNumber,
+        contract.ref,
+        contract.quotationNumber,
+        contract.invoiceNumber,
+        contract.contract_no,
+        contract.id,
+        contract._id,
+        contract.contractId
+      );
+      if (ref) return String(ref);
+      const alt = [normalizePhone(contract.phone), contract.startDate].filter(Boolean).join("-");
+    return alt || "";
   }, [contract]);
 
   const netAmount = useMemo(() => netAmountFrom(contract), [contract]);
