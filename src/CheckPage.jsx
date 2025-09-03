@@ -74,15 +74,40 @@ const normKey = (s) =>
 const pickByAliasesDeep = (obj, aliases) => {
   if (!obj || typeof obj !== 'object') return undefined;
   const want = new Set(aliases.map(normKey));
-  for (const k of Object.keys(obj)) {
-    const v = obj[k];
-    if (want.has(normKey(k))) return v;
+  const walk = (v) => {
     if (v && typeof v === 'object') {
-      const found = pickByAliasesDeep(v, aliases);
-      if (found !== undefined) return found;
+      for (const k of Object.keys(v)) {
+        if (want.has(normKey(k))) return v[k];
+        const hit = walk(v[k]);
+        if (hit !== undefined) return hit;
+      }
     }
-  }
-  return undefined;
+    return undefined;
+  };
+  return walk(obj);
+};
+
+const escapeRx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const scanDiscountInStrings = (obj) => {
+  const kws = ['ส่วนลด', 'discount'];
+  let found = 0;
+  const walk = (v) => {
+    if (found) return;
+    if (typeof v === 'string') {
+      const s = v.replace(/\u00a0/g, ' ');
+      for (const kw of kws) {
+        const re = new RegExp(escapeRx(kw) + '\\s*[:=]?\\s*([\\d,.]+)', 'i');
+        const m = s.match(re);
+        if (m && m[1]) { found = toNumberSafe(m[1]); return; }
+      }
+    } else if (Array.isArray(v)) {
+      for (const x of v) walk(x);
+    } else if (v && typeof v === 'object') {
+      for (const k of Object.keys(v)) walk(v[k]);
+    }
+  };
+  walk(obj);
+  return found || 0;
 };
 
 // ราคา base ตามแพ็กเกจ (พยายามอ่านจากข้อความก่อน)
@@ -97,27 +122,28 @@ const basePriceFrom = (c) => {
 
 // ✅ ส่วนลด: รองรับชื่อคอลัมน์หลากหลาย + เว้นวรรค/วงเล็บ/สัญลักษณ์
 const discountFrom = (c) => {
-
+  // ชื่อคอลัมน์ที่มักเจอ
   const aliases = [
     'ส่วนลด', 'ส่วนลด บาท', 'ส่วนลด(บาท)', 'ส่วนลด (บาท)', 'ส่วนลดบาท',
     'discount', 'discount baht', 'discount(baht)', 'discount (baht)', 'discountbaht'
   ];
 
-  // เคสตรง ๆ ก่อน
+  // ชั้นบนสุดก่อน
   const direct =
-    c?.discount ??
-    c?.discountBaht ??
-    c?.['ส่วนลด'] ??
-    c?.['ส่วนลดบาท'] ??
-    c?.['ส่วนลด (บาท)'] ??
-    c?.['ส่วนลด(บาท)'] ??
-    c?.['Discount(Baht)'] ??
-    c?.['discount (baht)'];
+    c?.discount ?? c?.discountBaht ??
+    c?.['ส่วนลด'] ?? c?.['ส่วนลดบาท'] ?? c?.['ส่วนลด (บาท)'] ?? c?.['ส่วนลด(บาท)'] ??
+    c?.['Discount(Baht)'] ?? c?.['discount (baht)'];
+  if (direct != null && direct !== '') return toNumberSafe(direct);
 
-   if (direct != null && direct !== '') return toNumberSafe(direct);
+  // ค้นแบบลึกทุกชั้น
+  const deep = pickByAliasesDeep(c, aliases);
+  if (deep != null && deep !== '') {
+    const n = toNumberSafe(deep);
+    if (n > 0) return n;
+  }
 
-   const deep = pickByAliasesDeep(c, aliases);
-  return toNumberSafe(deep);
+  // สำรอง: หาในข้อความทั่วไป
+  return scanDiscountInStrings(c);
 };
 
 // ราคาสุทธิ (ข้อความ)
