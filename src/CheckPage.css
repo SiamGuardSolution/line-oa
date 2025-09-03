@@ -369,3 +369,17 @@ body{ background:var(--bg); }
 
 /* ระยะของแต่ละแถวให้เนียน */
 .grid.two .field.stack{ margin: 2px 0 10px; }
+
+.notes-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.link-pay{
+  color:#2563eb;
+  font-weight:600;
+  text-decoration:underline;
+  white-space:nowrap;
+}
+.link-pay:hover{ text-decoration:none; opacity:.9; }

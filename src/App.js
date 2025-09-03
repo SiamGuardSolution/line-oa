@@ -6,6 +6,7 @@ import liff from "@line/liff";
 import "./App.css";
 import ContractForm from "./ContractForm";
 import CheckPage from "./CheckPage";
+import PayPage from "./PayPage"; // <-- เพิ่ม
 
 /** ---------- DEV BYPASS (เปิดโหมด mock ด้วย ?mock=1 หรือ .env: REACT_APP_BYPASS_LINE=1) ---------- */
 function computeDevBypass() {
@@ -31,7 +32,9 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = React.useState(false); // สถานะล็อกอิน (โฮมเพจเท่านั้น)
 
   React.useEffect(() => {
-    const isCheckPage = window.location.pathname.startsWith("/check");
+    // <-- เปลี่ยนจาก isCheckPage เป็น isPublic ครอบทั้ง /check และ /pay
+    const path = window.location.pathname;
+    const isPublic = ["/check", "/pay"].some((p) => path.startsWith(p));
 
     // 1) โหมด Dev Bypass: ไม่เรียก LIFF เลย
     if (DEV_BYPASS) {
@@ -40,8 +43,8 @@ export default function App() {
       return;
     }
 
-    // 2) หน้า /check ไม่บังคับล็อกอิน
-    if (isCheckPage) {
+    // 2) หน้า public ไม่บังคับล็อกอิน
+    if (isPublic) {
       setAuthReady(true);
       return;
     }
@@ -112,8 +115,9 @@ export default function App() {
 
       <Router>
         <Routes>
-          {/* /check ไม่ต้องล็อกอิน */}
+          {/* หน้า public (ไม่ต้องล็อกอิน) */}
           <Route path="/check" element={<CheckPage />} />
+          <Route path="/pay" element={<PayPage />} /> {/* <-- เส้นทางใหม่ */}
 
           {/* หน้าอื่นต้องล็อกอินผ่าน LINE */}
           <Route

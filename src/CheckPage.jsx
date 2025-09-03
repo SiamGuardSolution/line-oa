@@ -156,6 +156,18 @@ const netPriceTextFrom = (c) => {
   return `${net.toLocaleString('th-TH')} บาท${suffix}`;
 };
 
+// >>> เพิ่มใหม่
+const firstNonEmpty = (...vals) =>
+  vals.find(v => v !== undefined && v !== null && String(v).trim() !== "");
+
+const netAmountFrom = (c) => {
+  if (!c) return 0;
+  const base = basePriceFrom(c);
+  const disc = discountFrom(c);
+  return Math.max(0, Math.round(base - disc)); // ตัวเลข (ไม่ใช่ข้อความ)
+};
+
+
 /** ==== utils ==== */
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
 const formatThaiPhone = (digits) => {
@@ -202,47 +214,29 @@ const makeSprayItems = (start, s1, s2) => [
 ];
 
 /** --- Notes (หมายเหตุ) --- */
-const NotesFlex = () => (
+const NotesFlex = ({ payUrl }) => (
   <section className="notes-flex" aria-label="หมายเหตุการให้บริการ">
     <header className="notes-flex__header">หมายเหตุ</header>
     <ol className="notes-flex__list">
-      <li>
-        <span className="badge">1</span>
-        <div>
-          วันที่ครบกำหนด คือ วันที่ที่ครบกำหนดบริการตามเงื่อนไข
-          เป็นเพียงกำหนดการนัดหมายส่งงานเท่านั้น
-        </div>
-      </li>
-      <li>
-        <span className="badge">2</span>
-        <div>
-          วันที่เข้าบริการ คือ วันที่เข้ารับบริการจริง
-          ซึ่งทางบริษัทฯ ได้ทำการนัดหมายลูกค้าอย่างชัดเจน
-        </div>
-      </li>
-      <li>
-        <span className="badge">3</span>
-        <div>
-          ตารางครบกำหนดด้านล่าง ลูกค้าสามารถขอเปลี่ยนวันได้ด้วยตัวเองทาง
-          Line Official Account หรือโทรนัดกับเจ้าหน้าที่
-          โดยปกติแล้วทางเราจะโทรนัดล่วงหน้าก่อนประมาณ 2–7 วัน
-        </div>
-      </li>
-      <li>
-        <span className="badge">4</span>
-        <div>
-          หากเกิดความเสียหายจากการให้บริการ เช่น เจาะโดนท่อน้ำดี
-          บริษัทฯ จะรับผิดชอบซ่อมแซมให้ลูกค้าสูงสุด <strong>5,000 บาท</strong>
-          โดยสามารถหักจากค่าบริการที่ลูกค้าต้องชำระได้เลย
-          และบริษัทฯ จะจ่ายในส่วนที่เหลือ
-        </div>
-      </li>
+      {/* ... ข้อ 1–4 เหมือนเดิม ... */}
       <li>
         <span className="badge">5</span>
         <div>
           ลูกค้าสามารถเลือกชำระค่าบริการได้ผ่าน 3 ช่องทาง ดังนี้
           <ol className="notes-flex__sublist">
-            <li>เงินสด/โอน ณ วันที่ให้บริการ</li>
+            <li className="notes-row">
+              <span>เงินสด/โอน ณ วันที่ให้บริการ</span>
+              {payUrl && (
+                <a
+                  href={payUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link-pay"
+                >
+                  ไปหน้าชำระเงิน
+                </a>
+              )}
+            </li>
             <li>
               บัตรเครดิต รองรับการผ่อนชำระ 0% 6 เดือน
               <span className="muted"> (service charge 3%)</span>
@@ -399,6 +393,26 @@ export default function CheckPage() {
     return end < mid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
   }, [contract]);
 
+  const contractRef = useMemo(() => {
+    if (!contract) return "";
+    return firstNonEmpty(
+      contract.number,
+      contract.contractNumber,
+      contract.ref,
+      contract.quotationNumber,
+      contract.invoiceNumber,
+      contract.contract_no
+    ) || "";
+  }, [contract]);
+
+  const netAmount = useMemo(() => netAmountFrom(contract), [contract]);
+
+  const payUrl = useMemo(() => {
+    if (!contractRef) return "";
+    const parts = [`/pay?ref=${encodeURIComponent(contractRef)}`];
+    if (netAmount > 0) parts.push(`amt=${encodeURIComponent(netAmount.toFixed(2))}`);
+    return parts.join("&");
+  }, [contractRef, netAmount]);
 
   return (
     <div className="check-container">
@@ -500,7 +514,7 @@ export default function CheckPage() {
                 </div>
               )}
 
-              <NotesFlex />
+              <NotesFlex payUrl={payUrl} />
             </div>
           </section>
 

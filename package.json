@@ -11,6 +11,7 @@
     "jspdf": "^3.0.2",
     "jspdf-autotable": "^5.0.2",
     "node-fetch": "^3.3.2",
+    "promptpay-qr": "^0.5.0",
     "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
     "react": "^18.2.0",
