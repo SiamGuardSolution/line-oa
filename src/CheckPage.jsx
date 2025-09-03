@@ -167,6 +167,7 @@ const netAmountFrom = (c) => {
   return Math.max(0, Math.round(base - disc)); // ตัวเลข (ไม่ใช่ข้อความ)
 };
 
+const SHOW_PAY_LINK = false; // เปลี่ยนเป็น true เมื่อพร้อมเปิดใช้
 
 /** ==== utils ==== */
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
@@ -551,7 +552,7 @@ export default function CheckPage() {
                 </div>
               )}
 
-              <NotesFlex payUrl={payUrl} />
+              <NotesFlex payUrl={SHOW_PAY_LINK ? payUrl : ""} />
             </div>
           </section>
 
