@@ -218,7 +218,37 @@ const NotesFlex = ({ payUrl }) => (
   <section className="notes-flex" aria-label="หมายเหตุการให้บริการ">
     <header className="notes-flex__header">หมายเหตุ</header>
     <ol className="notes-flex__list">
-      {/* ... ข้อ 1–4 เหมือนเดิม ... */}
+      <li>
+        <span className="badge">1</span>
+        <div>
+          วันที่ครบกำหนด คือ วันที่ที่ครบกำหนดบริการตามเงื่อนไข
+          เป็นเพียงกำหนดการนัดหมายส่งงานเท่านั้น
+        </div>
+      </li>
+      <li>
+        <span className="badge">2</span>
+        <div>
+          วันที่เข้าบริการ คือ วันที่เข้ารับบริการจริง
+          ซึ่งทางบริษัทฯ ได้ทำการนัดหมายลูกค้าอย่างชัดเจน
+        </div>
+      </li>
+      <li>
+        <span className="badge">3</span>
+        <div>
+          ตารางครบกำหนดด้านล่าง ลูกค้าสามารถขอเปลี่ยนวันได้ด้วยตัวเองทาง
+          Line Official Account หรือโทรนัดกับเจ้าหน้าที่
+          โดยปกติแล้วทางเราจะโทรนัดล่วงหน้าก่อนประมาณ 2–7 วัน
+        </div>
+      </li>
+      <li>
+        <span className="badge">4</span>
+        <div>
+          หากเกิดความเสียหายจากการให้บริการ เช่น เจาะโดนท่อน้ำดี
+          บริษัทฯ จะรับผิดชอบซ่อมแซมให้ลูกค้าสูงสุด <strong>5,000 บาท</strong>
+          โดยสามารถหักจากค่าบริการที่ลูกค้าต้องชำระได้เลย
+          และบริษัทฯ จะจ่ายในส่วนที่เหลือ
+        </div>
+      </li>
       <li>
         <span className="badge">5</span>
         <div>
@@ -393,6 +423,7 @@ export default function CheckPage() {
     return end < mid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
   }, [contract]);
 
+  // >>> เพิ่มใน CheckPage component
   const contractRef = useMemo(() => {
     if (!contract) return "";
     return firstNonEmpty(
