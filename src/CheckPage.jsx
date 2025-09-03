@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import "./CheckPage.css";
 
-/** ==== API endpoints (ลอง same-origin ก่อน ถ้าไม่สำเร็จค่อย fallback ไป workers.dev) ==== */
-const API_BASES = [
-  "", // same-origin → /api/*
-  (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "")
-];
+const HOST = window.location.hostname;
+const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
+// ใช้ same-origin เฉพาะตอน dev บน localhost เท่านั้น
+const API_BASES = HOST === "localhost" || HOST === "127.0.0.1"
+? ["", PROXY]
+: [PROXY];
 
 function buildCheckUrls(digits) {
   const v = Date.now();
@@ -372,7 +373,6 @@ export default function CheckPage() {
     return end < mid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
   }, [contract]);
 
-  console.log('keys', Object.keys(contract)); console.log('disc', discountFrom(contract), contract);
 
   return (
     <div className="check-container">
