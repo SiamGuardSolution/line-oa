@@ -1,9 +1,12 @@
-// src/ContractForm.jsx ที่ใช้อยู่ในตอนนี้
+// src/ContractForm.jsx
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
 
 // ===== API endpoint (proxy ไป Apps Script หรือ API ของคุณ) =====
 const API_URL = "/api/submit-contract";
+
+// ราคาพื้นฐานแต่ละแพ็กเกจ
+const BASE_PRICES = { spray: 3993, bait: 5500, mix: 8500 };
 
 const PACKAGES = {
   spray: {
@@ -115,37 +118,38 @@ function computeSchedule(pkg, startStr) {
 }
 
 export default function ContractForm() {
-
   const [form, setForm] = useState({ ...emptyForm });
-  
-  // ----- ราคาตามแพ็กเกจ -----
-  const PACKAGE_PRICES = { spray: 3993, bait: 5500, mix: 8500 };
 
-  // ราคาพื้นฐานตามแพ็กเกจที่เลือก
-  const basePrice = PACKAGE_PRICES[form.package] ?? 0;
-  const items = [
-    {
-      name: `ค่าบริการแพ็กเกจ ${PACKAGES[form.package]?.label || ""}`,
-      quantity: 1,
-      price: basePrice,
-    },
-  ];
-  const [addons, setAddons] = useState([
-    { name: "", qty: 1, price: 0 },
-  ]);
+  // ราคาแพ็กเกจตามที่เลือก
+  const baseServicePrice = React.useMemo(
+    () => BASE_PRICES[form.package] ?? 0,
+    [form.package]
+  );
 
-  const addAddonRow = () =>
-    setAddons((rows) => [...rows, { name: "", qty: 1, price: 0 }]);
+  // รายการฐานเพื่อส่งให้ backend (คงโครง items ไว้)
+  const items = React.useMemo(
+    () => [
+      {
+        name: `ค่าบริการแพ็กเกจ ${PACKAGES[form.package]?.label || ""}`,
+        quantity: 1,
+        price: baseServicePrice,
+      },
+    ],
+    [form.package, baseServicePrice]
+  );
 
-  const removeAddonRow = (i) =>
-    setAddons((rows) => rows.filter((_, idx) => idx !== i));
+  // ยอดบริการหลัก = ราคาแพ็กเกจ
+  const itemsSubtotal = baseServicePrice;
 
+  const [addons, setAddons] = useState([{ name: "", qty: 1, price: 0 }]);
+  const addAddonRow = () => setAddons((rows) => [...rows, { name: "", qty: 1, price: 0 }]);
+  const removeAddonRow = (i) => setAddons((rows) => rows.filter((_, idx) => idx !== i));
   const onAddonChange = (i, field, value) => {
     setAddons((rows) => {
       const next = [...rows];
       next[i] = {
         ...next[i],
-        [field]: field === "qty" || field === "price" ? Number(value || 0) : value
+        [field]: field === "qty" || field === "price" ? Number(value || 0) : value,
       };
       return next;
     });
@@ -158,7 +162,8 @@ export default function ContractForm() {
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
   const phoneDigits = (s) => String(s || "").replace(/\D/g, "");
 
-  const [discountValue, setDiscountValue] = React.useState(0);
+  // ส่วนลดให้เริ่มว่าง (ไม่ส่ง 0 เพื่อกัน Google Sheet แปลงเป็นวันที่)
+  const [discountValue, setDiscountValue] = React.useState("");
 
   // auto-compute schedule เมื่อเปลี่ยน startDate/package
   useEffect(() => {
@@ -175,16 +180,14 @@ export default function ContractForm() {
     return "";
   };
 
-  // ----- คำนวณยอดรวม -----
-  const itemsSubtotal = (items || []).reduce(
-    (sum, it) => sum + Number(it.quantity || 0) * Number(it.price || 0), 0
-  );
-
   const addonsSubtotal = (addons || []).reduce(
-    (sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0), 0
+    (sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0),
+    0
   );
 
-  const netBeforeVat = itemsSubtotal - Number(discountValue || 0) + addonsSubtotal;
+  const discountNum = discountValue === "" ? 0 : Number(discountValue);
+  // ราคาสุทธิ = ยอดบริการหลัก - ส่วนลด + Add-on
+  const netBeforeVat = itemsSubtotal - discountNum + addonsSubtotal;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -204,13 +207,15 @@ export default function ContractForm() {
       tech: form.tech,
       note: form.note,
       status: form.status || "ใช้งานอยู่",
+
       items,
-      discount: Number(discountValue || 0),
+      discount: discountValue === "" ? "" : Number(discountValue),
       addons,
       itemsSubtotal,
       addonsSubtotal,
       netBeforeVat,
     };
+
     // เติมช่อง service ให้ครบตามแพ็กเกจ
     (pkgConf.fields || []).forEach(({ key }) => (payload[key] = form[key] || ""));
 
@@ -222,26 +227,27 @@ export default function ContractForm() {
         body: JSON.stringify(payload),
       });
 
-      // อ่าน JSON; ถ้าไม่ใช่ JSON เก็บ raw ช่วยดีบัก
       const raw = await res.text();
       let json;
-      try { json = JSON.parse(raw); } catch { json = { ok: res.ok, raw }; }
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        json = { ok: res.ok, raw };
+      }
 
       if (!res.ok || json?.ok === false) {
         throw new Error(json?.error || "save-failed");
       }
 
-      // ✅ บันทึกสำเร็จ
       setMsg({ text: "บันทึกสำเร็จ", ok: true });
-
-      // ล้างฟอร์ม (คงแพ็กเกจเดิมไว้)
       setForm({ ...emptyForm, package: form.package });
+      setAddons([{ name: "", qty: 1, price: 0 }]);
+      setDiscountValue("");
     } catch (err2) {
       setMsg({ text: `บันทึกไม่สำเร็จ ${err2?.message || err2}`, ok: false });
     } finally {
       setLoading(false);
     }
-
   };
 
   return (
@@ -283,16 +289,19 @@ export default function ContractForm() {
                   step={1}
                   value={discountValue}
                   onChange={(e) => {
-                    const v = Math.max(0, Number(e.target.value || 0)); // ห้ามติดลบ
-                    setDiscountValue(v);
+                    const s = e.target.value;
+                    if (s === "") return setDiscountValue("");
+                    const v = Math.max(0, Number(s) || 0);
+                    setDiscountValue(String(v));
                   }}
-                  onWheel={(e) => e.currentTarget.blur()} // กัน scroll เปลี่ยนค่า
+                  onWheel={(e) => e.currentTarget.blur()}
                 />
                 <span className="cf-unit">บาท</span>
               </div>
               <div className="cf-hint">กรอกจำนวนเงินส่วนลด (บาท)</div>
             </div>
           </section>
+
           <div className="section">
             <h3>ค่าบริการเพิ่มเติม (Add-on)</h3>
 
@@ -321,20 +330,37 @@ export default function ContractForm() {
                   onChange={(e) => onAddonChange(i, "price", e.target.value)}
                 />
                 <div className="addon-amount">
-                  { (row.qty * row.price).toLocaleString() }
+                  {(row.qty * row.price).toLocaleString()}
                 </div>
-                <button type="button" className="btn-outline" onClick={() => removeAddonRow(i)}>ลบ</button>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => removeAddonRow(i)}
+                >
+                  ลบ
+                </button>
               </div>
             ))}
 
-            <button type="button" className="btn-add" onClick={addAddonRow}>➕ เพิ่ม Add-on</button>
+            <button type="button" className="btn-add" onClick={addAddonRow}>
+              ➕ เพิ่ม Add-on
+            </button>
 
             <div className="totals">
-              <div>ยอดบริการหลัก: <b>{itemsSubtotal.toLocaleString()}</b></div>
-              <div>ส่วนลด: <b>-{Number(discountValue || 0).toLocaleString()}</b></div>
-              <div>ค่าบริการเพิ่มเติม (Add-on): <b>+{addonsSubtotal.toLocaleString()}</b></div>
+              <div>
+                ยอดบริการหลัก: <b>{itemsSubtotal.toLocaleString()}</b>
+              </div>
+              <div>
+                ส่วนลด: <b>-{discountNum.toLocaleString()}</b>
+              </div>
+              <div>
+                ค่าบริการเพิ่มเติม (Add-on):{" "}
+                <b>+{addonsSubtotal.toLocaleString()}</b>
+              </div>
               <hr />
-              <div className="total-line">ราคาสุทธิ: <b>{netBeforeVat.toLocaleString()}</b></div>
+              <div className="total-line">
+                ราคาสุทธิ: <b>{netBeforeVat.toLocaleString()}</b>
+              </div>
             </div>
           </div>
 
