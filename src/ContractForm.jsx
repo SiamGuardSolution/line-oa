@@ -115,6 +115,21 @@ function computeSchedule(pkg, startStr) {
 }
 
 export default function ContractForm() {
+
+  const [form, setForm] = useState({ ...emptyForm });
+  
+  // ----- ราคาตามแพ็กเกจ -----
+  const PACKAGE_PRICES = { spray: 3993, bait: 5500, mix: 8500 };
+
+  // ราคาพื้นฐานตามแพ็กเกจที่เลือก
+  const basePrice = PACKAGE_PRICES[form.package] ?? 0;
+  const items = [
+    {
+      name: `ค่าบริการแพ็กเกจ ${PACKAGES[form.package]?.label || ""}`,
+      quantity: 1,
+      price: basePrice,
+    },
+  ];
   const [addons, setAddons] = useState([
     { name: "", qty: 1, price: 0 },
   ]);
@@ -136,7 +151,6 @@ export default function ContractForm() {
     });
   };
 
-  const [form, setForm] = useState({ ...emptyForm });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", ok: false });
 
@@ -162,7 +176,6 @@ export default function ContractForm() {
   };
 
   // ----- คำนวณยอดรวม -----
-  const items = [];
   const itemsSubtotal = (items || []).reduce(
     (sum, it) => sum + Number(it.quantity || 0) * Number(it.price || 0), 0
   );
@@ -170,6 +183,7 @@ export default function ContractForm() {
   const addonsSubtotal = (addons || []).reduce(
     (sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0), 0
   );
+
   const netBeforeVat = itemsSubtotal - Number(discountValue || 0) + addonsSubtotal;
 
   const handleSubmit = async (e) => {
@@ -317,7 +331,7 @@ export default function ContractForm() {
 
             <div className="totals">
               <div>ยอดบริการหลัก: <b>{itemsSubtotal.toLocaleString()}</b></div>
-              <div>ส่วนลด: <b>-{Number(discountValue || 0).toLocaleString()}</b></div>   {/* ← เปลี่ยนบรรทัดนี้ */}
+              <div>ส่วนลด: <b>-{Number(discountValue || 0).toLocaleString()}</b></div>
               <div>ค่าบริการเพิ่มเติม (Add-on): <b>+{addonsSubtotal.toLocaleString()}</b></div>
               <hr />
               <div className="total-line">รวมก่อนภาษี: <b>{netBeforeVat.toLocaleString()}</b></div>
