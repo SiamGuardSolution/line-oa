@@ -1,4 +1,4 @@
-// src/ContractForm.jsx
+// src/ContractForm.jsx ที่ใช้อยู่ในตอนนี้
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
 
@@ -115,6 +115,27 @@ function computeSchedule(pkg, startStr) {
 }
 
 export default function ContractForm() {
+  const [addons, setAddons] = useState([
+    { name: "", qty: 1, price: 0 },
+  ]);
+
+  const addAddonRow = () =>
+    setAddons((rows) => [...rows, { name: "", qty: 1, price: 0 }]);
+
+  const removeAddonRow = (i) =>
+    setAddons((rows) => rows.filter((_, idx) => idx !== i));
+
+  const onAddonChange = (i, field, value) => {
+    setAddons((rows) => {
+      const next = [...rows];
+      next[i] = {
+        ...next[i],
+        [field]: field === "qty" || field === "price" ? Number(value || 0) : value
+      };
+      return next;
+    });
+  };
+
   const [form, setForm] = useState({ ...emptyForm });
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", ok: false });
@@ -140,6 +161,17 @@ export default function ContractForm() {
     return "";
   };
 
+  // ----- คำนวณยอดรวม -----
+  const items = [];
+  const itemsSubtotal = (items || []).reduce(
+    (sum, it) => sum + Number(it.quantity || 0) * Number(it.price || 0), 0
+  );
+
+  const addonsSubtotal = (addons || []).reduce(
+    (sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0), 0
+  );
+  const netBeforeVat = itemsSubtotal - Number(discountValue || 0) + addonsSubtotal;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMsg({ text: "", ok: false });
@@ -158,6 +190,12 @@ export default function ContractForm() {
       tech: form.tech,
       note: form.note,
       status: form.status || "ใช้งานอยู่",
+      items,
+      discount: Number(discountValue || 0),
+      addons,
+      itemsSubtotal,
+      addonsSubtotal,
+      netBeforeVat,
     };
     // เติมช่อง service ให้ครบตามแพ็กเกจ
     (pkgConf.fields || []).forEach(({ key }) => (payload[key] = form[key] || ""));
@@ -189,6 +227,7 @@ export default function ContractForm() {
     } finally {
       setLoading(false);
     }
+
   };
 
   return (
@@ -240,6 +279,50 @@ export default function ContractForm() {
               <div className="cf-hint">กรอกจำนวนเงินส่วนลด (บาท)</div>
             </div>
           </section>
+          <div className="section">
+            <h3>ค่าบริการเพิ่มเติม (Add-on)</h3>
+
+            {addons.map((row, i) => (
+              <div key={i} className="addon-row">
+                <input
+                  type="text"
+                  placeholder="ชื่อรายการ (เช่น ค่าน้ำยาเพิ่ม, พื้นที่เกิน)"
+                  value={row.name}
+                  onChange={(e) => onAddonChange(i, "name", e.target.value)}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="จำนวน"
+                  value={row.qty}
+                  onChange={(e) => onAddonChange(i, "qty", e.target.value)}
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="ราคา/หน่วย"
+                  value={row.price}
+                  onChange={(e) => onAddonChange(i, "price", e.target.value)}
+                />
+                <div className="addon-amount">
+                  { (row.qty * row.price).toLocaleString() }
+                </div>
+                <button type="button" className="btn-outline" onClick={() => removeAddonRow(i)}>ลบ</button>
+              </div>
+            ))}
+
+            <button type="button" className="btn-add" onClick={addAddonRow}>➕ เพิ่ม Add-on</button>
+
+            <div className="totals">
+              <div>ยอดบริการหลัก: <b>{itemsSubtotal.toLocaleString()}</b></div>
+              <div>ส่วนลด: <b>-{Number(discountValue || 0).toLocaleString()}</b></div>   {/* ← เปลี่ยนบรรทัดนี้ */}
+              <div>ค่าบริการเพิ่มเติม (Add-on): <b>+{addonsSubtotal.toLocaleString()}</b></div>
+              <hr />
+              <div className="total-line">รวมก่อนภาษี: <b>{netBeforeVat.toLocaleString()}</b></div>
+            </div>
+          </div>
 
           {/* ข้อมูลลูกค้า */}
           <div className="cf__grid">

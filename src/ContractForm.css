@@ -189,3 +189,17 @@ html, body { background: var(--sg-bg); color: var(--sg-text); }
   font-weight: 700;
 }
 .net-box .amount{ font-size: 1.05rem; }
+
+.section { margin-top: 18px; }
+.addon-row {
+  display: grid;
+  grid-template-columns: 2fr 0.7fr 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.addon-row input { padding: 8px 10px; }
+.addon-amount { text-align: right; font-weight: 600; }
+.btn-add { margin-top: 8px; }
+.totals { margin-top: 12px; }
+.total-line { font-size: 1.05rem; }
