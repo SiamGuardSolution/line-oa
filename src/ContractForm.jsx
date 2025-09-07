@@ -334,7 +334,7 @@ export default function ContractForm() {
               <div>ส่วนลด: <b>-{Number(discountValue || 0).toLocaleString()}</b></div>
               <div>ค่าบริการเพิ่มเติม (Add-on): <b>+{addonsSubtotal.toLocaleString()}</b></div>
               <hr />
-              <div className="total-line">รวมก่อนภาษี: <b>{netBeforeVat.toLocaleString()}</b></div>
+              <div className="total-line">ราคาสุทธิ: <b>{netBeforeVat.toLocaleString()}</b></div>
             </div>
           </div>
 
