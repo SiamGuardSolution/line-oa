@@ -141,17 +141,18 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const netTotal=Math.max(0, grandTotal-deposit);
 
   autoTable(doc,{
+    tableWidth: contentW - 12,
     startY:y,
     head,
     body: body.length?body:[["-","-","-","-","-"]],
-    styles:{ font:FAMILY, fontSize:12, cellPadding:6, lineWidth:0.2 },
+    styles: { font: FAMILY, fontSize: 12, cellPadding: 6, lineWidth: 0.2, overflow: 'linebreak' },
     headStyles:{ font:FAMILY, fontStyle:"bold", fillColor:[245,245,245] },
     columnStyles:{
-      0:{ halign:"center", cellWidth:40 },
-      1:{ halign:"center", cellWidth:70 },
-      2:{ cellWidth: W-(M*2+40+70+90+100) },
-      3:{ halign:"right", cellWidth:90 },
-      4:{ halign:"right", cellWidth:100 },
+        0: { halign: "center", cellWidth: 38 },
+        1: { halign: "center", cellWidth: 64 },
+        3: { halign: "right",  cellWidth: 88 },
+        4: { halign: "right",  cellWidth: 96 },
+        2: { cellWidth: 'auto' },         // รายละเอียดให้ยืด/หดตามที่เหลือ
     },
     theme:"grid",
   });
