@@ -208,7 +208,7 @@ export default function ContractForm() {
   };
 
   // ===== สร้างใบเสร็จ (PDF) =====
-  function handleCreateReceiptPDF() {
+  async function handleCreateReceiptPDF() {
     // รวมรายการ: แพ็กเกจหลัก + Add-on
     const pdfItems = [
       {
@@ -251,7 +251,12 @@ export default function ContractForm() {
       notes: form.note || "",
     };
 
-    generateReceiptPDF(payload);
+    try {
+      await generateReceiptPDF(payload);
+    } catch (e) {
+      console.error(e);
+      alert("สร้างใบเสร็จไม่สำเร็จ: " + (e?.message || e));
+    }
   }
 
   const handleSubmit = async (e) => {

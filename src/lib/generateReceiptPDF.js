@@ -2,6 +2,37 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+/** แปลง ArrayBuffer -> base64 (สำหรับ addFileToVFS) */
+function ab2b64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+/** โหลดและลงทะเบียนฟอนต์ไทยไว้ใน jsPDF (ทำครั้งเดียวและ cache) */
+let _thaiFontReady = false;
+async function ensureThaiFont(doc) {
+  if (_thaiFontReady) {
+    doc.setFont("THSarabunNew", "normal");
+    return;
+  }
+  // ปรับ 2 บรรทัดนี้ ถ้าใช้ Sarabun แทน THSarabunNew
+  const regularUrl = "/fonts/THSarabunNew.ttf";
+  const boldUrl    = "/fonts/THSarabunNew-Bold.ttf";
+
+  const [rRes, bRes] = await Promise.all([fetch(regularUrl), fetch(boldUrl)]);
+  const [rBuf, bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
+
+  doc.addFileToVFS("THSarabunNew.ttf", ab2b64(rBuf));
+  doc.addFont("THSarabunNew.ttf", "THSarabunNew", "normal");
+  doc.addFileToVFS("THSarabunNew-Bold.ttf", ab2b64(bBuf));
+  doc.addFont("THSarabunNew-Bold.ttf", "THSarabunNew", "bold");
+
+  _thaiFontReady = true;
+  doc.setFont("THSarabunNew", "normal");
+}
+
 function toMoney(n) {
   const v = Number(n || 0);
   return v.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -18,55 +49,56 @@ function makeFilename(receiptNo, clientName) {
   return `Receipt-${id}${safeName ? "-" + safeName : ""}.pdf`;
 }
 
-export default function generateReceiptPDF(payload = {}, options = {}) {
+export default async function generateReceiptPDF(payload = {}, options = {}) {
   const {
     companyName = "Siam Guard",
     companyAddress = "",
     companyPhone = "",
     companyTaxId = "",
-    logoDataUrl, // optional base64
+    logoDataUrl,
 
-    // ลูกค้า
     clientName = "",
     clientPhone = "",
     clientAddress = "",
 
-    // เอกสาร
     receiptNo = "",
     issueDate = new Date(),
 
-    // รายการ/สรุปยอด
     items = [],           // [{ description, qty, unitPrice }]
     discount = 0,
-    vatRate = 0,          // ปรับเป็น 0.07 ถ้าต้องการคิด VAT
+    vatRate = 0,
     alreadyPaid = 0,
     notes = "",
   } = payload;
 
   const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+  // ✅ ฝังฟอนต์ไทยก่อนพิมพ์ทุกอย่าง
+  await ensureThaiFont(doc);
+
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 48;
   let cursorY = 56;
 
-  // โลโก้
+  // โลโก้ (ถ้ามี)
   if (logoDataUrl) {
     try { doc.addImage(logoDataUrl, "PNG", marginX, cursorY - 8, 80, 80); } catch {}
   }
 
   // หัวเอกสาร
-  doc.setFontSize(18);
-  doc.setFont(undefined, "bold");
+  doc.setFont("THSarabunNew", "bold");
+  doc.setFontSize(20);
   doc.text("ใบเสร็จรับเงิน / RECEIPT", pageWidth - marginX, cursorY, { align: "right" });
 
-  doc.setFontSize(11);
-  doc.setFont(undefined, "normal");
+  doc.setFont("THSarabunNew", "normal");
+  doc.setFontSize(12);
   const companyLines = [
     companyName,
     companyAddress,
     companyPhone ? `โทร: ${companyPhone}` : "",
     companyTaxId ? `เลขประจำตัวผู้เสียภาษี: ${companyTaxId}` : "",
   ].filter(Boolean);
-  companyLines.forEach((t, i) => doc.text(t, marginX + (logoDataUrl ? 88 : 0), cursorY + 18 + i * 14));
+  companyLines.forEach((t, i) => doc.text(t, marginX + (logoDataUrl ? 88 : 0), cursorY + 20 + i * 16));
 
   // กล่องเลขที่/วันที่
   const rightBoxTop = cursorY + 6;
@@ -74,32 +106,32 @@ export default function generateReceiptPDF(payload = {}, options = {}) {
   const rightBoxX = pageWidth - marginX - rightBoxW;
   const rightBoxH = 70;
   doc.roundedRect(rightBoxX, rightBoxTop, rightBoxW, rightBoxH, 6, 6);
-  doc.setFont(undefined, "bold");
-  doc.text("เลขที่ใบเสร็จ:", rightBoxX + 10, rightBoxTop + 20);
-  doc.text("วันที่ออกเอกสาร:", rightBoxX + 10, rightBoxTop + 42);
-  doc.setFont(undefined, "normal");
+  doc.setFont("THSarabunNew", "bold");
+  doc.text("เลขที่ใบเสร็จ:", rightBoxX + 10, rightBoxTop + 22);
+  doc.text("วันที่ออกเอกสาร:", rightBoxX + 10, rightBoxTop + 44);
+  doc.setFont("THSarabunNew", "normal");
   const fmtDate = (d) => {
     try {
       const dd = d instanceof Date ? d : new Date(d);
       return dd.toLocaleDateString("th-TH", { year: "numeric", month: "2-digit", day: "2-digit" });
     } catch { return String(d || ""); }
   };
-  doc.text(receiptNo || "-", rightBoxX + 130, rightBoxTop + 20);
-  doc.text(fmtDate(issueDate), rightBoxX + 130, rightBoxTop + 42);
+  doc.text(receiptNo || "-", rightBoxX + 130, rightBoxTop + 22);
+  doc.text(fmtDate(issueDate), rightBoxX + 130, rightBoxTop + 44);
 
   cursorY = Math.max(cursorY + 100, rightBoxTop + rightBoxH + 16);
 
   // ข้อมูลลูกค้า
-  doc.setFont(undefined, "bold");
+  doc.setFont("THSarabunNew", "bold");
   doc.text("ข้อมูลลูกค้า", marginX, cursorY);
-  doc.setFont(undefined, "normal");
+  doc.setFont("THSarabunNew", "normal");
   const custLines = [
     `ชื่อลูกค้า: ${clientName || "-"}`,
     `ที่อยู่: ${clientAddress || "-"}`,
     `โทร: ${clientPhone || "-"}`,
   ];
-  custLines.forEach((t, i) => doc.text(t, marginX, cursorY + 18 + i * 14));
-  cursorY += 66;
+  custLines.forEach((t, i) => doc.text(t, marginX, cursorY + 20 + i * 16));
+  cursorY += 70;
 
   // รายการ
   const tableBody = (items || []).map((it, idx) => {
@@ -122,8 +154,8 @@ export default function generateReceiptPDF(payload = {}, options = {}) {
     startY: cursorY,
     head: [["#", "รายการ", "จำนวน", "ราคาต่อหน่วย", "จำนวนเงิน"]],
     body: tableBody.length ? tableBody : [["-", "-", "-", "-", "-"]],
-    styles: { fontSize: 10, cellPadding: 6 },
-    headStyles: { fillColor: [240, 240, 240] },
+    styles: { font: "THSarabunNew", fontSize: 12, cellPadding: 6 },
+    headStyles: { font: "THSarabunNew", fontStyle: "bold", fillColor: [240, 240, 240] },
     columnStyles: {
       0: { halign: "center", cellWidth: 28 },
       2: { halign: "right", cellWidth: 60 },
@@ -138,17 +170,17 @@ export default function generateReceiptPDF(payload = {}, options = {}) {
       ["", "", "", "ชำระแล้ว (Paid)", toMoney(alreadyPaid)],
       ["", "", "", "คงเหลือ (Balance)", toMoney(remaining)],
     ],
-    footStyles: { fillColor: [250, 250, 250], textColor: 20, fontStyle: "bold" },
+    footStyles: { font: "THSarabunNew", fontStyle: "bold", fillColor: [250, 250, 250], textColor: 20 },
     theme: "grid",
   });
 
   const lastY = doc.lastAutoTable?.finalY || cursorY;
 
   if (notes) {
-    doc.setFont(undefined, "bold");
+    doc.setFont("THSarabunNew", "bold");
     doc.text("หมายเหตุ", marginX, lastY + 28);
-    doc.setFont(undefined, "normal");
-    textBlock(doc, notes, marginX, lastY + 44, pageWidth - marginX * 2, 14);
+    doc.setFont("THSarabunNew", "normal");
+    textBlock(doc, notes, marginX, lastY + 46, pageWidth - marginX * 2, 16);
   }
 
   const fname = options.filename || makeFilename(receiptNo, clientName);
