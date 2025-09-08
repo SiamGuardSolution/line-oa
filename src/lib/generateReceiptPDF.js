@@ -2,7 +2,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-/** ArrayBuffer -> base64 */
+/** ArrayBuffer -> base64 (สำหรับ addFileToVFS) */
 function ab2b64(buf) {
   const bytes = new Uint8Array(buf);
   let bin = "";
@@ -13,41 +13,25 @@ function ab2b64(buf) {
 /** โหลดและลงทะเบียนฟอนต์ไทย (cache ครั้งเดียว) */
 let _thaiFontReady = false;
 async function ensureThaiFont(doc) {
-  if (_thaiFontReady) {
-    doc.setFont("THSarabunNew", "normal");
-    return;
-  }
+  if (_thaiFontReady) { doc.setFont("THSarabunNew", "normal"); return; }
 
   const base =
     (typeof process !== "undefined" &&
       process.env &&
       process.env.PUBLIC_URL &&
-      process.env.PUBLIC_URL.replace(/\/$/, "")) ||
-    "";
+      process.env.PUBLIC_URL.replace(/\/$/, "")) || "";
   const ver = (typeof window !== "undefined" && window.__FONT_VER__) || "1";
 
   const regularUrl = `${base}/fonts/THSarabunNew.ttf?v=${ver}`;
   const boldUrl    = `${base}/fonts/THSarabunNew-Bold.ttf?v=${ver}`;
 
   const [rRes, bRes] = await Promise.all([fetch(regularUrl), fetch(boldUrl)]);
-
-  const bad = (res, name) =>
-    !res.ok ||
-    (res.headers && res.headers.get("content-type") &&
-     !/font|octet-stream|application\/x-font-ttf/i.test(res.headers.get("content-type")));
-
-  if (bad(rRes, "regular")) {
-    throw new Error("โหลดฟอนต์ THSarabunNew.ttf ไม่สำเร็จ (path หรือ CORS ผิด)");
-  }
-  if (bad(bRes, "bold")) {
-    throw new Error("โหลดฟอนต์ THSarabunNew-Bold.ttf ไม่สำเร็จ (path หรือ CORS ผิด)");
-  }
+  if (!rRes.ok) throw new Error("โหลดฟอนต์ THSarabunNew.ttf ไม่สำเร็จ");
+  if (!bRes.ok) throw new Error("โหลดฟอนต์ THSarabunNew-Bold.ttf ไม่สำเร็จ");
 
   const [rBuf, bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
-
-  // ชื่อไฟล์ใน VFS กับ family ต้องสอดคล้องกัน
-  doc.addFileToVFS("THSarabunNew.ttf", ab2b64(rBuf));
-  doc.addFont("THSarabunNew.ttf", "THSarabunNew", "normal");
+  doc.addFileToVFS("THSarabunNew-Regular.ttf", ab2b64(rBuf));
+  doc.addFont("THSarabunNew-Regular.ttf", "THSarabunNew", "normal");
   doc.addFileToVFS("THSarabunNew-Bold.ttf", ab2b64(bBuf));
   doc.addFont("THSarabunNew-Bold.ttf", "THSarabunNew", "bold");
 
@@ -55,153 +39,253 @@ async function ensureThaiFont(doc) {
   doc.setFont("THSarabunNew", "normal");
 }
 
-function toMoney(n) {
-  const v = Number(n || 0);
-  return v.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function textBlock(doc, text, x, y, maxWidth, lineHeight = 14) {
+const money = (n) =>
+  Number(n || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const fmtDate = (d) => {
+  try {
+    const dd = d instanceof Date ? d : new Date(d);
+    // 24/08/2568
+    return dd.toLocaleDateString("th-TH", { year: "numeric", month: "2-digit", day: "2-digit" });
+  } catch { return String(d || ""); }
+};
+
+function textBlock(doc, text, x, y, maxWidth, lh = 16) {
   const lines = doc.splitTextToSize(String(text || ""), maxWidth);
-  lines.forEach((ln, i) => doc.text(ln, x, y + i * lineHeight));
-}
-function makeFilename(receiptNo, clientName) {
-  const safeName = String(clientName || "").trim().replace(/[\\/:*?"<>|]/g, "_");
-  const id = receiptNo || new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  return `Receipt-${id}${safeName ? "-" + safeName : ""}.pdf`;
+  lines.forEach((ln, i) => doc.text(ln, x, y + i * lh));
+  return y + (lines.length - 1) * lh;
 }
 
+/**
+ * payload ที่ใช้:
+ * companyName, companyAddress, companyPhone, companyTaxId, logoDataUrl
+ * clientName, clientPhone, clientAddress, clientTaxId, customerCode
+ * receiptNo, issueDate, poNumber, termDays, dueDate
+ * items[{ description, qty, unitPrice }], discount, vatRate, alreadyPaid, notes, bankRemark
+ * footerNotice (ข้อความท้ายเอกสาร)
+ */
 export default async function generateReceiptPDF(payload = {}, options = {}) {
   const {
+    // บริษัท
     companyName = "Siam Guard",
     companyAddress = "",
     companyPhone = "",
     companyTaxId = "",
     logoDataUrl,
 
+    // ลูกค้า
+    customerCode = "",
     clientName = "",
     clientPhone = "",
     clientAddress = "",
+    clientTaxId = "",
 
+    // เอกสาร
     receiptNo = "",
     issueDate = new Date(),
+    poNumber = "",
+    termDays = 0,
+    dueDate,
 
+    // รายการ/สรุปยอด
     items = [],
     discount = 0,
-    vatRate = 0,
-    alreadyPaid = 0,
+    vatRate = 0.07,
+    alreadyPaid = 0, // มัดจำ
     notes = "",
+    bankRemark = "",
+
+    // ข้อความประกาศท้ายใบเสร็จ
+    footerNotice = "สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
   } = payload;
 
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const _due = dueDate || new Date(new Date(issueDate).getTime() + termDays * 86400000);
 
-  // ✅ ฝังฟอนต์ไทยให้เรียบร้อยก่อน
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
   await ensureThaiFont(doc);
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const marginX = 48;
-  let cursorY = 56;
+    // ใช้ข้อมูลบริษัทเป็น metadata ของไฟล์ (แก้ no-unused-vars)
+    doc.setProperties({
+        title: `ใบเสร็จรับเงิน ${payload.receiptNo || ""}`,
+        author: companyName || "",
+        subject: companyAddress || "",
+        creator: companyName || "",
+        keywords: [companyPhone, companyTaxId].filter(Boolean).join(", "),
+    });
 
+  const W = doc.internal.pageSize.getWidth();
+  const M = 48;
+  let y = 56;
+
+  // โลโก้ (ถ้ามี)
   if (logoDataUrl) {
-    try { doc.addImage(logoDataUrl, "PNG", marginX, cursorY - 8, 80, 80); } catch {}
+    try { doc.addImage(logoDataUrl, "PNG", M, y - 8, 80, 80); } catch {}
   }
 
-  // หัวเอกสาร
-  doc.setFont("THSarabunNew", "bold");
-  doc.setFontSize(20);
-  doc.text("ใบเสร็จรับเงิน / RECEIPT", pageWidth - marginX, cursorY, { align: "right" });
+  // ชื่อเอกสาร (ไทยล้วน)
+  doc.setFont("THSarabunNew", "bold"); doc.setFontSize(22);
+  doc.text("ใบเสร็จรับเงิน", W / 2, y, { align: "center" });
 
-  doc.setFont("THSarabunNew", "normal");
-  doc.setFontSize(12);
-  const companyLines = [
-    companyName,
-    companyAddress,
-    companyPhone ? `โทร: ${companyPhone}` : "",
-    companyTaxId ? `เลขประจำตัวผู้เสียภาษี: ${companyTaxId}` : "",
-  ].filter(Boolean);
-  companyLines.forEach((t, i) => doc.text(t, marginX + (logoDataUrl ? 88 : 0), cursorY + 20 + i * 16));
-
-  // กล่องเลขที่/วันที่
-  const rightBoxTop = cursorY + 6;
-  const rightBoxW = 260;
-  const rightBoxX = pageWidth - marginX - rightBoxW;
-  const rightBoxH = 70;
-  doc.roundedRect(rightBoxX, rightBoxTop, rightBoxW, rightBoxH, 6, 6);
-  doc.setFont("THSarabunNew", "bold");
-  doc.text("เลขที่ใบเสร็จ:", rightBoxX + 10, rightBoxTop + 22);
-  doc.text("วันที่ออกเอกสาร:", rightBoxX + 10, rightBoxTop + 44);
-  doc.setFont("THSarabunNew", "normal");
-  const fmtDate = (d) => {
-    try {
-      const dd = d instanceof Date ? d : new Date(d);
-      return dd.toLocaleDateString("th-TH", { year: "numeric", month: "2-digit", day: "2-digit" });
-    } catch { return String(d || ""); }
-  };
-  doc.text(receiptNo || "-", rightBoxX + 130, rightBoxTop + 22);
-  doc.text(fmtDate(issueDate), rightBoxX + 130, rightBoxTop + 44);
-
-  cursorY = Math.max(cursorY + 100, rightBoxTop + rightBoxH + 16);
-
-  // ข้อมูลลูกค้า
-  doc.setFont("THSarabunNew", "bold");
-  doc.text("ข้อมูลลูกค้า", marginX, cursorY);
-  doc.setFont("THSarabunNew", "normal");
-  const custLines = [
+  // กล่องข้อมูลซ้าย (ลูกค้า)
+  const leftX = M, leftW = 380, leftPad = 10;
+  const addrLines = doc.splitTextToSize(clientAddress || "-", leftW - leftPad * 2);
+  const leftLines = [
+    `รหัสลูกค้า: ${customerCode || "-"}`,
     `ชื่อลูกค้า: ${clientName || "-"}`,
-    `ที่อยู่: ${clientAddress || "-"}`,
-    `โทร: ${clientPhone || "-"}`,
+    `เลขประจำตัวผู้เสียภาษี: ${clientTaxId || "-"}`,
+    `ที่อยู่:`,
+    ...addrLines,
+    `โทรศัพท์: ${clientPhone || "-"}`,
   ];
-  custLines.forEach((t, i) => doc.text(t, marginX, cursorY + 20 + i * 16));
-  cursorY += 70;
+  const leftH = leftPad * 2 + leftLines.length * 16 + 2;
 
-  // รายการตาราง
-  const tableBody = (items || []).map((it, idx) => {
+  doc.roundedRect(leftX, y + 20, leftW, leftH, 6, 6);
+  doc.setFont("THSarabunNew", "normal"); doc.setFontSize(12);
+  let ly = y + 20 + leftPad + 6;
+  leftLines.forEach((t) => { doc.text(t, leftX + leftPad, ly); ly += 16; });
+
+  // กล่องข้อมูลขวา (เอกสาร)
+  const rightW = 240, rightX = W - M - rightW, rightPad = 10;
+  const rightLines = [
+    `เลขที่: ${receiptNo || "-"}`,
+    `วันที่: ${fmtDate(issueDate)}`,
+    `เลขที่ใบสั่งซื้อ: ${poNumber || "-"}`,
+    `เงื่อนไขการชำระเงิน: ${Number(termDays || 0)} วัน`,
+    `ครบกำหนดชำระ: ${fmtDate(_due)}`,
+  ];
+  const rightH = rightPad * 2 + rightLines.length * 16 + 2;
+
+  doc.roundedRect(rightX, y + 20, rightW, rightH, 6, 6);
+  let ry = y + 20 + rightPad + 6;
+  rightLines.forEach((t) => { doc.text(t, rightX + rightPad, ry); ry += 16; });
+
+  y = Math.max(y + 20 + leftH, y + 20 + rightH) + 16;
+
+  // ตารางสินค้า/บริการ (หัวคอลัมน์ไทย)
+  const head = [[
+    "ลำดับ",
+    "จำนวน",
+    "รหัสสินค้า / รายละเอียดสินค้า",
+    "ราคา / หน่วย",
+    "จำนวนเงิน",
+  ]];
+
+  const body = (items || []).map((it, idx) => {
     const qty = Number(it.qty ?? it.quantity ?? 1);
     const unit = Number(it.unitPrice ?? it.price ?? 0);
     const amount = qty * unit;
-    return [String(idx + 1), String(it.description ?? it.name ?? "-"), String(qty), toMoney(unit), toMoney(amount)];
+    const desc = String(it.description ?? it.name ?? "");
+    return [String(idx + 1), String(qty), desc, money(unit), money(amount)];
   });
 
-  const subTotal = (items || []).reduce(
-    (sum, it) => sum + (Number(it.qty ?? it.quantity ?? 1) * Number(it.unitPrice ?? it.price ?? 0)),
-    0
-  );
+  const subTotal =
+    (items || []).reduce((s, it) =>
+      s + Number(it.qty ?? it.quantity ?? 1) * Number(it.unitPrice ?? it.price ?? 0), 0);
+
   const afterDiscount = Math.max(0, subTotal - Number(discount || 0));
   const vat = Math.max(0, afterDiscount * Number(vatRate || 0));
   const grandTotal = afterDiscount + vat;
-  const remaining = Math.max(0, grandTotal - Number(alreadyPaid || 0));
+  const deposit = Number(alreadyPaid || 0);
+  const netTotal = Math.max(0, grandTotal - deposit);
 
   autoTable(doc, {
-    startY: cursorY,
-    head: [["#", "รายการ", "จำนวน", "ราคาต่อหน่วย", "จำนวนเงิน"]],
-    body: tableBody.length ? tableBody : [["-", "-", "-", "-", "-"]],
-    styles: { font: "THSarabunNew", fontSize: 12, cellPadding: 6 },
-    headStyles: { font: "THSarabunNew", fontStyle: "bold", fillColor: [240, 240, 240] },
+    startY: y,
+    head,
+    body: body.length ? body : [["-", "-", "-", "-", "-"]],
+    styles: { font: "THSarabunNew", fontSize: 12, cellPadding: 6, lineWidth: 0.2 },
+    headStyles: { font: "THSarabunNew", fontStyle: "bold", fillColor: [245, 245, 245] },
     columnStyles: {
-      0: { halign: "center", cellWidth: 28 },
-      2: { halign: "right", cellWidth: 60 },
-      3: { halign: "right", cellWidth: 100 },
-      4: { halign: "right", cellWidth: 110 },
+      0: { halign: "center", cellWidth: 40 },
+      1: { halign: "center", cellWidth: 70 },
+      2: { cellWidth: W - (M * 2 + 40 + 70 + 90 + 100) }, // กินพื้นที่ที่เหลือ
+      3: { halign: "right", cellWidth: 90 },
+      4: { halign: "right", cellWidth: 100 },
     },
-    foot: [
-      ["", "", "", "รวม (Subtotal)", toMoney(subTotal)],
-      ["", "", "", "ส่วนลด (Discount)", toMoney(discount)],
-      ["", "", "", `ภาษีมูลค่าเพิ่ม ${Math.round((vatRate || 0) * 100)}%`, toMoney(vat)],
-      ["", "", "", "ยอดสุทธิ (Total)", toMoney(grandTotal)],
-      ["", "", "", "ชำระแล้ว (Paid)", toMoney(alreadyPaid)],
-      ["", "", "", "คงเหลือ (Balance)", toMoney(remaining)],
-    ],
-    footStyles: { font: "THSarabunNew", fontStyle: "bold", fillColor: [250, 250, 250], textColor: 20 },
     theme: "grid",
   });
 
-  const lastY = doc.lastAutoTable?.finalY || cursorY;
+  const tEnd = doc.lastAutoTable?.finalY || y;
 
+  // ส่วนล่าง: หมายเหตุ (ซ้าย) + กล่องสรุปยอด (ขวา)
+  const totalsW = 240;
+  const totalsX = W - M - totalsW;
+  const lineH = 24;
+
+  // หมายเหตุ (ซ้าย)
+  const remarkX = M;
+  const remarkW = totalsX - M - 12;
+  let noteY = tEnd + 16;
+
+  const firstRemark = bankRemark ? `หมายเหตุ: ${bankRemark}` : "หมายเหตุ:";
+  doc.setFont("THSarabunNew", "normal"); doc.setFontSize(12);
+  textBlock(doc, firstRemark, remarkX, noteY, remarkW);
   if (notes) {
-    doc.setFont("THSarabunNew", "bold");
-    doc.text("หมายเหตุ", marginX, lastY + 28);
-    doc.setFont("THSarabunNew", "normal");
-    textBlock(doc, notes, marginX, lastY + 46, pageWidth - marginX * 2, 16);
+    noteY += 18;
+    textBlock(doc, notes, remarkX, noteY, remarkW);
   }
 
-  const fname = options.filename || makeFilename(receiptNo, clientName);
+  // กล่องสรุปยอด (ขวา)
+  let ty = tEnd + 6;
+  const rows = [
+    ["รวมเงิน", money(subTotal), "normal"],
+  ];
+  if (Number(discount) > 0) rows.push(["ส่วนลด", `-${money(discount)}`, "normal"]);
+  rows.push([`ภาษีมูลค่าเพิ่ม ${Math.round((vatRate || 0) * 100)}%`, money(vat), "normal"]);
+  if (deposit > 0) rows.push(["หักมัดจำ", `-${money(deposit)}`, "highlight"]);
+  rows.push(["รวมเงินทั้งสิ้น", money(netTotal), "bold"]);
+
+  doc.setFontSize(12);
+  rows.forEach(([label, val, style]) => {
+    // พื้นหลังแถว (เฉพาะ "หักมัดจำ" ให้เป็นแถบฟ้า)
+    if (style === "highlight") {
+      doc.setFillColor(200, 228, 245);
+      doc.rect(totalsX, ty, totalsW, lineH, "F");
+    } else {
+      doc.setDrawColor(230); doc.rect(totalsX, ty, totalsW, lineH);
+    }
+    // เส้นแบ่ง label|value บาง ๆ
+    const mid = totalsX + totalsW - 110;
+
+    doc.setFont("THSarabunNew", style === "bold" ? "bold" : "normal");
+    doc.text(label, totalsX + 10, ty + 16);
+    doc.text(val, totalsX + totalsW - 10, ty + 16, { align: "right" });
+
+    doc.setDrawColor(235);
+    doc.line(mid, ty, mid, ty + lineH);
+
+    ty += lineH;
+  });
+
+  // ข้อความยืนยันรับเงิน + กล่องวิธีชำระเงิน + ช่องเซ็นชื่อ
+  const boxY = Math.max(noteY + 60, ty + 10);
+  doc.setFont("THSarabunNew", "normal");
+  doc.text("ได้รับเงินดังรายการข้างต้นในใบเสร็จฯเรียบร้อย", M, boxY);
+
+  // กล่องวิธีชำระเงิน
+  const payY = boxY + 12;
+  const payH = 88;
+  doc.roundedRect(M, payY, W - M * 2, payH, 6, 6);
+  let py = payY + 20;
+  doc.text("การชำระเงิน:", M + 10, py); py += 18;
+  doc.text("เช็คธนาคาร / สาขา: ____________________", M + 28, py); py += 18;
+  doc.text("เลขที่บัญชี: ____________________", M + 28, py); py += 18;
+  doc.text("ลงวันที่: ____________________", M + 28, py);
+
+  // ช่องเซ็นชื่อ 3 ช่อง
+  const signY = payY + payH + 16;
+  const signW = (W - M * 2 - 32) / 3;
+  for (let i = 0; i < 3; i++) {
+    const x = M + i * (signW + 16);
+    doc.line(x + 24, signY + 40, x + signW - 24, signY + 40);
+    const label = i === 0 ? "ผู้รับเงิน" : (i === 1 ? "ผู้รับสินค้า" : "ผู้มีอำนาจลงนาม");
+    doc.text(label, x + signW / 2, signY + 58, { align: "center" });
+  }
+
+  // ข้อความท้ายเอกสาร
+  doc.setFont("THSarabunNew", "normal");
+  doc.setFontSize(11);
+  doc.text(footerNotice, M, signY + 90);
+
+  const fname = options.filename || `Receipt-${receiptNo || fmtDate(issueDate)}.pdf`;
   doc.save(fname);
 }

@@ -226,29 +226,33 @@ export default function ContractForm() {
     ];
 
     const payload = {
-      // บริษัท
       companyName: COMPANY.name,
       companyAddress: COMPANY.address,
       companyPhone: COMPANY.phone,
       companyTaxId: COMPANY.taxId,
 
-      // ลูกค้า
+      customerCode: "",                 // ใส่รหัสลูกค้าถ้ามี
       clientName: form.name || "",
-      clientPhone: phoneDigits(form.phone) || "",
+      clientPhone: (String(form.phone||"").replace(/\D/g,"")) || "",
       clientAddress: form.address || "",
+      clientTaxId: "",                  // ถ้ามี
 
-      // เอกสาร
-      receiptNo: makeReceiptNo(),
+      receiptNo: makeReceiptNo(),       // หรือเลขเอกสารของคุณ
       issueDate: new Date(),
+      poNumber: "",                     // ถ้ามี
+      termDays: 0,                      // เงื่อนไขวันเครดิต
+      // dueDate: new Date(...),        // ถ้าจะกำหนดเอง
 
-      // รายการ + สรุปยอด
-      items: pdfItems,
-      discount: discountNum,
+      items: pdfItems,                  // แพ็กเกจหลัก + Add-on
+      discount: Number(discountNum || 0),
       vatRate: VAT_RATE,
-      alreadyPaid: 0,
+      alreadyPaid: 0,                   // มัดจำ (ถ้ามีให้ใส่จำนวนเงิน)
 
-      // หมายเหตุ
       notes: form.note || "",
+      bankRemark:
+        COMPANY.bank
+          ? `ธนาคาร${COMPANY.bank.name} ${COMPANY.bank.account}\n${COMPANY.bank.accountName}`
+          : "",
     };
 
     try {
