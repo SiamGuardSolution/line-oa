@@ -2,7 +2,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-/** แปลง ArrayBuffer -> base64 (สำหรับ addFileToVFS) */
+/** ArrayBuffer -> base64 */
 function ab2b64(buf) {
   const bytes = new Uint8Array(buf);
   let bin = "";
@@ -10,20 +10,42 @@ function ab2b64(buf) {
   return btoa(bin);
 }
 
-/** โหลดและลงทะเบียนฟอนต์ไทยไว้ใน jsPDF (ทำครั้งเดียวและ cache) */
+/** โหลดและลงทะเบียนฟอนต์ไทย (cache ครั้งเดียว) */
 let _thaiFontReady = false;
 async function ensureThaiFont(doc) {
   if (_thaiFontReady) {
     doc.setFont("THSarabunNew", "normal");
     return;
   }
-  // ปรับ 2 บรรทัดนี้ ถ้าใช้ Sarabun แทน THSarabunNew
-  const regularUrl = "/fonts/THSarabunNew.ttf";
-  const boldUrl    = "/fonts/THSarabunNew-Bold.ttf";
+
+  const base =
+    (typeof process !== "undefined" &&
+      process.env &&
+      process.env.PUBLIC_URL &&
+      process.env.PUBLIC_URL.replace(/\/$/, "")) ||
+    "";
+  const ver = (typeof window !== "undefined" && window.__FONT_VER__) || "1";
+
+  const regularUrl = `${base}/fonts/THSarabunNew.ttf?v=${ver}`;
+  const boldUrl    = `${base}/fonts/THSarabunNew-Bold.ttf?v=${ver}`;
 
   const [rRes, bRes] = await Promise.all([fetch(regularUrl), fetch(boldUrl)]);
+
+  const bad = (res, name) =>
+    !res.ok ||
+    (res.headers && res.headers.get("content-type") &&
+     !/font|octet-stream|application\/x-font-ttf/i.test(res.headers.get("content-type")));
+
+  if (bad(rRes, "regular")) {
+    throw new Error("โหลดฟอนต์ THSarabunNew.ttf ไม่สำเร็จ (path หรือ CORS ผิด)");
+  }
+  if (bad(bRes, "bold")) {
+    throw new Error("โหลดฟอนต์ THSarabunNew-Bold.ttf ไม่สำเร็จ (path หรือ CORS ผิด)");
+  }
+
   const [rBuf, bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
 
+  // ชื่อไฟล์ใน VFS กับ family ต้องสอดคล้องกัน
   doc.addFileToVFS("THSarabunNew.ttf", ab2b64(rBuf));
   doc.addFont("THSarabunNew.ttf", "THSarabunNew", "normal");
   doc.addFileToVFS("THSarabunNew-Bold.ttf", ab2b64(bBuf));
@@ -37,12 +59,10 @@ function toMoney(n) {
   const v = Number(n || 0);
   return v.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-
 function textBlock(doc, text, x, y, maxWidth, lineHeight = 14) {
   const lines = doc.splitTextToSize(String(text || ""), maxWidth);
   lines.forEach((ln, i) => doc.text(ln, x, y + i * lineHeight));
 }
-
 function makeFilename(receiptNo, clientName) {
   const safeName = String(clientName || "").trim().replace(/[\\/:*?"<>|]/g, "_");
   const id = receiptNo || new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -64,7 +84,7 @@ export default async function generateReceiptPDF(payload = {}, options = {}) {
     receiptNo = "",
     issueDate = new Date(),
 
-    items = [],           // [{ description, qty, unitPrice }]
+    items = [],
     discount = 0,
     vatRate = 0,
     alreadyPaid = 0,
@@ -73,14 +93,13 @@ export default async function generateReceiptPDF(payload = {}, options = {}) {
 
   const doc = new jsPDF({ unit: "pt", format: "a4" });
 
-  // ✅ ฝังฟอนต์ไทยก่อนพิมพ์ทุกอย่าง
+  // ✅ ฝังฟอนต์ไทยให้เรียบร้อยก่อน
   await ensureThaiFont(doc);
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 48;
   let cursorY = 56;
 
-  // โลโก้ (ถ้ามี)
   if (logoDataUrl) {
     try { doc.addImage(logoDataUrl, "PNG", marginX, cursorY - 8, 80, 80); } catch {}
   }
@@ -133,7 +152,7 @@ export default async function generateReceiptPDF(payload = {}, options = {}) {
   custLines.forEach((t, i) => doc.text(t, marginX, cursorY + 20 + i * 16));
   cursorY += 70;
 
-  // รายการ
+  // รายการตาราง
   const tableBody = (items || []).map((it, idx) => {
     const qty = Number(it.qty ?? it.quantity ?? 1);
     const unit = Number(it.unitPrice ?? it.price ?? 0);
