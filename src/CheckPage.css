@@ -383,3 +383,13 @@ body{ background:var(--bg); }
   white-space:nowrap;
 }
 .link-pay:hover{ text-decoration:none; opacity:.9; }
+
+.bill { margin-top: 6px; }
+.bill__row { display:flex; justify-content:space-between; padding:6px 0; }
+.bill__row--total { font-weight:700; }
+.bill__val { text-align:right; }
+.bill__sep { border:none; border-top:1px solid #eee; margin:6px 0; }
+
+.addons-table { display:grid; gap:6px; margin-top:8px; }
+.addons-row { display:grid; grid-template-columns:2fr .7fr 1fr 1fr; gap:8px; }
+.addons-row--head { font-weight:600; opacity:.85; }

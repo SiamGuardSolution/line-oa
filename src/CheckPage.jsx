@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import "./CheckPage.css";
 
 const HOST = window.location.hostname;
@@ -7,6 +7,10 @@ const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet6
 const API_BASES = HOST === "localhost" || HOST === "127.0.0.1"
 ? ["", PROXY]
 : [PROXY];
+
+// === New: ตั้งค่าคีย์สำหรับ localStorage + auto-run ===
+const LS_LAST_PHONE_KEY = "sg_lastPhone";
+const AUTORUN_LAST = true; // ให้ระบบค้นหาให้อัตโนมัติ ถ้ามีเบอร์ที่เคยค้นไว้
 
 function buildCheckUrls(digits) {
   const v = Date.now();
@@ -69,8 +73,6 @@ const normKey = (s) =>
     .replace(/\s+/g, '')
     .replace(/[/|_.\-()]/g, '');
 
-
-// ดึงค่าตามชุด alias ของชื่อหัวคอลัมน์
 const pickByAliasesDeep = (obj, aliases) => {
   if (!obj || typeof obj !== 'object') return undefined;
   const want = new Set(aliases.map(normKey));
@@ -120,38 +122,60 @@ const basePriceFrom = (c) => {
   return 3993;
 };
 
-// ✅ ส่วนลด: รองรับชื่อคอลัมน์หลากหลาย + เว้นวรรค/วงเล็บ/สัญลักษณ์
+// ✅ ส่วนลด
 const discountFrom = (c) => {
-  // ชื่อคอลัมน์ที่มักเจอ
   const aliases = [
     'ส่วนลด', 'ส่วนลด บาท', 'ส่วนลด(บาท)', 'ส่วนลด (บาท)', 'ส่วนลดบาท',
     'discount', 'discount baht', 'discount(baht)', 'discount (baht)', 'discountbaht'
   ];
-
-  // ชั้นบนสุดก่อน
   const direct =
     c?.discount ?? c?.discountBaht ??
     c?.['ส่วนลด'] ?? c?.['ส่วนลดบาท'] ?? c?.['ส่วนลด (บาท)'] ?? c?.['ส่วนลด(บาท)'] ??
     c?.['Discount(Baht)'] ?? c?.['discount (baht)'];
   if (direct != null && direct !== '') return toNumberSafe(direct);
-
-  // ค้นแบบลึกทุกชั้น
   const deep = pickByAliasesDeep(c, aliases);
   if (deep != null && deep !== '') {
     const n = toNumberSafe(deep);
     if (n > 0) return n;
   }
-
-  // สำรอง: หาในข้อความทั่วไป
   return scanDiscountInStrings(c);
+};
+
+// อ่านรายการ Add-on
+const addonsFrom = (c) => {
+  if (!c) return [];
+  if (Array.isArray(c.addons)) return c.addons;
+  const raw = firstNonEmpty(c?.['Add-ons JSON'], c?.addonsJson);
+  try {
+    const arr = JSON.parse(raw || "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+};
+
+// ยอดรวม Add-on (บาท)
+const addonsSubtotalFrom = (c) => {
+  const direct = firstNonEmpty(c?.addonsSubtotal, c?.['ค่าบริการเพิ่มเติม']);
+  const n = toNumberSafe(direct);
+  if (n > 0) return n;
+  const arr = addonsFrom(c);
+  return arr.reduce((s, a) => s + toNumberSafe(a.qty) * toNumberSafe(a.price), 0);
+};
+
+// ราคาสุทธิ (ตัวเลข)
+const netTotalFrom = (c) => {
+  const direct = firstNonEmpty(c?.netTotal, c?.['ราคาสุทธิ'], c?.netBeforeVat);
+  const n = toNumberSafe(direct);
+  if (n || direct === 0) return n;
+  return Math.max(0, Math.round(basePriceFrom(c) - discountFrom(c) + addonsSubtotalFrom(c)));
 };
 
 // ราคาสุทธิ (ข้อความ)
 const netPriceTextFrom = (c) => {
-  if (!c) return '-';
-  const base = basePriceFrom(c);
-  const disc = discountFrom(c);
-  const net  = Math.max(0, Math.round(base - disc));
+  if (!c) return "-";
+  if (c.netTotalText) return c.netTotalText;
+  const net = netTotalFrom(c);
   const suffix = derivePkg(c) === '5500' ? '' : '/ปี';
   return `${net.toLocaleString('th-TH')} บาท${suffix}`;
 };
@@ -160,12 +184,7 @@ const netPriceTextFrom = (c) => {
 const firstNonEmpty = (...vals) =>
   vals.find(v => v !== undefined && v !== null && String(v).trim() !== "");
 
-const netAmountFrom = (c) => {
-  if (!c) return 0;
-  const base = basePriceFrom(c);
-  const disc = discountFrom(c);
-  return Math.max(0, Math.round(base - disc)); // ตัวเลข (ไม่ใช่ข้อความ)
-};
+const netAmountFrom = (c) => netTotalFrom(c);
 
 const SHOW_PAY_LINK = false; // เปลี่ยนเป็น true เมื่อพร้อมเปิดใช้
 
@@ -294,15 +313,28 @@ export default function CheckPage() {
 
   // ใช้ค่าที่เลือกมาเป็น "contract ปัจจุบัน"
   const contract = useMemo(
-    () => (contracts && contracts.length ? contracts[activeIdx] || null : null),
+    () => (contracts && contracts.length ? (contracts[activeIdx] || null) : null),
     [contracts, activeIdx]
   );
 
-  /** ค้นหาจากเบอร์ */
-  const onSearch = async (e) => {
-    e?.preventDefault?.();
+  // === New: โหลดเบอร์ล่าสุดจาก localStorage เมื่อเปิดหน้า
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LS_LAST_PHONE_KEY);
+      if (saved) {
+        setPhoneInput(saved); // เก็บแบบ digits (ไม่ใส่ขีด)
+        if (AUTORUN_LAST) {
+          // ค้นหาให้อัตโนมัติเมื่อมีเบอร์ที่เคยค้นไว้
+          void searchByDigits(saved);
+        }
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Helper: ค้นหาจาก digits โดยไม่พึ่ง state (กัน timing setState)
+  const searchByDigits = async (digits) => {
     setError("");
-    const digits = normalizePhone(phoneInput);
     if (!digits || digits.length < 9) {
       setError("กรุณากรอกเบอร์โทรอย่างน้อย 9 หลัก");
       return;
@@ -354,6 +386,17 @@ export default function CheckPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  /** ค้นหาจากเบอร์ (event handler ปกติ) */
+  const onSearch = async (e) => {
+    e?.preventDefault?.();
+    const digits = normalizePhone(phoneInput);
+
+    // === New: บันทึกเบอร์ล่าสุด (digits) ลง localStorage
+    try { localStorage.setItem(LS_LAST_PHONE_KEY, digits); } catch {}
+
+    await searchByDigits(digits);
   };
 
   /** ===== กำหนดการตามแพ็กเกจ ===== */
@@ -451,6 +494,12 @@ export default function CheckPage() {
     if (netAmount > 0) parts.push(`amt=${encodeURIComponent(netAmount.toFixed(2))}`);
     return parts.join("&");
   }, [contractRef, netAmount]);
+
+  const discount = useMemo(() => discountFrom(contract), [contract]);
+  const addonsSubtotal = useMemo(() => addonsSubtotalFrom(contract), [contract]);
+  const addonsArr = useMemo(() => addonsFrom(contract), [contract]);
+  const netTotal = useMemo(() => netTotalFrom(contract), [contract]);
+
 
   return (
     <div className="check-container">
@@ -554,6 +603,51 @@ export default function CheckPage() {
 
               <NotesFlex payUrl={SHOW_PAY_LINK ? payUrl : ""} />
             </div>
+          </section>
+
+          <section className="card">
+            <div className="row between">
+              <h3 className="title">สรุปค่าใช้จ่าย</h3>
+            </div>
+
+            <div className="bill">
+              <div className="bill__row">
+                <div>ส่วนลด</div>
+                <div className="bill__val">-{discount.toLocaleString()}</div>
+              </div>
+              <div className="bill__row">
+                <div>ค่าบริการเพิ่มเติม (Add-on)</div>
+                <div className="bill__val">+{addonsSubtotal.toLocaleString()}</div>
+              </div>
+              <hr className="bill__sep" />
+              <div className="bill__row bill__row--total">
+                <div>ราคาสุทธิ</div>
+                <div className="bill__val">{netTotal.toLocaleString()}</div>
+              </div>
+            </div>
+
+            {addonsArr.length > 0 && (
+              <>
+                <h4 style={{ marginTop: 10 }}>รายละเอียด Add-on</h4>
+                <div className="addons-table">
+                  <div className="addons-row addons-row--head">
+                    <div>รายการ</div><div>จำนวน</div><div>ราคา/หน่วย</div><div>รวม</div>
+                  </div>
+                  {addonsArr.map((a, i) => {
+                    const qty = toNumberSafe(a.qty);
+                    const price = toNumberSafe(a.price);
+                    return (
+                      <div className="addons-row" key={i}>
+                        <div>{a.name || '-'}</div>
+                        <div>{qty}</div>
+                        <div>{price.toLocaleString()}</div>
+                        <div>{(qty * price).toLocaleString()}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </section>
 
           <section className="card">
