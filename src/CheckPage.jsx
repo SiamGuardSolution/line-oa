@@ -5,8 +5,8 @@ const HOST = window.location.hostname;
 const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
 // ใช้ same-origin เฉพาะตอน dev บน localhost เท่านั้น
 const API_BASES = HOST === "localhost" || HOST === "127.0.0.1"
-? ["", PROXY]
-: [PROXY];
+  ? ["", PROXY]
+  : [PROXY];
 
 // === New: ตั้งค่าคีย์สำหรับ localStorage + auto-run ===
 const LS_LAST_PHONE_KEY = "sg_lastPhone";
@@ -64,6 +64,10 @@ const toNumberSafe = (v) => {
   const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 };
+
+// ✅ ต้องประกาศก่อนใช้งาน (แก้บั๊ก hoist)
+const firstNonEmpty = (...vals) =>
+  vals.find(v => v !== undefined && v !== null && String(v).trim() !== "");
 
 // ทำให้ชื่อคีย์เทียบง่าย
 const normKey = (s) =>
@@ -170,10 +174,6 @@ const netTotalFrom = (c) => {
   if (n || direct === 0) return n;
   return Math.max(0, Math.round(basePriceFrom(c) - discountFrom(c) + addonsSubtotalFrom(c)));
 };
-
-// >>> เพิ่มใหม่
-const firstNonEmpty = (...vals) =>
-  vals.find(v => v !== undefined && v !== null && String(v).trim() !== "");
 
 const netAmountFrom = (c) => netTotalFrom(c);
 
@@ -491,7 +491,6 @@ export default function CheckPage() {
   const addonsArr = useMemo(() => addonsFrom(contract), [contract]);
   const netTotal = useMemo(() => netTotalFrom(contract), [contract]);
 
-
   return (
     <div className="check-container">
       <header className="top">
@@ -566,10 +565,13 @@ export default function CheckPage() {
                 <label>แพ็กเกจ</label>
                 <div className="value">{labelFromContract(contract)}</div>
               </div>
+
+              {/* ✅ เปลี่ยนเป็น "ราคาแพ็กเกจ" และแสดงข้อความสวยงาม */}
               <div className="field stack">
                 <label>ราคาแพ็กเกจ</label>
-                <div className="value">{derivePkg(contract)} บาท</div> 
+                <div className="value">{priceTextFrom(contract)}</div>
               </div>
+
               <div className="field">
                 <label>ประเภทบริการ</label>
                 <div className="value">{contract.serviceType || "กำจัดปลวก"}</div>
@@ -596,6 +598,7 @@ export default function CheckPage() {
             </div>
           </section>
 
+          {/* ✅ แสดงสรุปค่าใช้จ่ายด้านล่างที่เดียว รวม Add-on และ ส่วนลด */}
           <section className="card">
             <div className="row between">
               <h3 className="title">สรุปค่าใช้จ่าย</h3>
@@ -604,16 +607,16 @@ export default function CheckPage() {
             <div className="bill">
               <div className="bill__row">
                 <div>ส่วนลด</div>
-                <div className="bill__val">-{discount.toLocaleString()}</div>
+                <div className="bill__val">-{Number(discount || 0).toLocaleString('th-TH')}</div>
               </div>
               <div className="bill__row">
                 <div>ค่าบริการเพิ่มเติม (Add-on)</div>
-                <div className="bill__val">+{addonsSubtotal.toLocaleString()}</div>
+                <div className="bill__val">+{Number(addonsSubtotal || 0).toLocaleString('th-TH')}</div>
               </div>
               <hr className="bill__sep" />
               <div className="bill__row bill__row--total">
                 <div>ราคาสุทธิ</div>
-                <div className="bill__val">{netTotal.toLocaleString()}</div>
+                <div className="bill__val">{Number(netTotal || 0).toLocaleString('th-TH')}</div>
               </div>
             </div>
 
@@ -631,8 +634,8 @@ export default function CheckPage() {
                       <div className="addons-row" key={i}>
                         <div>{a.name || '-'}</div>
                         <div>{qty}</div>
-                        <div>{price.toLocaleString()}</div>
-                        <div>{(qty * price).toLocaleString()}</div>
+                        <div>{Number(price).toLocaleString('th-TH')}</div>
+                        <div>{Number(qty * price).toLocaleString('th-TH')}</div>
                       </div>
                     );
                   })}
