@@ -203,3 +203,104 @@ html, body { background: var(--sg-bg); color: var(--sg-text); }
 .btn-add { margin-top: 8px; }
 .totals { margin-top: 12px; }
 .total-line { font-size: 1.05rem; }
+
+/* ===== ปุ่มทั่วไป (ใช้กับปุ่ม "สร้างใบเสร็จ (PDF)") ===== */
+.btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:10px 14px; border-radius:10px; border:1px solid transparent;
+  font-weight:600; cursor:pointer; transition:.2s ease;
+}
+.btn.btn-secondary{
+  background:#fff; border-color:#22a06b; color:#22a06b;
+}
+.btn.btn-secondary:hover{ background:#22a06b; color:#fff; }
+
+/* วางปุ่มให้อยู่เหนือฟอร์มเล็กน้อย */
+.cf .btn { margin: 8px 0 14px; }
+
+/* ===== กล่องรวมยอด / ข้อความ ===== */
+.totals{
+  margin-top:14px; background:#fafafa; border:1px solid #eee; border-radius:12px;
+  padding:12px 14px; font-size:14px; color:#222;
+}
+.total-line{ font-size:18px; font-weight:700; }
+
+/* ===== บรรทัด Add-on ===== */
+.addon-row{
+  display:grid; gap:10px; align-items:center; margin-bottom:10px;
+  grid-template-columns: 1fr 100px 140px 120px 80px; /* ชื่อ | qty | ราคา/หน่วย | จำนวนเงิน | ลบ */
+}
+.addon-row input{ width:100%; padding:10px 12px; border:1px solid #e6e6e6; border-radius:10px; }
+.addon-amount{ text-align:right; font-weight:600; }
+.btn-outline{
+  background:#fff; border:1px solid #ddd; border-radius:10px; padding:8px 10px; cursor:pointer;
+}
+.btn-outline:hover{ border-color:#c9c9c9; background:#f7f7f7; }
+
+/* ปุ่มเพิ่ม Add-on */
+.btn-add{
+  display:inline-flex; align-items:center; gap:6px; margin:10px 0 6px;
+  padding:8px 12px; background:#f3fbf7; color:#1a7f57; border:1px solid #bfe9d3; border-radius:10px;
+}
+.btn-add:hover{ background:#e8f7ef; }
+
+/* ===== ส่วนลด (อินพุต + หน่วย) ===== */
+.cf-section{ margin: 12px 0 2px; }
+.cf-field{ display:flex; flex-direction:column; gap:6px; }
+.cf-input-inline{ display:flex; align-items:center; gap:8px; }
+.cf-input{
+  width:100%; padding:10px 12px; border:1px solid #e6e6e6; border-radius:10px;
+}
+.cf-unit{ font-size:14px; color:#555; }
+.cf-hint{ font-size:12px; color:#777; }
+
+/* ===== ตารางบริการ / ฟิลด์เซ็ต ===== */
+.cf__fieldset{
+  margin-top:12px; border:1px solid #eee; border-radius:12px; padding:12px;
+}
+.cf__legend{ padding:0 6px; font-weight:700; color:#111; }
+.cf__services{
+  display:grid; gap:12px; grid-template-columns: repeat(3, minmax(180px,1fr));
+}
+
+/* ===== Layout ฟอร์มหลัก ===== */
+.cf__grid{
+  display:grid; gap:12px; grid-template-columns: repeat(2, minmax(220px,1fr));
+}
+.cf__field{ display:flex; flex-direction:column; gap:6px; }
+.cf__label{ font-weight:600; color:#111; }
+.cf__input, .cf__select, .cf__textarea{
+  padding:10px 12px; border:1px solid #e6e6e6; border-radius:10px; width:100%;
+}
+.cf__textarea{ min-height:110px; resize:vertical; }
+
+/* ปุ่ม action ด้านล่างฟอร์ม */
+.cf__actions{
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px;
+}
+.cf__btn{
+  padding:10px 14px; border-radius:10px; border:1px solid transparent; cursor:pointer; font-weight:600;
+}
+.cf__btn--primary{ background:#1677ff; color:#fff; }
+.cf__btn--primary:disabled{ opacity:.7; cursor:not-allowed; }
+.cf__btn--ghost{ background:#fff; border-color:#ddd; }
+.cf__btn--ghost:hover{ background:#f7f7f7; }
+
+/* ข้อความแจ้งผล */
+.cf__msg{ margin-top:10px; font-weight:600; }
+.cf__msg--ok{ color:#11895a; }
+.cf__msg--err{ color:#d11f3a; }
+
+/* ===== Responsive ===== */
+@media (max-width: 860px){
+  .cf__grid{ grid-template-columns: 1fr; }
+  .cf__services{ grid-template-columns: repeat(2, minmax(140px,1fr)); }
+  .addon-row{ grid-template-columns: 1fr 80px 120px 1fr 70px; }
+}
+@media (max-width: 560px){
+  .cf__services{ grid-template-columns: 1fr; }
+  .addon-row{
+    grid-template-columns: 1fr;
+  }
+  .addon-amount{ text-align:left; }
+}
