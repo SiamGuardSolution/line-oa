@@ -9,32 +9,28 @@ const fmtDate = d => { try{ const dd=d instanceof Date?d:new Date(d); return dd.
 function textBlock(doc,text,x,y,maxW,lh=16){const lines=doc.splitTextToSize(String(text||""),maxW);lines.forEach((ln,i)=>doc.text(ln,x,y+i*lh));return y+(lines.length-1)*lh;}
 
 /* ---------- font loader (ROBUST) ---------- */
-const FAMILY = "THSarabunSG";           // ชื่อ family ใหม่กันชน cache
+const FAMILY = "THSarabunSG";   // family ใหม่ กันชน cache viewer
 let THAI_READY = false;
 
 async function ensureThaiFont(doc){
   if(THAI_READY){ doc.setFont(FAMILY,"normal"); return; }
 
-  // bust cache แบบชัวร์: ใช้เวลาปัจจุบันต่อท้าย URL
-  const base = (process?.env?.PUBLIC_URL || "").replace(/\/$/,"");
-  const v = Date.now().toString();
-  const regularUrl = `${base}/fonts/THSarabunNew.ttf?v=${v}`;
-  const boldUrl    = `${base}/fonts/THSarabunNew-Bold.ttf?v=${v}`;
+  // ใช้พาธตรงจาก public/ และ bust cache ด้วย timestamp
+  const v = String(Date.now());
+  const regularUrl = `/fonts/THSarabunNew.ttf?v=${v}`;
+  const boldUrl    = `/fonts/THSarabunNew-Bold.ttf?v=${v}`;
 
   const [rRes,bRes] = await Promise.all([fetch(regularUrl), fetch(boldUrl)]);
-  if(!rRes.ok) throw new Error("โหลดฟอนต์ THSarabunNew.ttf ไม่สำเร็จ (ตรวจ path/hosting)");
-  if(!bRes.ok) throw new Error("โหลดฟอนต์ THSarabunNew-Bold.ttf ไม่สำเร็จ (ตรวจ path/hosting)");
+  if(!rRes.ok) throw new Error(`โหลดฟอนต์ไม่สำเร็จ: ${regularUrl}`);
+  if(!bRes.ok) throw new Error(`โหลดฟอนต์ไม่สำเร็จ: ${boldUrl}`);
 
   const [rBuf,bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
-  // ใส่ชื่อไฟล์ใน VFS ให้ผูกกับ FAMILY ใหม่
   doc.addFileToVFS(`${FAMILY}-Regular.ttf`, ab2b64(rBuf));
   doc.addFont(`${FAMILY}-Regular.ttf`, FAMILY, "normal");
   doc.addFileToVFS(`${FAMILY}-Bold.ttf`, ab2b64(bBuf));
   doc.addFont(`${FAMILY}-Bold.ttf`, FAMILY, "bold");
 
-  // ยืนยันว่าลงทะเบียนแล้วจริง
-  const has = doc.getFontList && doc.getFontList()[FAMILY];
-  if(!has) throw new Error("ฟอนต์ไทยไม่ถูกลงทะเบียนกับ jsPDF");
+  if(!doc.getFontList?.()[FAMILY]) throw new Error("ฟอนต์ไทยไม่ถูกลงทะเบียนกับ jsPDF");
   THAI_READY = true;
   doc.setFont(FAMILY,"normal");
 }
@@ -66,7 +62,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const doc = new jsPDF({ unit:"pt", format:"a4", compress:false });
   await ensureThaiFont(doc);
 
-  // metadata (ช่วยให้ ESLint ไม่เตือนและมีข้อมูลไฟล์)
+  // metadata
   doc.setProperties({
     title:`ใบเสร็จรับเงิน ${receiptNo||""}`,
     author:companyName, subject:companyAddress, creator:companyName,
