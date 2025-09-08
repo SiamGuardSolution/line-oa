@@ -95,12 +95,12 @@ export default async function generateReceiptPDF(payload={}, options={}){
 
   // กล่องลูกค้า (ซ้าย)
   const leftPad=10;
-  const addrLines=doc.splitTextToSize(clientAddress||"-", leftW-leftPad*2);
   const leftLines=[
     `รหัสลูกค้า: ${customerCode||"-"}`,
     `ชื่อลูกค้า: ${clientName||"-"}`,
     `เลขประจำตัวผู้เสียภาษี: ${clientTaxId||"-"}`,
-    `ที่อยู่:`, ...addrLines,
+    `ที่อยู่:`, 
+    ...doc.splitTextToSize(clientAddress || "-", leftW - leftPad * 2),
     `โทรศัพท์: ${clientPhone||"-"}`,
   ];
   const leftH=leftPad*2+leftLines.length*16+2;
