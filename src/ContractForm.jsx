@@ -1,7 +1,7 @@
 // src/ContractForm.jsx
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
-import { generateReceiptPDF } from "./lib/generateReceiptPDF";
+import generateReceiptPDF from "./lib/generateReceiptPDF";
 
 // ===== API endpoint (proxy ไป Apps Script หรือ API ของคุณ) =====
 const API_URL = "/api/submit-contract";
