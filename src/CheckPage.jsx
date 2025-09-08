@@ -171,15 +171,6 @@ const netTotalFrom = (c) => {
   return Math.max(0, Math.round(basePriceFrom(c) - discountFrom(c) + addonsSubtotalFrom(c)));
 };
 
-// ราคาสุทธิ (ข้อความ)
-const netPriceTextFrom = (c) => {
-  if (!c) return "-";
-  if (c.netTotalText) return c.netTotalText;
-  const net = netTotalFrom(c);
-  const suffix = derivePkg(c) === '5500' ? '' : '/ปี';
-  return `${net.toLocaleString('th-TH')} บาท${suffix}`;
-};
-
 // >>> เพิ่มใหม่
 const firstNonEmpty = (...vals) =>
   vals.find(v => v !== undefined && v !== null && String(v).trim() !== "");
@@ -576,8 +567,8 @@ export default function CheckPage() {
                 <div className="value">{labelFromContract(contract)}</div>
               </div>
               <div className="field stack">
-                <label>ราคาสุทธิ</label>
-                <div className="value">{netPriceTextFrom(contract)}</div>
+                <label>ราคาแพ็กเกจ</label>
+                <div className="value">{derivePkg(contract)} บาท</div> 
               </div>
               <div className="field">
                 <label>ประเภทบริการ</label>
