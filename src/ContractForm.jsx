@@ -1,12 +1,24 @@
 // src/ContractForm.jsx
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
+import { generateReceiptPDF } from "./lib/generateReceiptPDF";
 
 // ===== API endpoint (proxy ไป Apps Script หรือ API ของคุณ) =====
 const API_URL = "/api/submit-contract";
 
 // ราคาพื้นฐานแต่ละแพ็กเกจ
 const BASE_PRICES = { spray: 3993, bait: 5500, mix: 8500 };
+
+// ข้อมูลบริษัทสำหรับใบเสร็จ (แก้ให้เป็นของจริงได้)
+const COMPANY = {
+  name: "Siam Guard",
+  address: "",
+  phone: "",
+  taxId: "",
+};
+
+// อัตราภาษี (ใบเสร็จทั่วไปอาจไม่คิด VAT) — ถ้าต้องการ 7% เปลี่ยนเป็น 0.07
+const VAT_RATE = 0;
 
 const PACKAGES = {
   spray: {
@@ -189,6 +201,59 @@ export default function ContractForm() {
   // ราคาสุทธิ = ยอดบริการหลัก - ส่วนลด + Add-on
   const netBeforeVat = itemsSubtotal - discountNum + addonsSubtotal;
 
+  // ===== เลขใบเสร็จอัตโนมัติ (ถ้าไม่มีระบบเลขเอกสาร) =====
+  const makeReceiptNo = () => {
+    const d = new Date();
+    return `RC-${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`;
+  };
+
+  // ===== สร้างใบเสร็จ (PDF) =====
+  function handleCreateReceiptPDF() {
+    // รวมรายการ: แพ็กเกจหลัก + Add-on
+    const pdfItems = [
+      {
+        description: `ค่าบริการแพ็กเกจ ${PACKAGES[form.package]?.label || ""}`,
+        qty: 1,
+        unitPrice: baseServicePrice,
+      },
+      ...addons
+        .filter((r) => r && (r.name || r.qty || r.price))
+        .map((r) => ({
+          description: r.name || "รายการเพิ่มเติม",
+          qty: Number(r.qty || 0),
+          unitPrice: Number(r.price || 0),
+        })),
+    ];
+
+    const payload = {
+      // บริษัท
+      companyName: COMPANY.name,
+      companyAddress: COMPANY.address,
+      companyPhone: COMPANY.phone,
+      companyTaxId: COMPANY.taxId,
+
+      // ลูกค้า
+      clientName: form.name || "",
+      clientPhone: phoneDigits(form.phone) || "",
+      clientAddress: form.address || "",
+
+      // เอกสาร
+      receiptNo: makeReceiptNo(),
+      issueDate: new Date(),
+
+      // รายการ + สรุปยอด
+      items: pdfItems,
+      discount: discountNum,
+      vatRate: VAT_RATE,
+      alreadyPaid: 0,
+
+      // หมายเหตุ
+      notes: form.note || "",
+    };
+
+    generateReceiptPDF(payload);
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMsg({ text: "", ok: false });
@@ -258,6 +323,10 @@ export default function ContractForm() {
         <p className="cf__subtitle">
           กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ ระบบจะคำนวณให้อัตโนมัติ
         </p>
+
+        <button type="button" className="btn btn-secondary" onClick={handleCreateReceiptPDF}>
+          สร้างใบเสร็จ (PDF)
+        </button>
 
         <form onSubmit={handleSubmit} className="cf__form">
           {/* แพ็กเกจ */}
