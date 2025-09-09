@@ -3,6 +3,49 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 /* ---------- utils ---------- */
+// ===== แปลงจำนวนเงินเป็นคำอ่านภาษาไทย =====
+const TH_NUM = ['ศูนย์','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
+const TH_POS = ['', 'สิบ','ร้อย','พัน','หมื่น','แสน']; // หลักย่อย (< ล้าน)
+
+function readUnderMillion(numStr){
+  let s = '';
+  const str = String(parseInt(numStr,10)||0);   // ตัด 0 นำหน้า
+  const len = str.length;
+  for(let i=0;i<len;i++){
+    const d = +str[i]; if(d===0) continue;
+    const pos = len - i - 1; // 0=หน่วย,1=สิบ,...
+
+    if(pos === 0){ // หน่วย
+      if(d === 1 && len > 1) s += 'เอ็ด';
+      else s += TH_NUM[d];
+    }else if(pos === 1){ // สิบ
+      if(d === 1) s += 'สิบ';
+      else if(d === 2) s += 'ยี่สิบ';
+      else s += TH_NUM[d] + 'สิบ';
+    }else{ // ร้อย พัน หมื่น แสน
+      s += TH_NUM[d] + TH_POS[pos];
+    }
+  }
+  return s || 'ศูนย์';
+}
+
+function readNumberThai(numStr){
+  const str = String(parseInt(numStr,10)||0);
+  if(str.length <= 6) return readUnderMillion(str);
+  const head = str.slice(0, str.length - 6);
+  const tail = str.slice(str.length - 6);
+  const tailVal = parseInt(tail,10);
+  return readNumberThai(head) + 'ล้าน' + (tailVal ? readUnderMillion(tail) : '');
+}
+
+function bahtText(amount){
+  const n = Math.round((Number(amount)||0) * 100) / 100;
+  const [baht, satang] = n.toFixed(2).split('.');
+  const bahtPart = readNumberThai(baht) + 'บาท';
+  if(satang === '00') return bahtPart + 'ถ้วน';
+  return bahtPart + readNumberThai(satang) + 'สตางค์';
+}
+
 // ===== หมายเหตุเริ่มต้นคงที่ (แก้ข้อความได้ตามต้องการ) =====
 const DEFAULT_REMARK_LINES = [
   "ธนาคารกสิกรไทย เลขที่บัญชี 201-8-860778\nRemark: บจก.สยามการ์ดโซลูชั่น (ประเทศไทย) จำกัด",
@@ -159,6 +202,10 @@ export default async function generateReceiptPDF(payload={}, options={}){
     noteY += 2;
   });
   const noteEndY = noteY + 12;
+
+  const amountInWords = bahtText(netTotal);
+  noteY = textBlock(doc, `จำนวนเงิน (ตัวอักษร): ${amountInWords}`, M, noteY, remarkW);
+  noteY += 2;
 
   /* --- กล่องสรุป (ขวา) --- */
   let ty = tableEndY + 6;
