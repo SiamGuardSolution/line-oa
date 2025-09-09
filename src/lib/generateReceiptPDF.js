@@ -212,7 +212,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
 
   /* --- จำนวนเงิน (ตัวอักษร) + กล่องไฮไลต์ จัดกึ่งกลางแนวตั้ง --- */
   const amountInWords = bahtText(netTotal);                         // เช่น สามพันเก้าร้อยเก้าสิบสามบาทถ้วน
-  const textLabel = `จำนวนเงิน (ตัวอักษร): ${amountInWords}`;
+  const textLabel = `${amountInWords}`;
 
   const padX = 6;                 // ระยะขอบซ้าย/ขวากล่อง
   const padY = 6;                 // ระยะขอบบน/ล่างกล่อง
