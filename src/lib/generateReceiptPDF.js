@@ -10,24 +10,46 @@ function textBlock(doc,text,x,y,maxW,lh=16){const lines=doc.splitTextToSize(Stri
 
 /* ---------- font loader (no process.env, cache-busted) ---------- */
 const FAMILY = "THSarabunSG";
-let THAI_READY = false;
 
-async function ensureThaiFont(doc){
-  if(THAI_READY){ doc.setFont(FAMILY,"normal"); return; }
-  const v = String(Date.now());
-  const regularUrl = `/fonts/THSarabunNew.ttf?v=${v}`;
-  const boldUrl    = `/fonts/THSarabunNew-Bold.ttf?v=${v}`;
-  const [rRes,bRes] = await Promise.all([fetch(regularUrl), fetch(boldUrl)]);
-  if(!rRes.ok) throw new Error(`โหลดฟอนต์ไม่สำเร็จ: ${regularUrl}`);
-  if(!bRes.ok) throw new Error(`โหลดฟอนต์ไม่สำเร็จ: ${boldUrl}`);
-  const [rBuf,bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
-  doc.addFileToVFS(`${FAMILY}-Regular.ttf`, ab2b64(rBuf));
+// แคชไฟล์ฟอนต์ (base64) ไว้ในหน่วยความจำ โหลดครั้งเดียวพอ
+let B64_REG = null;
+let B64_BOLD = null;
+
+// เก็บรายการเอกสารที่ลงทะเบียนฟอนต์แล้ว (กันลงซ้ำใน doc เดิม)
+const REGISTERED = new WeakSet();
+
+async function loadFontsB64() {
+  if (B64_REG && B64_BOLD) return { reg: B64_REG, bold: B64_BOLD };
+  // ไม่ใส่ timestamp แล้ว เพื่อให้ browser cache ได้
+  const regularUrl = `/fonts/THSarabunNew.ttf`;
+  const boldUrl    = `/fonts/THSarabunNew-Bold.ttf`;
+  const [rRes, bRes] = await Promise.all([fetch(regularUrl), fetch(boldUrl)]);
+  if (!rRes.ok) throw new Error(`โหลดฟอนต์ไม่สำเร็จ: ${regularUrl}`);
+  if (!bRes.ok) throw new Error(`โหลดฟอนต์ไม่สำเร็จ: ${boldUrl}`);
+  const [rBuf, bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
+  B64_REG  = ab2b64(rBuf);
+  B64_BOLD = ab2b64(bBuf);
+  return { reg: B64_REG, bold: B64_BOLD };
+}
+
+async function ensureThaiFont(doc) {
+  // ถ้า doc นี้ถูกลงทะเบียนแล้ว ข้ามได้
+  if (REGISTERED.has(doc) && doc.getFontList?.()[FAMILY]) {
+    doc.setFont(FAMILY, "normal");
+    return;
+  }
+  // โหลด base64 จากแคช (หรือเครือข่ายถ้ายังไม่เคยโหลด)
+  const { reg, bold } = await loadFontsB64();
+
+  // ลงทะเบียนฟอนต์กับ doc "ทุกครั้งที่สร้าง doc ใหม่"
+  doc.addFileToVFS(`${FAMILY}-Regular.ttf`, reg);
   doc.addFont(`${FAMILY}-Regular.ttf`, FAMILY, "normal");
-  doc.addFileToVFS(`${FAMILY}-Bold.ttf`, ab2b64(bBuf));
+  doc.addFileToVFS(`${FAMILY}-Bold.ttf`, bold);
   doc.addFont(`${FAMILY}-Bold.ttf`, FAMILY, "bold");
-  if(!doc.getFontList?.()[FAMILY]) throw new Error("ฟอนต์ไทยไม่ถูกลงทะเบียนกับ jsPDF");
-  THAI_READY = true;
-  doc.setFont(FAMILY,"normal");
+
+  if (!doc.getFontList?.()[FAMILY]) throw new Error("ฟอนต์ไทยไม่ถูกลงทะเบียนกับ jsPDF");
+  REGISTERED.add(doc);
+  doc.setFont(FAMILY, "normal");
 }
 
 /* ---------- main ---------- */
