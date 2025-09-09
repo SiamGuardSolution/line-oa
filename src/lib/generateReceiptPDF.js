@@ -210,33 +210,40 @@ export default async function generateReceiptPDF(payload={}, options={}){
     noteY += 2;
   });
 
-  /* --- จำนวนเงิน (ตัวอักษร) + กล่องไฮไลต์ จัดกึ่งกลางแนวตั้ง --- */
-  const amountInWords = bahtText(netTotal);                         // เช่น สามพันเก้าร้อยเก้าสิบสามบาทถ้วน
+  /* --- จำนวนเงิน (ตัวอักษร) + กล่องไฮไลต์ จัดกึ่งกลางทั้ง X/Y --- */
+  const amountInWords = bahtText(netTotal);
   const textLabel = `${amountInWords}`;
 
-  const padX = 6;                 // ระยะขอบซ้าย/ขวากล่อง
-  const padY = 6;                 // ระยะขอบบน/ล่างกล่อง
-  const lineHeight = 16;          // ความสูงบรรทัดของหมายเหตุ
+  const padX = 6, padY = 6;
+  const lineHeight = 16;
+  const boxWidth  = remarkW + padX * 2;
   const boxHeight = lineHeight + padY * 2;
-  const boxTop = noteY - (lineHeight - 12) - padY;  // ปรับให้อยู่สูงกว่าบรรทัดเล็กน้อย
-  const centerY = boxTop + boxHeight / 2;
+  const boxLeft   = M - padX;
+  const boxTop    = noteY - (lineHeight - 12) - padY;
 
-  // กล่องพื้นหลัง (เหลืองอ่อน)
-  doc.setFillColor(255, 247, 209);     // #FFF7D1
-  doc.roundedRect(M - padX, boxTop, remarkW + padX * 2, boxHeight, 4, 4, "F");
+  doc.setFillColor(255, 247, 209);                // พื้นหลังเหลืองอ่อน
+  doc.roundedRect(boxLeft, boxTop, boxWidth, boxHeight, 4, 4, "F");
 
-  // ข้อความกึ่งกลางแนวตั้ง
+  // จัดวางข้อความกลางกล่อง (รองรับหลายบรรทัด)
+  const centerX = boxLeft + boxWidth / 2;
+  const centerY = boxTop  + boxHeight / 2;
+  const lines   = doc.splitTextToSize(T(textLabel), remarkW);
+  const totalH  = lines.length * lineHeight;
+
   doc.setFont(FAMILY, "bold");
-  try {
-    doc.text(T(textLabel), M, centerY, { baseline: "middle" });
-  } catch {
-    // fallback สำหรับ jsPDF รุ่นที่ยังไม่รองรับ baseline
-    const fs = doc.getFontSize();
-    doc.text(T(textLabel), M, centerY + fs * 0.35);
-  }
+  lines.forEach((ln, i) => {
+    const yLine = centerY - totalH / 2 + (i + 0.5) * lineHeight;
+    try {
+      doc.text(T(ln), centerX, yLine, { align: "center", baseline: "middle" });
+    } catch {
+      // fallback (ถ้า jsPDF ไม่มี baseline: 'middle')
+      const fs = doc.getFontSize();
+      doc.text(T(ln), centerX, yLine + fs * 0.35, { align: "center" });
+    }
+  });
   doc.setFont(FAMILY, "normal");
 
-  // เลื่อน y ไปต่อบรรทัดถัดไป แล้วค่อยสรุป noteEndY (สำคัญ!)
+  // เลื่อน y ต่อจากกล่อง
   noteY = boxTop + boxHeight + 3;
   const noteEndY = noteY + 12;
 
