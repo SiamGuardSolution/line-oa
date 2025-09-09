@@ -57,7 +57,12 @@ const S = v => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
 function ab2b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s);}
 const money = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtDate = d => { try{ const dd=d instanceof Date?d:new Date(d); return dd.toLocaleDateString("th-TH",{year:"numeric",month:"2-digit",day:"2-digit"});}catch{return String(d||"");}};
-function textBlock(doc,text,x,y,maxW,lh=16){const lines=doc.splitTextToSize(String(text||""),maxW);lines.forEach((ln,i)=>doc.text(ln,x,y+i*lh));return y+(lines.length-1)*lh;}
+function textBlock(doc, text, x, y, maxW, lh=16) {
+  const lines = doc.splitTextToSize(String(text || ""), maxW);
+  lines.forEach((ln, i) => doc.text(String(ln), x, y + i * lh));
+  // คืน y ของ "บรรทัดถัดไป" เพื่อให้ต่อกันไม่ซ้อน
+  return y + lines.length * lh;
+}
 
 /* ---------- font loader (per-doc register + in-memory cache) ---------- */
 const FAMILY = "THSarabunSG";
