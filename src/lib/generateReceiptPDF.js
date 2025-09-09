@@ -3,6 +3,11 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 /* ---------- utils ---------- */
+// ===== หมายเหตุเริ่มต้นคงที่ (แก้ข้อความได้ตามต้องการ) =====
+const DEFAULT_REMARK_LINES = [
+  "ธนาคารกสิกรไทย เลขที่บัญชี 201-8-860778",
+  "Remark: บจก.สยามการ์ดโซลูชั่น (ประเทศไทย) จำกัด",
+];
 const S = v => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
 function ab2b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s);}
 const money = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -40,7 +45,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
     companyName="Siam Guard", companyAddress="", companyPhone="", companyTaxId="", logoDataUrl,
     customerCode="", clientName="", clientPhone="", clientAddress="", clientTaxId="",
     receiptNo="", issueDate=new Date(), poNumber="", termDays=0, dueDate,
-    items=[], discount=0, vatRate=0.07, alreadyPaid=0, notes="", bankRemark="",
+    items=[], discount=0, vatRate=0.07, alreadyPaid=0,
     footerNotice="สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
   } = payload;
 
@@ -137,36 +142,48 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const tableEndY = doc.lastAutoTable?.finalY || y;
 
   /* ===== หมายเหตุ (ซ้าย) + กล่องสรุป (ขวา) ===== */
-  const totalsW = 240, totalsX = W - M - totalsW, rowH = 24;
+  const totalsW = 240;
+  const totalsX = W - M - totalsW;
+  const rowH   = 24;
 
+  /* --- พิมพ์หมายเหตุแบบคงที่ ไม่อิง notes/bankRemark --- */
   let noteY = tableEndY + 12;
   const remarkW = totalsX - M - 12;
-  const firstRemark = bankRemark ? `หมายเหตุ: ${bankRemark}` : "หมายเหตุ:";
-  textBlock(doc, S(firstRemark), M, noteY, remarkW);
-  if(notes){ noteY += 18; textBlock(doc, notes, M, noteY, remarkW); }
+
+  doc.setFont(FAMILY, "normal"); doc.setFontSize(12);
+  doc.text("หมายเหตุ:", M, noteY);
+  noteY += 16;
+
+  // พิมพ์ 2 ประโยคคงที่
+  DEFAULT_REMARK_LINES.forEach(line => {
+    noteY = textBlock(doc, line, M, noteY, remarkW);
+    noteY += 2;
+  });
   const noteEndY = noteY + 12;
 
+  /* --- กล่องสรุป (ขวา) --- */
   let ty = tableEndY + 6;
   const rows = [
     ["รวมเงิน", money(subTotal), "normal"],
-    ...(Number(discount)>0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
-    [`ภาษีมูลค่าเพิ่ม 7%`, 0, "normal"],
-    ...(Number(alreadyPaid)>0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`, "highlight"]] : []),
+    ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
+    [`ภาษีมูลค่าเพิ่ม ${Math.round((vatRate || 0) * 100)}%`, money(vat), "normal"],
+    ...(Number(alreadyPaid) > 0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`, "highlight"]] : []),
     ["รวมเงินทั้งสิ้น", money(netTotal), "bold"],
   ];
-  rows.forEach(([label,val,style])=>{
-    if(style==="highlight"){ doc.setFillColor(200,228,245); doc.rect(totalsX,ty,totalsW,rowH,"F"); }
-    else{ doc.setDrawColor(230); doc.rect(totalsX,ty,totalsW,rowH); }
-    const mid=totalsX+totalsW-110;
-    doc.setFont(FAMILY, style==="bold"?"bold":"normal");
-    doc.text(S(label), totalsX + 10, ty + 16);
-    doc.text(S(val),   totalsX + totalsW - 10, ty + 16, { align: "right" });
-    doc.setDrawColor(235); doc.line(mid,ty,mid,ty+rowH);
-    ty+=rowH;
+
+  rows.forEach(([label, val, style]) => {
+    if (style === "highlight") { doc.setFillColor(200, 228, 245); doc.rect(totalsX, ty, totalsW, rowH, "F"); }
+    else { doc.setDrawColor(230); doc.rect(totalsX, ty, totalsW, rowH); }
+    const mid = totalsX + totalsW - 110;
+    doc.setFont(FAMILY, style === "bold" ? "bold" : "normal");
+    doc.text(label, totalsX + 10, ty + 16);
+    doc.text(val,   totalsX + totalsW - 10, ty + 16, { align: "right" });
+    doc.setDrawColor(235); doc.line(mid, ty, mid, ty + rowH);
+    ty += rowH;
   });
   const totalsEndY = ty;
 
-  // ตำแหน่งเริ่มของบล็อกท้าย
+  // จัด y ให้ต่อจากส่วนที่สูงกว่า
   y = Math.max(noteEndY, totalsEndY) + 16;
 
   /* ===== ตรึงบล็อกท้ายให้ชิดล่าง ===== */
