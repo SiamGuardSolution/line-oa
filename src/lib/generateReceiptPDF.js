@@ -3,6 +3,9 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 /* ---------- utils ---------- */
+// แปลงทุก input ของ doc.text ให้เป็น string / string[]
+const T = (v) => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
+
 // ===== แปลงจำนวนเงินเป็นคำอ่านภาษาไทย =====
 const TH_NUM = ['ศูนย์','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
 const TH_POS = ['', 'สิบ','ร้อย','พัน','หมื่น','แสน']; // หลักย่อย (< ล้าน)
@@ -112,7 +115,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
 
   // หัวเรื่อง
   doc.setFont(FAMILY,"bold"); doc.setFontSize(22);
-  doc.text("ใบเสร็จรับเงิน", W/2, y, { align:"center" });
+  doc.text(T("ใบเสร็จรับเงิน"), W/2, y, { align:"center" });
 
   /* ===== กล่องลูกค้า/เอกสาร ===== */
   const contentW = W - M*2, pad = 10, lineH = 16;
@@ -142,8 +145,8 @@ export default async function generateReceiptPDF(payload={}, options={}){
   doc.setDrawColor(230); doc.line(boxX+leftW, boxY, boxX+leftW, boxY+boxH);
 
   doc.setFont(FAMILY,"normal"); doc.setFontSize(12);
-  let ly=boxY+pad+6; leftLines.forEach(t=>{ doc.text(t, boxX+pad, ly); ly+=lineH; });
-  let ry=boxY+pad+6; rightLines.forEach(t=>{ doc.text(t, boxX+leftW+pad, ry); ry+=lineH; });
+  let ly=boxY+pad+6; leftLines.forEach(t => { doc.text(T(t), boxX + pad, ly); ly += lineH; });
+  let ry=boxY+pad+6; rightLines.forEach(t => { doc.text(T(t), boxX + leftW + pad, ry); ry += lineH; });
 
   y = boxY + boxH + 16;
 
@@ -193,7 +196,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const remarkW = totalsX - M - 12;
 
   doc.setFont(FAMILY, "normal"); doc.setFontSize(12);
-  doc.text("หมายเหตุ:", M, noteY);
+  doc.text(T("หมายเหตุ:"), M, noteY);
   noteY += 16;
 
   // พิมพ์ 2 ประโยคคงที่
@@ -204,7 +207,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const noteEndY = noteY + 12;
 
   const amountInWords = bahtText(netTotal);
-  noteY = textBlock(doc, `จำนวนเงิน (ตัวอักษร): ${amountInWords}`, M, noteY, remarkW);
+  noteY = textBlock(doc, T(`จำนวนเงิน (ตัวอักษร): ${amountInWords}`), M, noteY, remarkW);
   noteY += 2;
 
   /* --- กล่องสรุป (ขวา) --- */
@@ -222,8 +225,8 @@ export default async function generateReceiptPDF(payload={}, options={}){
     else { doc.setDrawColor(230); doc.rect(totalsX, ty, totalsW, rowH); }
     const mid = totalsX + totalsW - 110;
     doc.setFont(FAMILY, style === "bold" ? "bold" : "normal");
-    doc.text(label, totalsX + 10, ty + 16);
-    doc.text(val,   totalsX + totalsW - 10, ty + 16, { align: "right" });
+    doc.text(T(label), totalsX + 10, ty + 16);
+    doc.text(T(val),   totalsX + totalsW - 10, ty + 16, { align: "right" });
     doc.setDrawColor(235); doc.line(mid, ty, mid, ty + rowH);
     ty += rowH;
   });
@@ -241,15 +244,15 @@ export default async function generateReceiptPDF(payload={}, options={}){
 
   /* ===== ข้อความรับเงิน + วิธีชำระ + เซ็นชื่อ ===== */
   doc.setFont(FAMILY,"normal");
-  doc.text("ได้รับเงินดังรายการข้างต้นในใบเสร็จฯเรียบร้อย", M, y);
+  doc.text(T("ได้รับเงินดังรายการข้างต้นในใบเสร็จฯเรียบร้อย"), M, y);
 
   const payY = y + 12;
   doc.roundedRect(M, payY, W - M*2, PAY_H, 6, 6);
   let py = payY + 20;
-  doc.text("การชำระเงิน:", M + 10, py); py += 18;
-  doc.text("เช็คธนาคาร / สาขา: ____________________", M + 28, py); py += 18;
-  doc.text("เลขที่บัญชี: ____________________", M + 28, py); py += 18;
-  doc.text("ลงวันที่: ____________________", M + 28, py);
+  doc.text(T("การชำระเงิน:"), M + 10, py += 18);
+  doc.text(T("เช็คธนาคาร / สาขา: ____________________"), M + 28, py); py += 18;
+  doc.text(T("เลขที่บัญชี: ____________________"), M + 28, py); py += 18;
+  doc.text(T("ลงวันที่: ____________________"), M + 28, py);
 
   const signY = payY + PAY_H + 16;
   const colGap = 24;
@@ -258,7 +261,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   ["ผู้รับเงิน", "ผู้รับสินค้า"].forEach((label, i) => {
     const x = M + i * (signW + colGap);
     doc.line(x + 24, signY + 40, x + signW - 24, signY + 40);
-    doc.text(label, x + signW / 2, signY + 58, { align: "center" });
+    doc.text(T(label), x + signW / 2, signY + 58, { align: "center" });
   });
 
   // ข้อความท้ายเอกสาร (จะอยู่ชิดล่างตาม margin)
