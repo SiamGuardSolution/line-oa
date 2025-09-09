@@ -79,47 +79,54 @@ export default async function generateReceiptPDF(payload={}, options={}){
   doc.text("ใบเสร็จรับเงิน", W/2, y, { align:"center" });
 
   /* ===== กล่องลูกค้า/เอกสาร — ป้องกันทับกันด้วยการคำนวณกว้างแบบไดนามิก ===== */
-  const contentW = W - M*2;
-  const GAP = 12;
+  const contentW = W - M * 2;
+  const pad = 10;
+  const lineH = 16;
 
-  let rightW = Math.min(260, Math.round(contentW*0.42)); // ~42% หรือสูงสุด 260
-  let leftW  = contentW - rightW - GAP;
-  if(leftW < 260){
-    leftW = 260;
-    rightW = contentW - leftW - GAP;
-    if(rightW < 200) rightW = 200;
-    leftW = contentW - rightW - GAP;
-  }
-  const leftX  = M;
-  const rightX = leftX + leftW + GAP;
+  // สัดส่วนซ้าย:ขวา (ซ้ายกว้างกว่าเพื่อรองรับที่อยู่ยาว)
+  let leftW  = Math.max(260, Math.round(contentW * 0.60));
+  let rightW = contentW - leftW;
+  if (rightW < 200) { rightW = 200; leftW = contentW - rightW; }
 
-  // กล่องลูกค้า (ซ้าย)
-  const leftPad=10;
-  const leftLines=[
-    `รหัสลูกค้า: ${customerCode||"-"}`,
-    `ชื่อลูกค้า: ${clientName||"-"}`,
-    `เลขประจำตัวผู้เสียภาษี: ${clientTaxId||"-"}`,
-    `ที่อยู่:`, 
-    ...doc.splitTextToSize(clientAddress || "-", leftW - leftPad * 2),
-    `โทรศัพท์: ${clientPhone||"-"}`,
+  const boxX = M;
+  const boxY = y + 20;
+
+  // “ที่อยู่:” ต่อท้ายบรรทัดเดียวกับข้อมูล (ไม่ขึ้นบรรทัดใหม่)
+  const leftLines = [
+    `รหัสลูกค้า: ${customerCode || "-"}`,
+    `ชื่อลูกค้า: ${clientName || "-"}`,
+    `เลขประจำตัวผู้เสียภาษี: ${clientTaxId || "-"}`,
+    ...doc.splitTextToSize(`ที่อยู่: ${clientAddress || "-"}`, leftW - pad * 2),
+    `โทรศัพท์: ${clientPhone || "-"}`,
   ];
-  const leftH=leftPad*2+leftLines.length*16+2;
-  doc.roundedRect(leftX,y+20,leftW,leftH,6,6);
-  doc.setFont(FAMILY,"normal"); doc.setFontSize(12);
-  let ly=y+20+leftPad+6; leftLines.forEach(t=>{doc.text(t,leftX+leftPad,ly); ly+=16;});
-
-  // กล่องเอกสาร (ขวา)
-  const rightPad=10;
-  const rightLines=[
-    `เลขที่: ${receiptNo||"-"}`,
+  const rightLines = [
+    `เลขที่: ${receiptNo || "-"}`,
     `วันที่: ${fmtDate(issueDate)}`,
-    `เลขที่ใบสั่งซื้อ: ${poNumber||"-"}`,
-    `เงื่อนไขการชำระเงิน: ${Number(termDays||0)} วัน`,
+    `เลขที่ใบสั่งซื้อ: ${poNumber || "-"}`,
+    `เงื่อนไขการชำระเงิน: ${Number(termDays || 0)} วัน`,
     `ครบกำหนดชำระ: ${fmtDate(_due)}`,
   ];
-  const rightH=rightPad*2+rightLines.length*16+2;
-  doc.roundedRect(rightX,y+20,rightW,rightH,6,6);
-  let ry=y+20+rightPad+6; rightLines.forEach(t=>{doc.text(t,rightX+rightPad,ry); ry+=16;});
+
+  const leftH  = pad * 2 + leftLines.length  * lineH + 2;
+  const rightH = pad * 2 + rightLines.length * lineH + 2;
+  const boxH   = Math.max(leftH, rightH);
+
+  // กรอบใหญ่ 1 อัน (มุมมน) + เส้นแบ่งตรงกลาง (ไม่มีช่องว่าง/ไม่ซ้อน)
+  doc.roundedRect(boxX, boxY, contentW, boxH, 6, 6);
+  doc.setDrawColor(230);
+  doc.line(boxX + leftW, boxY, boxX + leftW, boxY + boxH);
+
+  // พิมพ์ข้อความฝั่งซ้าย
+  doc.setFont(FAMILY, "normal"); doc.setFontSize(12);
+  let ly = boxY + pad + 6;
+  leftLines.forEach(t => { doc.text(t, boxX + pad, ly); ly += lineH; });
+
+  // พิมพ์ข้อความฝั่งขวา
+  let ry = boxY + pad + 6;
+  rightLines.forEach(t => { doc.text(t, boxX + leftW + pad, ry); ry += lineH; });
+
+  // ดัน Y ลงมาถัดจากกล่อง
+  y = boxY + boxH + 16;
 
   y=Math.max(y+20+leftH, y+20+rightH)+16;
 
@@ -141,11 +148,11 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const netTotal=Math.max(0, grandTotal-deposit);
 
   autoTable(doc,{
-    tableWidth: contentW - 12,
+    tableWidth: contentW - 16,
     startY:y,
     head,
     body: body.length?body:[["-","-","-","-","-"]],
-    styles: { font: FAMILY, fontSize: 12, cellPadding: 6, lineWidth: 0.2, overflow: 'linebreak' },
+    styles: { font: FAMILY, fontSize: 12, cellPadding: 5, lineWidth: 0.2, overflow: 'linebreak' },
     headStyles:{ font:FAMILY, fontStyle:"bold", fillColor:[245,245,245] },
     columnStyles:{
         0: { halign: "center", cellWidth: 38 },
@@ -160,7 +167,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const tEnd=doc.lastAutoTable?.finalY||y;
 
   /* ===== หมายเหตุ (ซ้าย) + กล่องสรุป (ขวา) ===== */
-  const totalsW=240, totalsX=W-M-totalsW, lineH=24;
+  const totalsW=240, totalsX=W-M-totalsW;
 
   // หมายเหตุ
   const remarkX=M, remarkW=totalsX-M-12; let noteY=tEnd+16;
@@ -188,7 +195,6 @@ export default async function generateReceiptPDF(payload={}, options={}){
   });
 
   /* ===== ช่อง “ได้รับเงิน…” + วิธีชำระ + เซ็นชื่อ ===== */
-  const boxY=Math.max(noteY+60, ty+10);
   doc.setFont(FAMILY,"normal");
   doc.text("ได้รับเงินดังรายการข้างต้นในใบเสร็จฯเรียบร้อย", M, boxY);
 
