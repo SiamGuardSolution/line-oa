@@ -212,7 +212,26 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const noteEndY = noteY + 12;
 
   const amountInWords = bahtText(netTotal);
-  noteY = textBlock(doc, T(`จำนวนเงิน (ตัวอักษร): ${amountInWords}`), M, noteY, remarkW);
+
+  const padX = 6;           // ระยะขอบซ้าย/ขวาของกล่อง
+  const padY = 4;           // ระยะขอบบน/ล่างของกล่อง
+  const lineHeight = 16;    // ต้องสอดคล้องกับ lineH ที่ใช้กับหมายเหตุ
+  const boxTop = noteY - (lineHeight - 12) - padY; // ย้ายกล่องขึ้นเหนือ baseline เล็กน้อย
+  const boxHeight = lineHeight + padY * 2;
+
+  // สีพื้นหลัง (เหลืองอ่อน) และมุมมน
+  doc.setFillColor(255, 247, 209);
+  doc.roundedRect(M - padX, boxTop, remarkW + padX * 2, boxHeight, 4, 4, "F");
+
+  // ข้อความทับบนกล่อง (หนา)
+  doc.setFont(FAMILY, "bold")
+  doc.text(T(`จำนวนเงิน (ตัวอักษร): ${amountInWords}`), M, noteY);
+  doc.setFont(FAMILY, "normal");
+
+  // ขยับ y ลงต่อบรรทัดถัดไป (กันทับ)
+  noteY += boxHeight + 2;
+
+  noteY = textBlock(doc, T(`${amountInWords}`), M, noteY, remarkW);
   noteY += 2;
 
   /* --- กล่องสรุป (ขวา) --- */
