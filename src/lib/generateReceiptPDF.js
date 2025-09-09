@@ -5,8 +5,7 @@ import autoTable from "jspdf-autotable";
 /* ---------- utils ---------- */
 // ===== หมายเหตุเริ่มต้นคงที่ (แก้ข้อความได้ตามต้องการ) =====
 const DEFAULT_REMARK_LINES = [
-  "ธนาคารกสิกรไทย เลขที่บัญชี 201-8-860778",
-  "Remark: บจก.สยามการ์ดโซลูชั่น (ประเทศไทย) จำกัด",
+  "ธนาคารกสิกรไทย เลขที่บัญชี 201-8-860778\nRemark: บจก.สยามการ์ดโซลูชั่น (ประเทศไทย) จำกัด",
 ];
 const S = v => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
 function ab2b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s);}
