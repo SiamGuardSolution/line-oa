@@ -286,9 +286,12 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const payY = y + 12;
   doc.roundedRect(M, payY, W - M*2, PAY_H, 6, 6);
   let py = payY + 20;
-  doc.text(T("การชำระเงิน:"), M + 10, py += 18);
-  doc.text(T("เช็คธนาคาร / สาขา: ____________________"), M + 28, py); py += 18;
-  doc.text(T("เลขที่บัญชี: ____________________"), M + 28, py); py += 18;
+  doc.text(T("การชำระเงิน:"), M + 10, py);
+  py += 18;
+  doc.text(T("เช็คธนาคาร / สาขา: ____________________"), M + 28, py);
+  py += 18;
+  doc.text(T("เลขที่บัญชี: ____________________"), M + 28, py);
+  py += 18;
   doc.text(T("ลงวันที่: ____________________"), M + 28, py);
 
   const signY = payY + PAY_H + 16;
