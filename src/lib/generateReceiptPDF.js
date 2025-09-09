@@ -225,14 +225,11 @@ export default async function generateReceiptPDF(payload={}, options={}){
 
   // ข้อความทับบนกล่อง (หนา)
   doc.setFont(FAMILY, "bold")
-  doc.text(T(`จำนวนเงิน (ตัวอักษร): ${amountInWords}`), M, noteY);
+  doc.text(T(`${amountInWords}`), M, noteY);
   doc.setFont(FAMILY, "normal");
 
   // ขยับ y ลงต่อบรรทัดถัดไป (กันทับ)
-  noteY += boxHeight + 2;
-
-  noteY = textBlock(doc, T(`${amountInWords}`), M, noteY, remarkW);
-  noteY += 2;
+  noteY += boxHeight + 3;
 
   /* --- กล่องสรุป (ขวา) --- */
   let ty = tableEndY + 6;
