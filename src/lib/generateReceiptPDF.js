@@ -165,7 +165,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const rows = [
     ["รวมเงิน", money(subTotal), "normal"],
     ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
-    [`ภาษีมูลค่าเพิ่ม ${Math.round((vatRate || 0) * 100)}%`, money(vat), "normal"],
+    [`ภาษีมูลค่าเพิ่ม 7%`, 0, "normal"],
     ...(Number(alreadyPaid) > 0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`, "highlight"]] : []),
     ["รวมเงินทั้งสิ้น", money(netTotal), "bold"],
   ];
