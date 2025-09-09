@@ -3,6 +3,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 /* ---------- utils ---------- */
+const S = v => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
 function ab2b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s);}
 const money = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtDate = d => { try{ const dd=d instanceof Date?d:new Date(d); return dd.toLocaleDateString("th-TH",{year:"numeric",month:"2-digit",day:"2-digit"});}catch{return String(d||"");}};
@@ -141,7 +142,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   let noteY = tableEndY + 12;
   const remarkW = totalsX - M - 12;
   const firstRemark = bankRemark ? `หมายเหตุ: ${bankRemark}` : "หมายเหตุ:";
-  textBlock(doc, firstRemark, M, noteY, remarkW);
+  textBlock(doc, S(firstRemark), M, noteY, remarkW);
   if(notes){ noteY += 18; textBlock(doc, notes, M, noteY, remarkW); }
   const noteEndY = noteY + 12;
 
@@ -158,8 +159,8 @@ export default async function generateReceiptPDF(payload={}, options={}){
     else{ doc.setDrawColor(230); doc.rect(totalsX,ty,totalsW,rowH); }
     const mid=totalsX+totalsW-110;
     doc.setFont(FAMILY, style==="bold"?"bold":"normal");
-    doc.text(label, totalsX+10, ty+16);
-    doc.text(val, totalsX+totalsW-10, ty+16, {align:"right"});
+    doc.text(S(label), totalsX + 10, ty + 16);
+    doc.text(S(val),   totalsX + totalsW - 10, ty + 16, { align: "right" });
     doc.setDrawColor(235); doc.line(mid,ty,mid,ty+rowH);
     ty+=rowH;
   });
@@ -199,7 +200,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
 
   // ข้อความท้ายเอกสาร (จะอยู่ชิดล่างตาม margin)
   doc.setFontSize(11); doc.setFont(FAMILY,"normal");
-  doc.text(footerNotice, M, signY + FOOTER_GAP);
+  doc.text(S(footerNotice), M, signY + FOOTER_GAP);
 
   const fname = options.filename || `Receipt-${receiptNo || fmtDate(issueDate)}.pdf`;
   doc.save(fname);
