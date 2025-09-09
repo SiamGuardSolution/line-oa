@@ -196,7 +196,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const totalsX = W - M - totalsW;
   const rowH   = 24;
 
-  /* --- พิมพ์หมายเหตุแบบคงที่ ไม่อิง notes/bankRemark --- */
+  /* --- หมายเหตุแบบคงที่ --- */
   let noteY = tableEndY + 12;
   const remarkW = totalsX - M - 12;
 
@@ -204,32 +204,41 @@ export default async function generateReceiptPDF(payload={}, options={}){
   doc.text(T("หมายเหตุ:"), M, noteY);
   noteY += 16;
 
-  // พิมพ์ 2 ประโยคคงที่
+  // 2 บรรทัดคงที่
   DEFAULT_REMARK_LINES.forEach(line => {
     noteY = textBlock(doc, line, M, noteY, remarkW);
     noteY += 2;
   });
-  const noteEndY = noteY + 12;
 
-  const amountInWords = bahtText(netTotal);
+  /* --- จำนวนเงิน (ตัวอักษร) + กล่องไฮไลต์ จัดกึ่งกลางแนวตั้ง --- */
+  const amountInWords = bahtText(netTotal);                         // เช่น สามพันเก้าร้อยเก้าสิบสามบาทถ้วน
+  const textLabel = `จำนวนเงิน (ตัวอักษร): ${amountInWords}`;
 
-  const padX = 6;           // ระยะขอบซ้าย/ขวาของกล่อง
-  const padY = 4;           // ระยะขอบบน/ล่างของกล่อง
-  const lineHeight = 16;    // ต้องสอดคล้องกับ lineH ที่ใช้กับหมายเหตุ
-  const boxTop = noteY - (lineHeight - 12) - padY; // ย้ายกล่องขึ้นเหนือ baseline เล็กน้อย
+  const padX = 6;                 // ระยะขอบซ้าย/ขวากล่อง
+  const padY = 6;                 // ระยะขอบบน/ล่างกล่อง
+  const lineHeight = 16;          // ความสูงบรรทัดของหมายเหตุ
   const boxHeight = lineHeight + padY * 2;
+  const boxTop = noteY - (lineHeight - 12) - padY;  // ปรับให้อยู่สูงกว่าบรรทัดเล็กน้อย
+  const centerY = boxTop + boxHeight / 2;
 
-  // สีพื้นหลัง (เหลืองอ่อน) และมุมมน
-  doc.setFillColor(255, 247, 209);
+  // กล่องพื้นหลัง (เหลืองอ่อน)
+  doc.setFillColor(255, 247, 209);     // #FFF7D1
   doc.roundedRect(M - padX, boxTop, remarkW + padX * 2, boxHeight, 4, 4, "F");
 
-  // ข้อความทับบนกล่อง (หนา)
-  doc.setFont(FAMILY, "bold")
-  doc.text(T(`${amountInWords}`), M, noteY);
+  // ข้อความกึ่งกลางแนวตั้ง
+  doc.setFont(FAMILY, "bold");
+  try {
+    doc.text(T(textLabel), M, centerY, { baseline: "middle" });
+  } catch {
+    // fallback สำหรับ jsPDF รุ่นที่ยังไม่รองรับ baseline
+    const fs = doc.getFontSize();
+    doc.text(T(textLabel), M, centerY + fs * 0.35);
+  }
   doc.setFont(FAMILY, "normal");
 
-  // ขยับ y ลงต่อบรรทัดถัดไป (กันทับ)
-  noteY += boxHeight + 3;
+  // เลื่อน y ไปต่อบรรทัดถัดไป แล้วค่อยสรุป noteEndY (สำคัญ!)
+  noteY = boxTop + boxHeight + 3;
+  const noteEndY = noteY + 12;
 
   /* --- กล่องสรุป (ขวา) --- */
   let ty = tableEndY + 6;
