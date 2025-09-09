@@ -188,13 +188,14 @@ export default async function generateReceiptPDF(payload={}, options={}){
   doc.text("ลงวันที่: ____________________", M + 28, py);
 
   const signY = payY + PAY_H + 16;
-  const signW = (W - M*2 - 32) / 3;
-  for(let i=0;i<3;i++){
-    const x = M + i*(signW+16);
-    doc.line(x+24, signY+40, x+signW-24, signY+40);
-    const label = i===0 ? "ผู้รับเงิน" : i===1 ? "ผู้รับสินค้า" : "ผู้มีอำนาจลงนาม";
-    doc.text(label, x+signW/2, signY+58, {align:"center"});
-  }
+  const colGap = 24;
+  const signW  = (W - M * 2 - colGap) / 2;
+
+  ["ผู้รับเงิน", "ผู้รับสินค้า"].forEach((label, i) => {
+    const x = M + i * (signW + colGap);
+    doc.line(x + 24, signY + 40, x + signW - 24, signY + 40);
+    doc.text(label, x + signW / 2, signY + 58, { align: "center" });
+  });
 
   // ข้อความท้ายเอกสาร (จะอยู่ชิดล่างตาม margin)
   doc.setFontSize(11); doc.setFont(FAMILY,"normal");
