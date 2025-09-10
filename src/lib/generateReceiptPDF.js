@@ -3,29 +3,27 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 /* ---------- utils ---------- */
-// แปลงทุก input ของ doc.text ให้เป็น string / string[]
 const T = (v) => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
 
 // ===== แปลงจำนวนเงินเป็นคำอ่านภาษาไทย =====
 const TH_NUM = ['ศูนย์','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
-const TH_POS = ['', 'สิบ','ร้อย','พัน','หมื่น','แสน']; // หลักย่อย (< ล้าน)
+const TH_POS = ['', 'สิบ','ร้อย','พัน','หมื่น','แสน'];
 
 function readUnderMillion(numStr){
   let s = '';
-  const str = String(parseInt(numStr,10)||0);   // ตัด 0 นำหน้า
+  const str = String(parseInt(numStr,10)||0);
   const len = str.length;
   for(let i=0;i<len;i++){
     const d = +str[i]; if(d===0) continue;
     const pos = len - i - 1; // 0=หน่วย,1=สิบ,...
-
-    if(pos === 0){ // หน่วย
+    if(pos === 0){
       if(d === 1 && len > 1) s += 'เอ็ด';
       else s += TH_NUM[d];
-    }else if(pos === 1){ // สิบ
+    }else if(pos === 1){
       if(d === 1) s += 'สิบ';
       else if(d === 2) s += 'ยี่สิบ';
       else s += TH_NUM[d] + 'สิบ';
-    }else{ // ร้อย พัน หมื่น แสน
+    }else{
       s += TH_NUM[d] + TH_POS[pos];
     }
   }
@@ -49,7 +47,7 @@ function bahtText(amount){
   return bahtPart + readNumberThai(satang) + 'สตางค์';
 }
 
-// ===== หมายเหตุเริ่มต้นคงที่ (แก้ข้อความได้ตามต้องการ) =====
+// ===== หมายเหตุเริ่มต้นคงที่ =====
 const DEFAULT_REMARK_LINES = [
   "ธนาคารกสิกรไทย เลขที่บัญชี 201-8-860778\nRemark: บจก.สยามการ์ดโซลูชั่น (ประเทศไทย) จำกัด",
 ];
@@ -61,11 +59,10 @@ const fmtDate = d => { try{ const dd=d instanceof Date?d:new Date(d); return dd.
 function textBlock(doc, text, x, y, maxW, lh=16) {
   const lines = doc.splitTextToSize(String(text || ""), maxW);
   lines.forEach((ln, i) => doc.text(String(ln), x, y + i * lh));
-  // คืน y ของ "บรรทัดถัดไป" เพื่อให้ต่อกันไม่ซ้อน
   return y + lines.length * lh;
 }
 
-/* ---------- font loader (per-doc register + in-memory cache) ---------- */
+/* ---------- font loader ---------- */
 const FAMILY = "THSarabunSG";
 let B64_REG = null, B64_BOLD = null;
 const REGISTERED = new WeakSet();
@@ -91,18 +88,23 @@ async function ensureThaiFont(doc){
 }
 
 /* ---------- main ---------- */
+/**
+ * options:
+ *  - filename?: string
+ *  - returnType?: 'save' | 'blob' | 'bloburl' | 'arraybuffer' | 'datauristring'
+ *  - autoSave?: boolean  // ถ้า false จะเหมือน returnType='blob'
+ */
 export default async function generateReceiptPDF(payload={}, options={}){
   const {
     companyName="Siam Guard", companyAddress="", companyPhone="", companyTaxId="", logoDataUrl,
     clientName="", clientPhone="", clientAddress="", clientTaxId="",
     receiptNo="", issueDate=new Date(),
-    // เพิ่มคีย์ที่อาจเป็น "วันที่เริ่มสัญญา" หลายรูปแบบ เพื่อรับจากระบบที่ต่างกัน
+    // วันเริ่มสัญญา (รองรับหลายคีย์)
     contractStartDate, startDate, startYMD, service1Date,
     items=[], discount=0, vatRate=0.07, alreadyPaid=0,
     footerNotice="สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
   } = payload;
 
-  // เลือกค่า "วันที่เริ่มสัญญา" จากหลายคีย์ที่รับมา หากไม่มีเลยจะ fallback เป็น issueDate
   const contractStart =
     contractStartDate ??
     startDate ??
@@ -122,7 +124,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
 
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
-  const M = 48;               // margin ร่วมทั้งเอกสาร
+  const M = 48;
   let y = 56;
 
   // โลโก้
@@ -145,7 +147,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
     `โทรศัพท์: ${clientPhone || "-"}`,
   ];
 
-  // เปลี่ยนจาก "ครบกำหนดชำระ" -> "วันที่เริ่มสัญญา"
+  // ใช้ "วันที่เริ่มสัญญา" ตามที่ต้องการ
   const rightLines = [
     `เลขที่: ${receiptNo || "-"}`,
     `วันที่: ${fmtDate(issueDate)}`,
@@ -206,7 +208,6 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const totalsX = W - M - totalsW;
   const rowH   = 24;
 
-  /* --- หมายเหตุแบบคงที่ --- */
   let noteY = tableEndY + 12;
   const remarkW = totalsX - M - 12;
 
@@ -214,13 +215,12 @@ export default async function generateReceiptPDF(payload={}, options={}){
   doc.text(T("หมายเหตุ:"), M, noteY);
   noteY += 16;
 
-  // 2 บรรทัดคงที่
   DEFAULT_REMARK_LINES.forEach(line => {
     noteY = textBlock(doc, line, M, noteY, remarkW);
     noteY += 2;
   });
 
-  /* --- จำนวนเงิน (ตัวอักษร) + กล่องไฮไลต์ จัดกึ่งกลางทั้ง X/Y --- */
+  // จำนวนเงิน (ตัวอักษร)
   const amountInWords = bahtText(netTotal);
   const textLabel = `${amountInWords}`;
 
@@ -231,10 +231,9 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const boxLeft   = M - padX;
   const boxTop    = noteY - (lineHeight - 12) - padY;
 
-  doc.setFillColor(142, 169, 219);                // พื้นหลังน้ำเงินแก่
+  doc.setFillColor(142, 169, 219);
   doc.roundedRect(boxLeft, boxTop, boxWidth, boxHeight, 4, 4, "F");
 
-  // จัดวางข้อความกลางกล่อง (รองรับหลายบรรทัด)
   const centerX = boxLeft + boxWidth / 2;
   const centerY = boxTop  + boxHeight / 2;
   const lines   = doc.splitTextToSize(T(textLabel), remarkW);
@@ -246,18 +245,16 @@ export default async function generateReceiptPDF(payload={}, options={}){
     try {
       doc.text(T(ln), centerX, yLine, { align: "center", baseline: "middle" });
     } catch {
-      // fallback (ถ้า jsPDF ไม่มี baseline: 'middle')
       const fs = doc.getFontSize();
       doc.text(T(ln), centerX, yLine + fs * 0.35, { align: "center" });
     }
   });
   doc.setFont(FAMILY, "normal");
 
-  // เลื่อน y ต่อจากกล่อง
   noteY = boxTop + boxHeight + 3;
   const noteEndY = noteY + 12;
 
-  /* --- กล่องสรุป (ขวา) --- */
+  // กล่องสรุปด้านขวา
   let ty = tableEndY + 6;
   const rows = [
     ["รวมเงิน", money(subTotal), "normal"],
@@ -279,21 +276,19 @@ export default async function generateReceiptPDF(payload={}, options={}){
   });
   const totalsEndY = ty;
 
-  // จัด y ให้ต่อจากส่วนที่สูงกว่า
-  y = Math.max(noteEndY, totalsEndY) + 16;
-
-  /* ===== ตรึงบล็อกท้ายให้ชิดล่าง ===== */
-  const bottomMargin = M;            // ระยะว่างจากขอบล่าง
-  const PAY_H = 88;                  // ความสูงกล่องชำระเงิน
-  const FOOTER_GAP = 90;             // ระยะจากเส้นเซ็นถึงข้อความท้าย
+  // ดันบล็อกท้ายลงล่าง
+  let y2 = Math.max(noteEndY, totalsEndY) + 16;
+  const bottomMargin = M;
+  const PAY_H = 88;
+  const FOOTER_GAP = 90;
   const BLOCK_H = 12 + PAY_H + 16 + FOOTER_GAP;
-  y = Math.max(y, H - bottomMargin - BLOCK_H);
+  y2 = Math.max(y2, H - bottomMargin - BLOCK_H);
 
-  /* ===== ข้อความรับเงิน + วิธีชำระ + เซ็นชื่อ ===== */
+  // ข้อความรับเงิน + วิธีชำระ + เซ็นชื่อ
   doc.setFont(FAMILY,"normal");
-  doc.text(T("ได้รับเงินดังรายการข้างต้นในใบเสร็จฯเรียบร้อย"), M, y);
+  doc.text(T("ได้รับเงินดังรายการข้างต้นในใบเสร็จฯเรียบร้อย"), M, y2);
 
-  const payY = y + 12;
+  const payY = y2 + 12;
   doc.roundedRect(M, payY, W - M*2, PAY_H, 6, 6);
   let py = payY + 20;
   doc.text(T("การชำระเงิน:"), M + 10, py);
@@ -314,10 +309,25 @@ export default async function generateReceiptPDF(payload={}, options={}){
     doc.text(T(label), x + signW / 2, signY + 58, { align: "center" });
   });
 
-  // ข้อความท้ายเอกสาร (จะอยู่ชิดล่างตาม margin)
   doc.setFontSize(11); doc.setFont(FAMILY,"normal");
   doc.text(S(footerNotice), M, signY + FOOTER_GAP);
 
+  // === โหมดส่งออกสำหรับให้ลูกค้ากดรับเอง ===
   const fname = options.filename || `Receipt-${receiptNo || fmtDate(issueDate)}.pdf`;
-  doc.save(fname);
+  const ret = options.returnType || (options.autoSave === false ? 'blob' : 'save');
+
+  switch (ret) {
+    case 'blob':
+      return doc.output('blob');
+    case 'bloburl':
+      return doc.output('bloburl');
+    case 'arraybuffer':
+      return doc.output('arraybuffer');
+    case 'datauristring':
+      return doc.output('datauristring');
+    case 'save':
+    default:
+      doc.save(fname);
+      return { filename: fname };
+  }
 }

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import "./CheckPage.css";
+import generateReceiptPDF from "./lib/generateReceiptPDF";
 
 const HOST = window.location.hostname;
 const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
@@ -298,6 +299,9 @@ export default function CheckPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // เพิ่ม state สร้างใบเสร็จ
+  const [downloading, setDownloading] = useState(false);
+
   // หลายสัญญา + index ที่เลือก
   const [contracts, setContracts] = useState([]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -491,6 +495,79 @@ export default function CheckPage() {
   const addonsArr = useMemo(() => addonsFrom(contract), [contract]);
   const netTotal = useMemo(() => netTotalFrom(contract), [contract]);
 
+  // === 新: ปุ่มดาวน์โหลดใบเสร็จ
+  async function handleDownloadReceipt(current) {
+    if (!current) return;
+    setDownloading(true);
+    try {
+      // ----- ข้อมูลบริษัท (แก้เป็นของจริง/ใช้ .env ก็ได้) -----
+      const companyName   = process.env.REACT_APP_COMPANY_NAME   || "Siam Guard";
+      const companyAddr   = process.env.REACT_APP_COMPANY_ADDR   || "สำนักงานใหญ่ แขวง/เขต กรุงเทพฯ";
+      const companyPhone  = process.env.REACT_APP_COMPANY_PHONE  || "02-xxx-xxxx";
+      const companyTaxId  = process.env.REACT_APP_COMPANY_TAXID  || "";
+      // const logoDataUrl = ... // ถ้ามี Base64 หรือ dataURL
+
+      // วันเริ่มสัญญา
+      const contractStartDate =
+        current.startDate ||
+        current.startYMD ||
+        current.service1Date ||
+        current.firstServiceDate ||
+        current.beginDate ||
+        null;
+
+      // ราคาพื้นฐาน + Add-on + ส่วนลด
+      const basePrice = basePriceFrom(current);
+      const addOns = addonsFrom(current);
+      const items = [
+        { description: labelFromContract(current), qty: 1, unitPrice: basePrice },
+        ...addOns.map(a => ({
+          description: a.name || "บริการเพิ่มเติม",
+          qty: toNumberSafe(a.qty) || 1,
+          unitPrice: toNumberSafe(a.price) || 0,
+        })),
+      ];
+
+      const receiptNo =
+        firstNonEmpty(current.receiptNo, current.invoiceNumber, current.quotationNumber) ||
+        `RN-${toYMD(new Date()).replace(/-/g, "")}-${String(normalizePhone(current.phone)).slice(-4).padStart(4,"0")}`;
+
+      const payload = {
+        companyName: companyName,
+        companyAddress: companyAddr,
+        companyPhone: companyPhone,
+        companyTaxId: companyTaxId,
+        // logoDataUrl,
+
+        clientName:   current.name || current.customerName || current.clientName || "-",
+        clientPhone:  current.phone || current.clientPhone || "-",
+        clientAddress: current.address || current.clientAddress || "-",
+        clientTaxId:   current.taxId || current.clientTaxId || "",
+
+        receiptNo,
+        issueDate: new Date(),
+        contractStartDate,
+
+        items,
+        discount: discountFrom(current),
+        vatRate: 0.07,
+        alreadyPaid: toNumberSafe(current.deposit || current.alreadyPaid || 0),
+      };
+
+      const filename = `Receipt-${receiptNo}.pdf`;
+      const blob = await generateReceiptPDF(payload, { returnType: "blob", filename });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="check-container">
       <header className="top">
@@ -591,10 +668,27 @@ export default function CheckPage() {
             </div>
           </section>
 
-          {/* ✅ แสดงสรุปค่าใช้จ่ายด้านล่างที่เดียว รวม Add-on และ ส่วนลด */}
+          {/* ✅ สรุปค่าใช้จ่าย + ปุ่มรับใบเสร็จ */}
           <section className="card">
             <div className="row between">
               <h3 className="title">สรุปค่าใช้จ่าย</h3>
+              <button
+                onClick={() => handleDownloadReceipt(contract)}
+                disabled={downloading}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#2a7de1",
+                  color: "#fff",
+                  fontWeight: 700,
+                  boxShadow: "0 2px 8px rgba(42,125,225,.25)",
+                  cursor: downloading ? "not-allowed" : "pointer"
+                }}
+                title="ดาวน์โหลดใบเสร็จ PDF"
+              >
+                {downloading ? "กำลังสร้าง..." : "รับใบเสร็จ (PDF)"}
+              </button>
             </div>
 
             <div className="bill">
