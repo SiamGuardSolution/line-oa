@@ -53,6 +53,7 @@ function bahtText(amount){
 const DEFAULT_REMARK_LINES = [
   "ธนาคารกสิกรไทย เลขที่บัญชี 201-8-860778\nRemark: บจก.สยามการ์ดโซลูชั่น (ประเทศไทย) จำกัด",
 ];
+
 const S = v => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
 function ab2b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s);}
 const money = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -93,13 +94,22 @@ async function ensureThaiFont(doc){
 export default async function generateReceiptPDF(payload={}, options={}){
   const {
     companyName="Siam Guard", companyAddress="", companyPhone="", companyTaxId="", logoDataUrl,
-    customerCode="", clientName="", clientPhone="", clientAddress="", clientTaxId="",
-    receiptNo="", issueDate=new Date(), poNumber="", termDays=0, dueDate,
+    clientName="", clientPhone="", clientAddress="", clientTaxId="",
+    receiptNo="", issueDate=new Date(),
+    // เพิ่มคีย์ที่อาจเป็น "วันที่เริ่มสัญญา" หลายรูปแบบ เพื่อรับจากระบบที่ต่างกัน
+    contractStartDate, startDate, startYMD, service1Date,
     items=[], discount=0, vatRate=0.07, alreadyPaid=0,
     footerNotice="สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
   } = payload;
 
-  const _due = dueDate || new Date(new Date(issueDate).getTime()+termDays*86400000);
+  // เลือกค่า "วันที่เริ่มสัญญา" จากหลายคีย์ที่รับมา หากไม่มีเลยจะ fallback เป็น issueDate
+  const contractStart =
+    contractStartDate ??
+    startDate ??
+    startYMD ??
+    service1Date ??
+    issueDate;
+
   const doc = new jsPDF({ unit:"pt", format:"a4", compress:false });
   await ensureThaiFont(doc);
 
@@ -129,19 +139,19 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const boxX = M, boxY = y+20;
 
   const leftLines = [
-    `รหัสลูกค้า: ${customerCode || "-"}`,
     `ชื่อลูกค้า: ${clientName || "-"}`,
     `เลขประจำตัวผู้เสียภาษี: ${clientTaxId || "-"}`,
     ...doc.splitTextToSize(`ที่อยู่: ${clientAddress || "-"}`, leftW - pad*2),
     `โทรศัพท์: ${clientPhone || "-"}`,
   ];
+
+  // เปลี่ยนจาก "ครบกำหนดชำระ" -> "วันที่เริ่มสัญญา"
   const rightLines = [
     `เลขที่: ${receiptNo || "-"}`,
     `วันที่: ${fmtDate(issueDate)}`,
-    `เลขที่ใบสั่งซื้อ: ${poNumber || "-"}`,
-    `เงื่อนไขการชำระเงิน: ${Number(termDays||0)} วัน`,
-    `ครบกำหนดชำระ: ${fmtDate(_due)}`,
+    `วันที่เริ่มสัญญา: ${fmtDate(contractStart)}`,
   ];
+
   const leftH  = pad*2 + leftLines.length*lineH + 2;
   const rightH = pad*2 + rightLines.length*lineH + 2;
   const boxH   = Math.max(leftH,rightH);
@@ -221,7 +231,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const boxLeft   = M - padX;
   const boxTop    = noteY - (lineHeight - 12) - padY;
 
-  doc.setFillColor(51, 102, 153);                // พื้นหลังน้ำเงินแก่
+  doc.setFillColor(102, 178, 255);                // พื้นหลังน้ำเงินแก่
   doc.roundedRect(boxLeft, boxTop, boxWidth, boxHeight, 4, 4, "F");
 
   // จัดวางข้อความกลางกล่อง (รองรับหลายบรรทัด)
