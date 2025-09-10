@@ -2,21 +2,23 @@
 import React, { useEffect, useState } from "react";
 import "./ContractForm.css";
 import generateReceiptPDF from "./lib/generateReceiptPDF";
+import generateContractPDF from "./lib/generateContractPDF";
 
 const API_URL = "/api/submit-contract";
 
 // ราคาพื้นฐานแต่ละแพ็กเกจ
 const BASE_PRICES = { spray: 3993, bait: 5500, mix: 8500 };
 
-// ข้อมูลบริษัทสำหรับใบเสร็จ (แก้ให้เป็นของจริงได้)
+// ข้อมูลบริษัท (แก้เป็นข้อมูลจริงของ Siam Guard)
 const COMPANY = {
   name: "Siam Guard",
   address: "",
   phone: "",
   taxId: "",
+  // bank: { name: "", account: "", accountName: "" }, // ถ้ามี
 };
 
-// อัตราภาษี (ใบเสร็จทั่วไปอาจไม่คิด VAT) — ถ้าต้องการ 7% เปลี่ยนเป็น 0.07
+// อัตราภาษีสำหรับใบเสร็จ (สัญญาไม่ได้ใช้)
 const VAT_RATE = 0;
 
 const PACKAGES = {
@@ -57,7 +59,7 @@ const emptyForm = {
   address: "",
   facebook: "",
   phone: "",
-  taxId: "",              // ✅ เพิ่มฟิลด์เลขผู้เสียภาษี
+  taxId: "",            // ✅ เลขผู้เสียภาษี
   startDate: "",
   endDate: "",
   tech: "",
@@ -133,6 +135,80 @@ function computeSchedule(pkg, startStr) {
   return out;
 }
 
+// ====== สร้างเลขเอกสาร ======
+const makeReceiptNo = () => {
+  const d = new Date();
+  return `RC-${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`;
+};
+const makeContractNo = () => {
+  const d = new Date();
+  return `CT-${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`;
+};
+
+// ====== สร้าง payload สำหรับ generateContractPDF ======
+function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
+  // ตารางรอบบริการในรูปแบบที่ generateContractPDF รองรับ
+  const schedule = (pkgConf.fields || [])
+    .map((f, idx) => {
+      const dateStr = form[f.key];
+      if (!dateStr) return null;
+      return {
+        round: idx + 1,
+        date: dateStr,
+        note: f.label || "",
+      };
+    })
+    .filter(Boolean);
+
+  const data = {
+    contractNumber: makeContractNo(),
+    contractDate: new Date(),
+    startDate: form.startDate,
+    endDate: form.endDate,
+
+    company: {
+      name: COMPANY.name,
+      address: COMPANY.address,
+      phone: COMPANY.phone,
+      taxId: COMPANY.taxId,
+    },
+
+    client: {
+      name: form.name,
+      phone: digitsOnly(form.phone),
+      address: form.address,
+      facebook: form.facebook,
+      taxId: taxIdDigits(form.taxId) || "",
+    },
+
+    service: {
+      type: PACKAGES[form.package]?.label || form.package,
+      packageName: PACKAGES[form.package]?.label || "",
+      basePrice: baseServicePrice,
+      addons: (addons || [])
+        .filter((r) => r && (r.name || r.qty || r.price))
+        .map((r) => ({ name: r.name || "รายการเพิ่มเติม", price: Number(r.price || 0) * Number(r.qty || 0) })),
+    },
+
+    schedule,
+
+    // เงื่อนไขตัวอย่าง — แก้ไขข้อความให้ตรงกับนโยบายบริษัทได้
+    terms: [
+      "อายุสัญญา 1 ปีนับจากวันเริ่มให้บริการ และต่ออายุได้ตามเงื่อนไขที่ตกลง",
+      "ตารางรอบบริการอาจมีการเลื่อนตามความเหมาะสม โดยจะแจ้งให้ทราบล่วงหน้า",
+      "ลูกค้าตกลงเตรียมสถานที่เอื้ออำนวยต่อการเข้าบริการตามมาตรฐานความปลอดภัย",
+      "การเคลมงานให้เป็นไปตามหลักฐานการให้บริการและคู่มือการรับประกันของบริษัท",
+    ],
+
+    signatures: {
+      companyRep: form.tech || "", // ใช้ชื่อผู้รับผิดชอบฝั่งบริษัทเป็นตัวแทนลงนาม
+      clientRep: form.name || "",
+    },
+  };
+
+  return { data, fileName: `Contract_${data.contractNumber}.pdf` };
+}
+
 export default function ContractForm() {
   const [form, setForm] = useState({ ...emptyForm });
 
@@ -142,7 +218,7 @@ export default function ContractForm() {
     [form.package]
   );
 
-  // รายการฐานเพื่อส่งให้ backend (คงโครง items ไว้)
+  // รายการฐานเพื่อส่งให้ backend (รูปแบบ items)
   const items = React.useMemo(
     () => [
       {
@@ -179,16 +255,17 @@ export default function ContractForm() {
 
   const [discountValue, setDiscountValue] = React.useState("");
 
+  // Auto-generate ตารางบริการ / endDate จาก startDate
   useEffect(() => {
     if (!form.startDate) return;
     const auto = computeSchedule(form.package, form.startDate);
     if (Object.keys(auto).length) setForm((s) => ({ ...s, ...auto }));
   }, [form.package, form.startDate]);
 
+  // ตรวจความถูกต้องก่อนบันทึก/พิมพ์
   const validate = () => {
     if (!form.name.trim()) return "กรุณากรอกชื่อลูกค้า";
     if (phoneDigits(form.phone).length < 9) return "กรุณากรอกเบอร์โทรให้ถูกต้อง";
-    // ✅ ถ้ากรอกเลขผู้เสียภาษี ต้องมี 13 หลัก
     if (form.taxId && taxIdDigits(form.taxId).length !== 13) {
       return "กรุณากรอกเลขประจำตัวผู้เสียภาษีให้ครบ 13 หลัก";
     }
@@ -205,13 +282,7 @@ export default function ContractForm() {
   const discountNum = discountValue === "" ? 0 : Number(discountValue);
   const netBeforeVat = itemsSubtotal - discountNum + addonsSubtotal;
 
-  const makeReceiptNo = () => {
-    const d = new Date();
-    return `RC-${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`;
-    // อยากกันซ้ำยิ่งขึ้น อาจเติม seconds ได้: + pad2(d.getSeconds())
-  };
-
-  // ===== สร้างใบเสร็จ (PDF) =====
+  // ===== ใบเสร็จ (PDF) =====
   async function handleCreateReceiptPDF() {
     const pdfItems = [
       {
@@ -238,7 +309,7 @@ export default function ContractForm() {
       clientName: form.name || "",
       clientPhone: phoneDigits(form.phone) || "",
       clientAddress: form.address || "",
-      clientTaxId: taxIdDigits(form.taxId) || "",   // ✅ ส่งเลขผู้เสียภาษีเข้า PDF
+      clientTaxId: taxIdDigits(form.taxId) || "",
 
       receiptNo: makeReceiptNo(),
       issueDate: new Date(),
@@ -265,6 +336,23 @@ export default function ContractForm() {
     }
   }
 
+  // ===== สร้างสัญญา (PDF) โดยไม่บันทึก =====
+  function handleCreateContractPDFOnly() {
+    const err = validate();
+    if (err) {
+      alert(err);
+      return;
+    }
+    const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
+    try {
+      generateContractPDF(data, { fileName });
+    } catch (e) {
+      console.error(e);
+      alert("สร้างสัญญาไม่สำเร็จ: " + (e?.message || e));
+    }
+  }
+
+  // ===== บันทึกลง API แล้วค่อยสร้างสัญญา (PDF) =====
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMsg({ text: "", ok: false });
@@ -278,7 +366,7 @@ export default function ContractForm() {
       address: form.address,
       facebook: form.facebook,
       phone: phoneDigits(form.phone),
-      taxId: taxIdDigits(form.taxId),            // ✅ เก็บแบบตัวเลข 13 หลัก
+      taxId: taxIdDigits(form.taxId),
       startDate: form.startDate,
       endDate: form.endDate,
       tech: form.tech,
@@ -309,10 +397,20 @@ export default function ContractForm() {
 
       if (!res.ok || json?.ok === false) throw new Error(json?.error || "save-failed");
 
+      // ✅ บันทึกสำเร็จ -> สร้าง PDF สัญญาทันที
+      const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
+      try {
+        generateContractPDF(data, { fileName });
+      } catch (pdfErr) {
+        console.error(pdfErr);
+        // ไม่ throw ต่อ เพื่อให้ UI แจ้ง "บันทึกสำเร็จ" แม้ PDF พลาด
+      }
+
       setMsg({ text: "บันทึกสำเร็จ", ok: true });
       setForm({ ...emptyForm, package: form.package });
       setAddons([{ name: "", qty: 1, price: 0 }]);
       setDiscountValue("");
+
     } catch (err2) {
       setMsg({ text: `บันทึกไม่สำเร็จ ${err2?.message || err2}`, ok: false });
     } finally {
@@ -329,9 +427,14 @@ export default function ContractForm() {
           กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ ระบบจะคำนวณให้อัตโนมัติ
         </p>
 
-        <button type="button" className="btn btn-secondary" onClick={handleCreateReceiptPDF}>
-          สร้างใบเสร็จ (PDF)
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="btn btn-secondary" onClick={handleCreateReceiptPDF}>
+            สร้างใบเสร็จ (PDF)
+          </button>
+          <button type="button" className="btn" onClick={handleCreateContractPDFOnly}>
+            สร้างสัญญา (PDF)
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit} className="cf__form">
           {/* แพ็กเกจ */}
