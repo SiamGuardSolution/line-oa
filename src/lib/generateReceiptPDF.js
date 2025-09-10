@@ -231,7 +231,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const boxLeft   = M - padX;
   const boxTop    = noteY - (lineHeight - 12) - padY;
 
-  doc.setFillColor(102, 178, 255);                // พื้นหลังน้ำเงินแก่
+  doc.setFillColor(142, 169, 219);                // พื้นหลังน้ำเงินแก่
   doc.roundedRect(boxLeft, boxTop, boxWidth, boxHeight, 4, 4, "F");
 
   // จัดวางข้อความกลางกล่อง (รองรับหลายบรรทัด)
