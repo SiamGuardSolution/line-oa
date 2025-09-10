@@ -177,7 +177,7 @@ const netTotalFrom = (c) => {
 
 const netAmountFrom = (c) => netTotalFrom(c);
 
-const SHOW_PAY_LINK = false; // เปลี่ยนเป็น true เมื่อพร้อมเปิดใช้
+const SHOW_PAY_LINK = true; // เปลี่ยนเป็น true เมื่อพร้อมเปิดใช้
 
 /** ==== utils ==== */
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
@@ -565,13 +565,6 @@ export default function CheckPage() {
                 <label>แพ็กเกจ</label>
                 <div className="value">{labelFromContract(contract)}</div>
               </div>
-
-              {/* ✅ เปลี่ยนเป็น "ราคาแพ็กเกจ" และแสดงข้อความสวยงาม */}
-              <div className="field stack">
-                <label>ราคาแพ็กเกจ</label>
-                <div className="value">{priceTextFrom(contract)}</div>
-              </div>
-
               <div className="field">
                 <label>ประเภทบริการ</label>
                 <div className="value">{contract.serviceType || "กำจัดปลวก"}</div>

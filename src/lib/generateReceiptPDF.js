@@ -149,7 +149,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const rightLines = [
     `เลขที่: ${receiptNo || "-"}`,
     `วันที่: ${fmtDate(issueDate)}`,
-    `วันที่เริ่มสัญญา: ${fmtDate(contractStart)}`,
+    `ครบกำหนดชำระ: ${fmtDate(contractStart)}`,
   ];
 
   const leftH  = pad*2 + leftLines.length*lineH + 2;
