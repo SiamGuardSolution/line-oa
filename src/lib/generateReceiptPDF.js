@@ -101,7 +101,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
     receiptNo="", issueDate=new Date(),
     // วันเริ่มสัญญา (รองรับหลายคีย์)
     contractStartDate, startDate, startYMD, service1Date,
-    items=[], discount=0, vatRate=0.07, alreadyPaid=0,
+    items=[], discount=0, vatRate=0, alreadyPaid=0,
     footerNotice="สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
   } = payload;
 
@@ -259,7 +259,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const rows = [
     ["รวมเงิน", money(subTotal), "normal"],
     ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
-    [`ภาษีมูลค่าเพิ่ม 7%`, 0, "normal"],
+    ...(Number(vatRate) > 0 ? [[`ภาษีมูลค่าเพิ่ม ${Math.round(Number(vatRate)*100)}%`, money(vat), "normal"]] : []),
     ...(Number(alreadyPaid) > 0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`, "highlight"]] : []),
     ["รวมเงินทั้งสิ้น", money(netTotal), "bold"],
   ];

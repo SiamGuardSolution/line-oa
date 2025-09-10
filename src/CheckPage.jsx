@@ -550,7 +550,7 @@ export default function CheckPage() {
 
         items,
         discount: discountFrom(current),
-        vatRate: 0.07,
+        vatRate: 0,
         alreadyPaid: toNumberSafe(current.deposit || current.alreadyPaid || 0),
       };
 
