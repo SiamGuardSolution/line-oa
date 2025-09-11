@@ -72,13 +72,6 @@ export default function PayPage() {
       amt ? `ยอดชำระ: ${baht(amt)} (${amt} บาท)` : "",
       payerName ? `ชื่อผู้โอน: ${payerName}` : "",
       phone ? `เบอร์โทร: ${phone}` : "",
-      note ? `หมายเหตุ: ${note}` : "",
-      "",
-      "ข้อมูลบัญชีปลายทาง",
-      `ธนาคาร: ${BANK.bankName}`,
-      `ชื่อบัญชี: ${BANK.accountName}`,
-      `เลขที่บัญชี: ${BANK.accountNumber}`,
-      BANK.promptpayId ? `พร้อมเพย์: ${BANK.promptpayId}` : "",
     ].filter(Boolean);
     return lines.join("\n");
   };

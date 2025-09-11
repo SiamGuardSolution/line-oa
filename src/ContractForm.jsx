@@ -337,16 +337,15 @@ export default function ContractForm() {
   }
 
   // ===== สร้างสัญญา (PDF) โดยไม่บันทึก =====
-  function handleCreateContractPDFOnly() {
+  async function handleCreateContractPDFOnly() {
     const err = validate();
     if (err) {
       alert(err);
       return;
     }
     const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
-    try {
-      generateContractPDF(data, { fileName });
-    } catch (e) {
+    try { 
+      await generateContractPDF(data, { fileName }); } catch (e) {
       console.error(e);
       alert("สร้างสัญญาไม่สำเร็จ: " + (e?.message || e));
     }
@@ -396,15 +395,6 @@ export default function ContractForm() {
       try { json = JSON.parse(raw); } catch { json = { ok: res.ok, raw }; }
 
       if (!res.ok || json?.ok === false) throw new Error(json?.error || "save-failed");
-
-      // ✅ บันทึกสำเร็จ -> สร้าง PDF สัญญาทันที
-      const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
-      try {
-        generateContractPDF(data, { fileName });
-      } catch (pdfErr) {
-        console.error(pdfErr);
-        // ไม่ throw ต่อ เพื่อให้ UI แจ้ง "บันทึกสำเร็จ" แม้ PDF พลาด
-      }
 
       setMsg({ text: "บันทึกสำเร็จ", ok: true });
       setForm({ ...emptyForm, package: form.package });
@@ -603,7 +593,7 @@ export default function ContractForm() {
 
           <div className="cf__actions">
             <button type="submit" className="cf__btn cf__btn--primary" disabled={loading}>
-              {loading ? "กำลังบันทึก..." : "บันทึกและสร้างสัญญา"}
+              {loading ? "กำลังบันทึก..." : "บันทึกข้อมูลสัญญา"}
             </button>
             <button type="button" className="cf__btn cf__btn--ghost" onClick={() => setForm({ ...emptyForm, package: form.package })}>
               ล้างฟอร์ม
