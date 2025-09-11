@@ -220,14 +220,18 @@ if (terms.length) {
   const colW = (W - M * 2 - gap) / 2;
   const boxH2 = 110;
 
-  // บริษัท
-  doc.roundedRect(M, y, colW, boxH2, 6, 6);
-  doc.text(T("ลงชื่อผู้แทนบริษัท"), M + 12, y + 20);
-  doc.text(T("(.................................................)"), M + 12, y + 84);
-  if (signatures.companyRep) doc.text(T(`ชื่อ: ${signatures.companyRep}`), M + 12, y + 100);
+  // จัดให้อยู่ "กึ่งกลางหน้า" ทั้งกลุ่ม
+  const groupW = colW * 2 + gap;
+  const startX = (W - groupW) / 2;         // ← จุดเริ่มกลุ่มที่กึ่งกลางจริง
 
+  // บริษัท
+  doc.roundedRect(startX, y, colW, boxH2, 6, 6);
+  doc.text(T("ลงชื่อผู้แทนบริษัท"), startX + 12, y + 20);
+  doc.text(T("(.................................................)"), startX + 12, y + 84);
+  if (signatures.companyRep) doc.text(T(`ชื่อ: ${signatures.companyRep}`), startX + 12, y + 100);
+  
   // ลูกค้า
-  const rightX = M + colW + gap;
+  const rightX = startX + colW + gap;
   doc.roundedRect(rightX, y, colW, boxH2, 6, 6);
   doc.text(T("ลงชื่อลูกค้า/ผู้ว่าจ้าง"), rightX + 12, y + 20);
   doc.text(T("(.................................................)"), rightX + 12, y + 84);
