@@ -11,10 +11,9 @@ const BASE_PRICES = { spray: 3993, bait: 5500, mix: 8500 };
 
 // ข้อมูลบริษัท (แก้เป็นข้อมูลจริงของ Siam Guard)
 const COMPANY = {
-  name: "Siam Guard",
-  address: "",
-  phone: "",
-  taxId: "",
+  name: "สยามการ์ด โซลูชั่น (ประเทศไทย) จำกัด",
+  address: "99 หมู่ 17 ต.คลองหนึ่ง อ.คลองหลวง จ.ปทุมธานี 12120",
+  phone: "063-364-5567",
   // bank: { name: "", account: "", accountName: "" }, // ถ้ามี
 };
 

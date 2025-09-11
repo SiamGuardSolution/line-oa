@@ -103,7 +103,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     `ผู้ให้บริการ: ${company.name || "-"}`,
     ...doc.splitTextToSize(`ที่อยู่: ${company.address || "-"}`, leftW - pad * 2),
     `โทรศัพท์: ${company.phone || "-"}`,
-    `เลขประจำตัวผู้เสียภาษี: ${company.taxId || "-"}`,
   ];
   const rightLines = [
     `เลขที่สัญญา: ${contractNumber || "-"}`,
@@ -125,7 +124,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   // ผู้รับบริการ
   const custLines = [
     `ผู้รับบริการ: ${client.name || "-"}`,
-    `เลขประจำตัวผู้เสียภาษี: ${client.taxId || "-"}`,
     ...doc.splitTextToSize(`ที่อยู่: ${client.address || "-"}`, contentW),
     `โทรศัพท์: ${client.phone || "-"}`,
     client.facebook ? `Facebook/Line: ${client.facebook}` : "",
@@ -181,17 +179,7 @@ if (terms.length) {
   doc.setFont(FAMILY, "bold");
   doc.text(T("ข้อกำหนดและเงื่อนไข"), M, y);
   doc.setFont(FAMILY, "normal");
-  y += 10;
-  // ข้อกำหนดและเงื่อนไข (จัดช่องไฟใหม่ให้โปร่งขึ้น)
-  if (terms.length) {
-    // ช่องไฟก่อนหัวข้อ
-    y += SPACING.beforeTermsHeader;
-    doc.setFont(FAMILY, "bold");
-    doc.text(T("ข้อกำหนดและเงื่อนไข"), M, y);
-    doc.setFont(FAMILY, "normal");
-    // ช่องไฟระหว่างหัวข้อกับข้อ 1
-    y += SPACING.afterTermsHeader;
-  }
+  y += SPACING.afterTermsHeader;
 
   const maxW = W - M * 2;
 
