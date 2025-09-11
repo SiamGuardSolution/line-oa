@@ -11,6 +11,15 @@ const fmtThaiDate = (d) => {
   } catch { return String(d || ""); }
 };
 
+/* ---------- spacing presets ---------- */
+const SPACING = {
+  afterTable: 22,        // ช่องไฟหลังตาราง (Add-on/รอบบริการ)
+  beforeTermsHeader: 18, // ช่องไฟก่อนหัวข้อ "ข้อกำหนดและเงื่อนไข"
+  afterTermsHeader: 10,  // ช่องไฟระหว่างหัวข้อกับข้อแรก
+  termLine: 15,          // ระยะห่างบรรทัดของแต่ละข้อ
+  termItemGap: 10,       // ช่องไฟเพิ่มหลังจบแต่ละข้อ
+}
+
 /* ---------- font loader (same pattern as generateReceiptPDF) ---------- */
 const FAMILY = "THSarabunSG";
 let B64_REG = null, B64_BOLD = null;
@@ -56,7 +65,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const {
     contractNumber = "",
     contractDate   = new Date(),
-    startDate,
     endDate,
     company   = {},
     client    = {},
@@ -100,7 +108,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const rightLines = [
     `เลขที่สัญญา: ${contractNumber || "-"}`,
     `วันที่ทำสัญญา: ${fmtThaiDate(contractDate)}`,
-    `เริ่มให้บริการ: ${fmtThaiDate(startDate || "-")}`,
     `สิ้นสุดสัญญา: ${fmtThaiDate(endDate || "-")}`,
   ];
   const leftH = pad * 2 + leftLines.length * lineH + 2;
@@ -150,7 +157,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       alternateRowStyles: { fillColor: [248, 248, 248] },
       theme: "grid",
     });
-    y = doc.lastAutoTable?.finalY + 12;
+    y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
   }
 
   // ตารางรอบบริการ
@@ -166,7 +173,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       alternateRowStyles: { fillColor: [248, 248, 248] },
       theme: "grid",
     });
-    y = doc.lastAutoTable?.finalY + 12;
+    y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
   }
 
   // ข้อกำหนดและเงื่อนไข (ใช้ for-loop ทั้งชั้นนอก/ใน เพื่อลด no-loop-func)
@@ -175,12 +182,22 @@ if (terms.length) {
   doc.text(T("ข้อกำหนดและเงื่อนไข"), M, y);
   doc.setFont(FAMILY, "normal");
   y += 10;
+  // ข้อกำหนดและเงื่อนไข (จัดช่องไฟใหม่ให้โปร่งขึ้น)
+  if (terms.length) {
+    // ช่องไฟก่อนหัวข้อ
+    y += SPACING.beforeTermsHeader;
+    doc.setFont(FAMILY, "bold");
+    doc.text(T("ข้อกำหนดและเงื่อนไข"), M, y);
+    doc.setFont(FAMILY, "normal");
+    // ช่องไฟระหว่างหัวข้อกับข้อ 1
+    y += SPACING.afterTermsHeader;
+  }
 
   const maxW = W - M * 2;
 
   for (let i = 0; i < terms.length; i++) {
     const lines = doc.splitTextToSize(`${i + 1}. ${terms[i]}`, maxW);
-    const needH = lines.length * 14 + 6;
+    const needH = lines.length * SPACING.termLine + SPACING.termItemGap;
 
     if (y + needH > H - 180) {
       doc.addPage();
@@ -191,9 +208,9 @@ if (terms.length) {
     // ✅ ใช้ลูปปกติแทน forEach เพื่อไม่สร้างฟังก์ชันในลูป
     const baseY = y;
     for (let j = 0; j < lines.length; j++) {
-      doc.text(T(lines[j]), M, baseY + j * 14);
+      doc.text(T(lines[j]), M, baseY + j * SPACING.termLine);
     }
-    y = baseY + lines.length * 14 + 6;
+    y = baseY + lines.length * SPACING.termLine + SPACING.termItemGap;
   }
 }
 
