@@ -100,7 +100,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     logoDataUrl,
   } = data;
 
-  const intervalMonths = Number(service.intervalMonths ?? 4);
   const fileName = opts.fileName || `Contract_${contractNumber || Date.now()}.pdf`;
 
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: false });
@@ -185,40 +184,71 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
   }
 
-  /* ===== ตารางรอบบริการ (Top 2 + Bottom 5, ลำดับแยกกัน) ===== */
+  /* ===== ตารางรอบบริการ (Top 2 = Spray , Bottom 5 = Bait) ===== */
   const MAX_TOP = 2;
   const MAX_BOTTOM = 5;
+
   const mapItem = (it) => ({
     due:   fmtThaiDate(it?.dueDate ?? it?.due ?? it?.date),
     visit: fmtThaiDate(it?.visitDate ?? it?.visit ?? ""),
     note:  it?.note ?? "",
   });
 
-  const srcTop = Array.isArray(data.scheduleTop) ? data.scheduleTop : null;
-  const srcBottom = Array.isArray(data.scheduleBottom) ? data.scheduleBottom : null;
+  // ---------- ตรวจโหมดบริการ ----------
+  const label = `${(service.type || "")} ${(service.packageName || "")}`.toLowerCase();
+  const isMix   = /mix|ผสม/.test(label) || (!/spray|ฉีดพ่น|bait|เหยื่อ/.test(label)); // default เป็น mix
+  const isSpray = /spray|ฉีดพ่น/.test(label) && !isMix;
+  const isBait  = /bait|เหยื่อ/.test(label) && !isMix;
 
-  let schedTop = [];
-  let schedBottom = [];
+  // ตารางที่ส่งแยกมาใน service (ถ้ามี)
+  const spraySrc = Array.isArray(service.spraySchedule) ? service.spraySchedule : null;
+  const baitSrc  = Array.isArray(service.baitSchedule)  ? service.baitSchedule  : null;
 
-  if (srcTop || srcBottom) {
-    if (srcTop)    schedTop    = srcTop.slice(0, MAX_TOP).map(mapItem);
-    if (srcBottom) schedBottom = srcBottom.slice(0, MAX_BOTTOM).map(mapItem);
+  const schedTop = [];     // สำหรับ Spray
+  const schedBottom = [];  // สำหรับ Bait
+
+  // ---------- เติมข้อมูลตามโหมด ----------
+  if (isSpray) {
+    // Spray only → แสดงในตารางบนเท่านั้น
+    (spraySrc || schedule || []).slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
+  } else if (isBait) {
+    // Bait only → แสดงในตารางล่างเท่านั้น
+    (baitSrc || schedule || []).slice(0, MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
   } else {
-    const combined = Array.isArray(schedule) ? schedule : [];
-    schedTop    = combined.slice(0, MAX_TOP).map(mapItem);
-    schedBottom = combined.slice(MAX_TOP, MAX_TOP + MAX_BOTTOM).map(mapItem);
+    // Mix (หรือไม่ได้ระบุชัด) → ใช้แบบเดิม: Spray=ตารางบน, Bait=ตารางล่าง
+    if (spraySrc?.length || baitSrc?.length) {
+      (spraySrc || []).slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
+      (baitSrc  || []).slice(0, MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
+    } else {
+      // fallback จาก schedule เดิม: แยก 2 บรรทัดแรกเป็นบน ที่เหลือเป็นล่าง
+      const combined = Array.isArray(schedule) ? schedule : [];
+      combined.slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
+      combined.slice(MAX_TOP, MAX_TOP + MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
+    }
   }
 
-  // เติม auto-gen หากไม่ครบจำนวน
-  const needTop = MAX_TOP - schedTop.length;
-  for (let i = 0; i < needTop; i++) {
-    const d = startDate ? addMonths(startDate, intervalMonths * (i + 1)) : null;
-    schedTop.push({ due: fmtThaiDate(d), visit: "", note: "" });
+  // ---------- เติมออโต้ถ้ายังไม่ครบจำนวนแถว ----------
+  const intSpray = Number(service.intervalMonthsSpray ?? service.intervalMonths ?? 4);
+  const intBait  = Number(service.intervalMonthsBait  ?? service.intervalMonths ?? 4);
+
+  // บน (Spray)
+  if (!isBait) { // spray & mix เท่านั้นที่ควร auto-gen ให้บน
+    for (let i = schedTop.length; i < MAX_TOP; i++) {
+      const d = startDate ? addMonths(startDate, intSpray * (i + 1)) : null;
+      schedTop.push({ due: fmtThaiDate(d), visit: "", note: "" });
+    }
+  } else {
+    while (schedTop.length < MAX_TOP) schedTop.push({ due: "", visit: "", note: "" });
   }
-  const needBottom = MAX_BOTTOM - schedBottom.length;
-  for (let i = 0; i < needBottom; i++) {
-    const d = startDate ? addMonths(startDate, intervalMonths * (i + 1)) : null;
-    schedBottom.push({ due: fmtThaiDate(d), visit: "", note: "" });
+
+  // ล่าง (Bait)
+  if (!isSpray) { // bait & mix เท่านั้นที่ควร auto-gen ให้ล่าง
+    for (let i = schedBottom.length; i < MAX_BOTTOM; i++) {
+      const d = startDate ? addMonths(startDate, intBait * (i + 1)) : null;
+      schedBottom.push({ due: fmtThaiDate(d), visit: "", note: "" });
+    }
+  } else {
+    while (schedBottom.length < MAX_BOTTOM) schedBottom.push({ due: "", visit: "", note: "" });
   }
 
   const headCols = [
@@ -230,7 +260,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     "หมายเหตุ",
   ];
 
-  // ===== ตารางบน (2 แถว, ลำดับ 1–2) =====
+  /* ===== ตารางบน (2 แถว = Spray) ===== */
   autoTable(doc, {
     startY: y,
     head: [headCols],
@@ -257,7 +287,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   });
   y = (doc.lastAutoTable?.finalY || y) + 8;
 
-  // ===== ตารางล่าง (5 แถว, ลำดับ 1–5) =====
+  /* ===== ตารางล่าง (5 แถว = Bait) ===== */
   autoTable(doc, {
     startY: y,
     head: [headCols],
