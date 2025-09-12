@@ -1,230 +1,171 @@
-// src/lib/generateContractPDF.js
+// src/lib/generateReceiptPDF.js
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-/* ---------- helpers ---------- */
-const T = (v) => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
-const fmtThaiDate = (d) => {
+/* ========== utils ========== */
+const money = n =>
+  Number(n || 0).toLocaleString("th-TH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+const fmtDate = d => {
   try {
     const dd = d instanceof Date ? d : new Date(d);
-    return dd.toLocaleDateString("th-TH", { year: "numeric", month: "2-digit", day: "2-digit" });
-  } catch { return String(d || ""); }
+    return dd.toLocaleDateString("th-TH", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } catch {
+    return String(d || "");
+  }
 };
 
-/* ---------- spacing presets ---------- */
-const SPACING = {
-  afterTable: 22,        // ช่องไฟหลังตาราง (Add-on/รอบบริการ)
-  beforeTermsHeader: 18, // ช่องไฟก่อนหัวข้อ "ข้อกำหนดและเงื่อนไข"
-  afterTermsHeader: 10,  // ช่องไฟระหว่างหัวข้อกับข้อแรก
-  termLine: 15,          // ระยะห่างบรรทัดของแต่ละข้อ
-  termItemGap: 10,       // ช่องไฟเพิ่มหลังจบแต่ละข้อ
-}
-
-/* ---------- font loader (same pattern as generateReceiptPDF) ---------- */
-const FAMILY = "THSarabunSG";
-let B64_REG = null, B64_BOLD = null;
-const REGISTERED = new WeakSet();
-function ab2b64(buf){ const u=new Uint8Array(buf); let s=""; for(let i=0;i<u.length;i++) s+=String.fromCharCode(u[i]); return btoa(s); }
-
-async function loadFontsB64(){
-  if (B64_REG && B64_BOLD) return { reg: B64_REG, bold: B64_BOLD };
-  const [rRes, bRes] = await Promise.all([
-    fetch("/fonts/THSarabunNew.ttf"),
-    fetch("/fonts/THSarabunNew-Bold.ttf"),
-  ]);
-  if (!rRes.ok || !bRes.ok) throw new Error("โหลดฟอนต์ไม่สำเร็จ");
-  const [rBuf, bBuf] = await Promise.all([rRes.arrayBuffer(), bRes.arrayBuffer()]);
-  B64_REG = ab2b64(rBuf); B64_BOLD = ab2b64(bBuf);
-  return { reg: B64_REG, bold: B64_BOLD };
-}
-async function ensureThaiFont(doc){
-  if (REGISTERED.has(doc) && doc.getFontList?.()[FAMILY]) { doc.setFont(FAMILY, "normal"); return; }
-  const { reg, bold } = await loadFontsB64();
-  doc.addFileToVFS(`${FAMILY}-Regular.ttf`, reg);  doc.addFont(`${FAMILY}-Regular.ttf`, FAMILY, "normal");
-  doc.addFileToVFS(`${FAMILY}-Bold.ttf`,    bold); doc.addFont(`${FAMILY}-Bold.ttf`,    FAMILY, "bold");
-  if (!doc.getFontList?.()[FAMILY]) throw new Error("ฟอนต์ไทยไม่ถูกลงทะเบียนกับ jsPDF");
-  REGISTERED.add(doc); doc.setFont(FAMILY, "normal");
-}
-
-/* ---------- main ---------- */
-/**
- * @param {Object} data
- * {
- *   contractNumber, contractDate, startDate, endDate,
- *   company: { name, address, phone, taxId },
- *   client:  { name, phone, address, facebook, taxId },
- *   service: { type, packageName, basePrice, addons:[{name, price}] },
- *   schedule: [{round, date, note}],
- *   terms: [ "..." ],
- *   signatures: { companyRep, clientRep },
- *   logoDataUrl?
- * }
- * @param {Object} opts  { fileName }
- */
-export default async function generateContractPDF(data = {}, opts = {}) {
+/* ========== main ========== */
+export default function generateReceiptPDF(payload = {}, options = {}) {
   const {
-    contractNumber = "",
-    contractDate   = new Date(),
-    endDate,
-    company   = {},
-    client    = {},
-    service   = {},
-    schedule  = [],
-    terms     = [],
-    signatures = {},
+    companyName = "Siam Guard",
+    companyAddress = "",
+    companyPhone = "",
+    companyTaxId = "",
     logoDataUrl,
-  } = data;
+    clientName = "",
+    clientPhone = "",
+    clientAddress = "",
+    clientTaxId = "",
+    receiptNo = "",
+    issueDate = new Date(),
+    items = [],
+    discount = 0,
+    alreadyPaid = 0,
+    remarks = [
+      "ธนาคารกสิกรไทย เลขที่บัญชี 201-8-860778",
+      "Remark: บจก.สยามการ์ดโซลูชั่น (ประเทศไทย) จำกัด",
+    ],
+    footerNotice =
+      "สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
+  } = payload;
 
-  const fileName = opts.fileName || `Contract_${contractNumber || Date.now()}.pdf`;
-  const doc = new jsPDF({ unit: "pt", format: "a4", compress: false });
-  await ensureThaiFont(doc);
-  doc.setFontSize(12);
-
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 48;
   let y = 56;
 
-  // โลโก้ (ถ้ามี)
-  if (logoDataUrl) { try { doc.addImage(logoDataUrl, "PNG", M, y - 8, 80, 80); } catch {} }
+  // ===== โลโก้ =====
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, "PNG", M, y - 20, 80, 80);
+    } catch {}
+  }
 
-  // หัวกระดาษ
-  doc.setFont(FAMILY, "bold"); doc.setFontSize(20);
-  doc.text(T("สัญญาบริการกำจัดปลวก"), W / 2, y, { align: "center" });
-  doc.setFont(FAMILY, "normal"); doc.setFontSize(12);
+  // ===== หัวเรื่อง =====
+  doc.setFont("THSarabunNew", "bold");
+  doc.setFontSize(22);
+  doc.text("ใบเสร็จรับเงิน", W / 2, y, { align: "center" });
 
-  // กล่องข้อมูลบริษัท/สัญญา (สองคอลัมน์)
-  const contentW = W - M * 2, pad = 10, lineH = 16;
-  let leftW = Math.max(260, Math.round(contentW * 0.55));
-  let rightW = contentW - leftW; if (rightW < 220) { rightW = 220; leftW = contentW - rightW; }
-  const boxX = M, boxY = y + 18;
-
-  const leftLines = [
-    `ผู้ให้บริการ: ${company.name || "-"}`,
-    ...doc.splitTextToSize(`ที่อยู่: ${company.address || "-"}`, leftW - pad * 2),
-    `โทรศัพท์: ${company.phone || "-"}`,
-  ];
-  const rightLines = [
-    `เลขที่สัญญา: ${contractNumber || "-"}`,
-    `วันที่ทำสัญญา: ${fmtThaiDate(contractDate)}`,
-    `สิ้นสุดสัญญา: ${fmtThaiDate(endDate || "-")}`,
-  ];
-  const leftH = pad * 2 + leftLines.length * lineH + 2;
-  const rightH = pad * 2 + rightLines.length * lineH + 2;
-  const boxH = Math.max(leftH, rightH);
-
-  doc.roundedRect(boxX, boxY, contentW, boxH, 6, 6);
-  doc.setDrawColor(230); doc.line(boxX + leftW, boxY, boxX + leftW, boxY + boxH);
-
-  let ly = boxY + pad + 6; leftLines.forEach(t => { doc.text(T(t), boxX + pad, ly); ly += lineH; });
-  let ry = boxY + pad + 6; rightLines.forEach(t => { doc.text(T(t), boxX + leftW + pad, ry); ry += lineH; });
-
-  y = boxY + boxH + 16;
-
-  // ผู้รับบริการ
-  const custLines = [
-    `ผู้รับบริการ: ${client.name || "-"}`,
-    ...doc.splitTextToSize(`ที่อยู่: ${client.address || "-"}`, contentW),
-    `โทรศัพท์: ${client.phone || "-"}`,
-    client.facebook ? `Facebook/Line: ${client.facebook}` : "",
-  ].filter(Boolean);
-  custLines.forEach((t, i) => doc.text(T(t), M, y + i * 16));
-  y += custLines.length * 16 + 10;
-
-  // รายละเอียดแพ็กเกจ
-  const s = service || {};
-  const addons = Array.isArray(s.addons) ? s.addons : [];
-  const pkgLines = [
-    s.type ? `ประเภทบริการ: ${s.type}` : "",
-    s.packageName ? `แพ็กเกจ: ${s.packageName}` : "",
-    (s.basePrice != null) ? `ราคาแพ็กเกจ: ${Number(s.basePrice).toLocaleString("th-TH")} บาท` : "",
-  ].filter(Boolean);
-  pkgLines.forEach((t, i) => doc.text(T(t), M, y + i * 16));
-  y += pkgLines.length * 16 + 6;
-
-  // ตาราง Add-on
-  if (addons.length) {
-    autoTable(doc, {
-      startY: y,
-      margin: { left: M, right: M },
-      tableWidth: contentW,
-      head: [["รายการเสริม (Add-on)", "ราคา (บาท)"]],
-      body: addons.map(a => [a.name || "-", (a.price != null ? Number(a.price).toLocaleString("th-TH") : "-")]),
-      styles: { font: FAMILY, fontSize: 12, cellPadding: 6, lineWidth: 0.4, lineColor: [180, 180, 180] },
-      headStyles: { font: FAMILY, fontStyle: "bold", fillColor: [220, 220, 220], textColor: [0, 0, 0], lineWidth: 0.6 },
-      alternateRowStyles: { fillColor: [248, 248, 248] },
-      theme: "grid",
+  // ===== ข้อมูลบริษัท =====
+  y += 40;
+  doc.setFont("THSarabunNew", "normal");
+  doc.setFontSize(12);
+  doc.text(companyName, M, y);
+  y += 16;
+  if (companyAddress) {
+    const lines = doc.splitTextToSize(companyAddress, W - M * 2);
+    lines.forEach(line => {
+      doc.text(line, M, y);
+      y += 16;
     });
-    y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
+  }
+  if (companyPhone) {
+    doc.text(`โทร: ${companyPhone}`, M, y);
+    y += 16;
+  }
+  if (companyTaxId) {
+    doc.text(`เลขประจำตัวผู้เสียภาษี: ${companyTaxId}`, M, y);
+    y += 16;
   }
 
-  // ตารางรอบบริการ
-  if (schedule.length) {
-    autoTable(doc, {
-      startY: y,
-      margin: { left: M, right: M },
-      tableWidth: contentW,
-      head: [["รอบที่", "วันที่", "หมายเหตุ"]],
-      body: schedule.map(sv => [String(sv.round ?? ""), fmtThaiDate(sv.date || ""), sv.note || ""]),
-      styles: { font: FAMILY, fontSize: 12, cellPadding: 6, lineWidth: 0.4, lineColor: [180, 180, 180] },
-      headStyles: { font: FAMILY, fontStyle: "bold", fillColor: [220, 220, 220], textColor: [0, 0, 0], lineWidth: 0.6 },
-      alternateRowStyles: { fillColor: [248, 248, 248] },
-      theme: "grid",
+  // ===== ข้อมูลลูกค้า/เลขที่เอกสาร =====
+  y += 20;
+  const leftX = M,
+    rightX = W / 2 + 20;
+  doc.text(`ชื่อลูกค้า: ${clientName || "-"}`, leftX, y);
+  doc.text(`เลขที่: ${receiptNo || "-"}`, rightX, y);
+  y += 16;
+  doc.text(`ที่อยู่: ${clientAddress || "-"}`, leftX, y);
+  doc.text(`วันที่: ${fmtDate(issueDate)}`, rightX, y);
+  y += 16;
+  doc.text(`โทรศัพท์: ${clientPhone || "-"}`, leftX, y);
+  doc.text(`เลขผู้เสียภาษี: ${clientTaxId || "-"}`, rightX, y);
+  y += 24;
+
+  // ===== ตารางรายการสินค้า/บริการ =====
+  autoTable(doc, {
+    startY: y,
+    margin: { left: M, right: M },
+    head: [
+      ["ลำดับ", "รายละเอียด", "จำนวน", "ราคาต่อหน่วย", "จำนวนเงิน"],
+    ],
+    body: (items || []).length
+      ? items.map((it, idx) => {
+          const qty = Number(it.qty || it.quantity || 1);
+          const price = Number(it.unitPrice || it.price || 0);
+          return [
+            String(idx + 1),
+            String(it.description || it.name || ""),
+            String(qty),
+            money(price),
+            money(qty * price),
+          ];
+        })
+      : [["-", "-", "-", "-", "-"]],
+    styles: { font: "THSarabunNew", fontSize: 12, lineWidth: 0.3 },
+    headStyles: { fillColor: [230, 230, 230] },
+    theme: "grid",
+  });
+  y = doc.lastAutoTable.finalY + 20;
+
+  // ===== คำนวณยอด (ไม่มี VAT) =====
+  const subTotal = (items || []).reduce(
+    (s, it) => s + Number(it.qty || it.quantity || 1) * Number(it.unitPrice || it.price || 0),
+    0
+  );
+  const afterDiscount = Math.max(0, subTotal - Number(discount || 0));
+  const grandTotal = afterDiscount; // << ไม่มี VAT
+  const netTotal = Math.max(0, grandTotal - Number(alreadyPaid || 0));
+
+  const rows = [
+    ["รวมเงิน", money(subTotal)],
+    ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`]] : []),
+    ...(Number(alreadyPaid) > 0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`]] : []),
+    ["รวมเงินทั้งสิ้น", money(netTotal)],
+  ];
+
+  rows.forEach(([label, val], i) => {
+    doc.text(label, W - M - 200, y + i * 20);
+    doc.text(val, W - M - 20, y + i * 20, { align: "right" });
+  });
+  y += rows.length * 20 + 20;
+
+  // ===== หมายเหตุ =====
+  doc.setFont("THSarabunNew", "bold");
+  doc.text("หมายเหตุ:", M, y);
+  doc.setFont("THSarabunNew", "normal");
+  y += 16;
+  remarks.forEach(line => {
+    const lines = doc.splitTextToSize(line, W - M * 2);
+    lines.forEach(ln => {
+      doc.text(ln, M, y);
+      y += 16;
     });
-    y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
-  }
+  });
 
-  // ข้อกำหนดและเงื่อนไข (ใช้ for-loop ทั้งชั้นนอก/ใน เพื่อลด no-loop-func)
-if (terms.length) {
-  doc.setFont(FAMILY, "bold");
-  doc.text(T("ข้อกำหนดและเงื่อนไข"), M, y);
-  doc.setFont(FAMILY, "normal");
-  y += SPACING.afterTermsHeader;
+  // ===== ลายเซ็น =====
+  y = H - 100;
+  doc.text("ลงชื่อ .................................................. ผู้รับเงิน", W - M - 200, y);
 
-  const maxW = W - M * 2;
-
-  for (let i = 0; i < terms.length; i++) {
-    const lines = doc.splitTextToSize(`${i + 1}. ${terms[i]}`, maxW);
-    const needH = lines.length * SPACING.termLine + SPACING.termItemGap;
-
-    if (y + needH > H - 180) {
-      doc.addPage();
-      await ensureThaiFont(doc);
-      y = 56;
-    }
-
-    // ✅ ใช้ลูปปกติแทน forEach เพื่อไม่สร้างฟังก์ชันในลูป
-    const baseY = y;
-    for (let j = 0; j < lines.length; j++) {
-      doc.text(T(lines[j]), M, baseY + j * SPACING.termLine);
-    }
-    y = baseY + lines.length * SPACING.termLine + SPACING.termItemGap;
-  }
-}
-
-  // พื้นที่ลายเซ็น (ตรึงไว้ใกล้ล่าง)
-  y = Math.max(y, H - 200);
-  const gap = 24;
-  const colW = (W - M * 2 - gap) / 2;
-  const boxH2 = 110;
-
-  // จัดให้อยู่ "กึ่งกลางหน้า" ทั้งกลุ่ม
-  const groupW = colW * 2 + gap;
-  const startX = (W - groupW) / 2;         // ← จุดเริ่มกลุ่มที่กึ่งกลางจริง
-
-  // บริษัท
-  doc.roundedRect(startX, y, colW, boxH2, 6, 6);
-  doc.text(T("ลงชื่อผู้แทนบริษัท"), startX + 12, y + 20);
-  doc.text(T("(.................................................)"), startX + 12, y + 84);
-  if (signatures.companyRep) doc.text(T(`ชื่อ: ${signatures.companyRep}`), startX + 12, y + 100);
-  
-  // ลูกค้า
-  const rightX = startX + colW + gap;
-  doc.roundedRect(rightX, y, colW, boxH2, 6, 6);
-  doc.text(T("ลงชื่อลูกค้า/ผู้ว่าจ้าง"), rightX + 12, y + 20);
-  doc.text(T("(.................................................)"), rightX + 12, y + 84);
-  if (signatures.clientRep) doc.text(T(`ชื่อ: ${signatures.clientRep}`), rightX + 12, y + 100);
-
-  // บันทึกไฟล์
-  doc.save(fileName);
+  // ===== บันทึก =====
+  const fname = options.filename || `Receipt-${receiptNo || fmtDate(issueDate)}.pdf`;
+  doc.save(fname);
 }
