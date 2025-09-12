@@ -267,7 +267,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   doc.setFont(FAMILY, "bold");
   TXT(doc, topTitle, M, y);
   doc.setFont(FAMILY, "normal");
-  y += 14;
 
   autoTable(doc, {
     startY: y + TITLE_GAP,
@@ -299,7 +298,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   doc.setFont(FAMILY, "bold");
   TXT(doc, bottomTitle, M, y);
   doc.setFont(FAMILY, "normal");
-  y += 14;
 
   autoTable(doc, {
     startY: y + TITLE_GAP,
