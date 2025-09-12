@@ -3,7 +3,6 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 /* ---------- helpers ---------- */
-const T = (v) => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
 const fmtThaiDate = (d) => {
   try {
     if (!d) return "";
@@ -25,7 +24,7 @@ const addMonths = (date, months) => {
 const TXT = (doc, text, x, y, opts) => {
   const S = v => (v == null ? "" : String(v));
   const isNum = n => typeof n === "number" && isFinite(n);
-  if (!isNum(x) || !isNum(y)) return; // ถ้าไม่ได้เลข ให้ข้ามเพื่อกันพัง
+  if (!isNum(x) || !isNum(y)) return;
   if (Array.isArray(text)) {
     const lines = text.map(S).filter(Boolean);
     if (lines.length) doc.text(lines, x, y, opts);
@@ -36,11 +35,14 @@ const TXT = (doc, text, x, y, opts) => {
 
 /* ---------- spacing presets ---------- */
 const SPACING = {
-  afterTable: 22,
-  afterTermsHeader: 10,
-  termLine: 15,
-  termItemGap: 10,
+  afterTable: 18,
+  beforeTermsHeader: 14, // เพิ่มช่องไฟก่อนหัวข้อ
+  afterTermsHeader: 8,   // ช่องไฟหลังหัวข้อ
+  termLine: 12,          // ลด line-height ภายในข้อย่อย
+  termItemGap: 4,        // ลดช่องไฟหลังจบแต่ละข้อ
 };
+// กันพื้นที่สำหรับบล็อกลายเซ็น (กล่องสูง ~110pt + เผื่อระยะ)
+const SIGN_RESERVE = 150;
 
 /* ---------- font loader (same pattern as generateReceiptPDF) ---------- */
 const FAMILY = "THSarabunSG";
@@ -76,7 +78,7 @@ async function ensureThaiFont(doc){
  *   company: { name, address, phone },
  *   client:  { name, phone, address, facebook },
  *   service: { type, packageName, basePrice, addons:[{name, price}], intervalMonths?:number },
- *   schedule: [ { round, dueDate?, date?, visitDate?, visit?, note? }, ... ], // ใช้เป็นค่ากำหนดเองแทน auto-gen ได้
+ *   schedule: [ { round, dueDate?, date?, visitDate?, visit?, note? }, ... ],
  *   terms: [ "..." ],
  *   signatures: { companyRep, clientRep },
  *   logoDataUrl?
@@ -87,7 +89,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const {
     contractNumber = "",
     contractDate   = new Date(),
-    startDate, // ✅ เพิ่มรองรับ
+    startDate,
     endDate,
     company   = {},
     client    = {},
@@ -99,8 +101,8 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   } = data;
 
   const intervalMonths = Number(service.intervalMonths ?? 4);
-  
   const fileName = opts.fileName || `Contract_${contractNumber || Date.now()}.pdf`;
+
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: false });
   await ensureThaiFont(doc);
   doc.setFontSize(12);
@@ -164,7 +166,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     s.packageName ? `แพ็กเกจ: ${s.packageName}` : "",
     (s.basePrice != null) ? `ราคาแพ็กเกจ: ${Number(s.basePrice).toLocaleString("th-TH")} บาท` : "",
   ].filter(Boolean);
-  pkgLines.forEach((t, i) => doc.text(T(t), M, y + i * 16));
+  pkgLines.forEach((t, i) => TXT(doc, t, M, y + i * 16));
   y += pkgLines.length * 16 + 6;
 
   // ตาราง Add-on
@@ -184,7 +186,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   }
 
   /* ===== ตารางรอบบริการ (Top 2 + Bottom 5, ลำดับแยกกัน) ===== */
-  // ค่าพื้นฐาน
   const MAX_TOP = 2;
   const MAX_BOTTOM = 5;
   const mapItem = (it) => ({
@@ -193,7 +194,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     note:  it?.note ?? "",
   });
 
-  // รองรับ data.scheduleTop / data.scheduleBottom (ถ้ามี)
   const srcTop = Array.isArray(data.scheduleTop) ? data.scheduleTop : null;
   const srcBottom = Array.isArray(data.scheduleBottom) ? data.scheduleBottom : null;
 
@@ -204,7 +204,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     if (srcTop)    schedTop    = srcTop.slice(0, MAX_TOP).map(mapItem);
     if (srcBottom) schedBottom = srcBottom.slice(0, MAX_BOTTOM).map(mapItem);
   } else {
-    // ใช้ data.schedule เดิม: แยก 2 แถวแรกให้ตารางบน, ที่เหลือลงตารางล่าง
     const combined = Array.isArray(schedule) ? schedule : [];
     schedTop    = combined.slice(0, MAX_TOP).map(mapItem);
     schedBottom = combined.slice(MAX_TOP, MAX_TOP + MAX_BOTTOM).map(mapItem);
@@ -218,7 +217,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   }
   const needBottom = MAX_BOTTOM - schedBottom.length;
   for (let i = 0; i < needBottom; i++) {
-    const d = startDate ? addMonths(startDate, intervalMonths * (i + 1)) : null; // เริ่มรอบที่ 1
+    const d = startDate ? addMonths(startDate, intervalMonths * (i + 1)) : null;
     schedBottom.push({ due: fmtThaiDate(d), visit: "", note: "" });
   }
 
@@ -285,40 +284,40 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   });
   y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
 
-  /* ---------- ข้อกำหนดและเงื่อนไข (ตัดหน้าให้อัตโนมัติ) ---------- */
-if (terms.length) {
-  // ถ้าอยากเว้นก่อนหัวข้อเพิ่ม ให้ใส่ y += SPACING.beforeTermsHeader; ได้
-  doc.setFont(FAMILY, "bold");
-  TXT(doc, "ข้อกำหนดและเงื่อนไข", M, y);
-  doc.setFont(FAMILY, "normal");
-  y += SPACING.afterTermsHeader;
+  /* ---------- ข้อกำหนดและเงื่อนไข (พยายามอัดให้อยู่หน้าเดียว) ---------- */
+  if (terms.length) {
+    y += SPACING.beforeTermsHeader;
+    doc.setFont(FAMILY, "bold");
+    TXT(doc, "ข้อกำหนดและเงื่อนไข", M, y);
+    doc.setFont(FAMILY, "normal");
+    y += SPACING.afterTermsHeader;
 
-  const maxW = W - M * 2;
+    const maxW = W - M * 2;
+    const breakAt = H - SIGN_RESERVE; // อย่าให้ล้นเข้าโซนลายเซ็น
 
-  for (let i = 0; i < terms.length; i++) {
-    const text = `${i + 1}. ${String(terms[i] ?? "")}`;
-    const lines = doc.splitTextToSize(text, maxW);
-    const needH = lines.length * SPACING.termLine + SPACING.termItemGap;
+    for (let i = 0; i < terms.length; i++) {
+      const text = `${i + 1}. ${String(terms[i] ?? "")}`;
+      const lines = doc.splitTextToSize(text, maxW);
+      const needH = lines.length * SPACING.termLine + SPACING.termItemGap;
 
-    // ขึ้นหน้าใหม่ถ้าไม่พอพื้นที่
-    if (y + needH > H - 200) {
-      doc.addPage();
-      await ensureThaiFont(doc);
-      y = 56;
+      if (y + needH > breakAt) {
+        // ถ้าเกินจริง ๆ ค่อยขึ้นหน้าใหม่
+        doc.addPage();
+        await ensureThaiFont(doc);
+        y = 56;
+      }
+
+      let lineY = y;
+      for (let j = 0; j < lines.length; j++) {
+        TXT(doc, lines[j], M, lineY);
+        lineY += SPACING.termLine;
+      }
+      y = lineY + SPACING.termItemGap;
     }
-
-    // ใช้ตัวแปรท้องถิ่นแทน baseY ที่หายไป
-    let lineY = y;
-    for (let j = 0; j < lines.length; j++) {
-      TXT(doc, lines[j], M, lineY);
-      lineY += SPACING.termLine;
-    }
-    y = lineY + SPACING.termItemGap; // ขยับ y ต่อหลังจบข้อ
   }
-}
 
   /* ---------- พื้นที่ลายเซ็น (จัดกลุ่มให้อยู่กึ่งกลางหน้า) ---------- */
-  y = Math.max(y, H - 200);
+  y = Math.max(y, H - SIGN_RESERVE);
   const gap = 24;
   const colW = (W - M * 2 - gap) / 2;
   const boxH2 = 110;
@@ -330,7 +329,7 @@ if (terms.length) {
   doc.roundedRect(startX, y, colW, boxH2, 6, 6);
   TXT(doc, "ลงชื่อผู้แทนบริษัท", startX + 12, y + 20);
   TXT(doc, "(.................................................)", startX + 12, y + 84);
-   if (signatures.companyRep) TXT(doc, `ชื่อ: ${signatures.companyRep}`, startX + 12, y + 100);
+  if (signatures.companyRep) TXT(doc, `ชื่อ: ${signatures.companyRep}`, startX + 12, y + 100);
 
   // ลูกค้า
   const rightX = startX + colW + gap;
