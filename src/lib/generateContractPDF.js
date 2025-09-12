@@ -37,7 +37,7 @@ const TXT = (doc, text, x, y, opts) => {
 const SPACING = {
   afterTable: 18,
   beforeTermsHeader: 14, // เพิ่มช่องไฟก่อนหัวข้อ
-  afterTermsHeader: 8,   // ช่องไฟหลังหัวข้อ
+  afterTermsHeader: 18,   // ช่องไฟหลังหัวข้อ
   termLine: 12,          // ลด line-height ภายในข้อย่อย
   termItemGap: 4,        // ลดช่องไฟหลังจบแต่ละข้อ
 };
