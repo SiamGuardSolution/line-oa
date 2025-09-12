@@ -249,6 +249,9 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     while (schedBottom.length < MAX_BOTTOM) schedBottom.push({ due: "", visit: "", note: "" });
   }
 
+  const topTitle = service.topTitle ?? "ตารางบริการฉีดพ่น (Spray)";
+  const bottomTitle = service.bottomTitle ?? "ตารางบริการวางเหยื่อ (Bait)";
+
   const headCols = [
     "ครั้งที่",
     "วันครบกำหนด",
@@ -259,6 +262,11 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   ];
 
   /* ===== ตารางบน (2 แถว = Spray) ===== */
+  doc.setFont(FAMILY, "bold");
+  TXT(doc, topTitle, M, y);
+  doc.setFont(FAMILY, "normal");
+  y += 14;
+
   autoTable(doc, {
     startY: y,
     head: [headCols],
@@ -286,6 +294,11 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   y = (doc.lastAutoTable?.finalY || y) + 8;
 
   /* ===== ตารางล่าง (5 แถว = Bait) ===== */
+  doc.setFont(FAMILY, "bold");
+  TXT(doc, bottomTitle, M, y);
+  doc.setFont(FAMILY, "normal");
+  y += 14;
+
   autoTable(doc, {
     startY: y,
     head: [headCols],
