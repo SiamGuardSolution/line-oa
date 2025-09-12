@@ -80,7 +80,6 @@ async function ensureThaiFont(doc){
  *   service: { type, packageName, basePrice, addons:[{name, price}], intervalMonths?:number },
  *   schedule: [ { round, dueDate?, date?, visitDate?, visit?, note? }, ... ],
  *   terms: [ "..." ],
- *   signatures: { companyRep, clientRep },
  *   logoDataUrl?
  * }
  * @param {Object} opts  { fileName }
@@ -96,7 +95,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     service   = {},
     schedule  = [],
     terms     = [],
-    signatures = {},
     logoDataUrl,
   } = data;
 
@@ -280,8 +278,8 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       0: { cellWidth: 32,  halign: "center" },
       1: { cellWidth: 90,  halign: "center" },
       2: { cellWidth: 110, halign: "center" },
-      3: { cellWidth: 110 },
-      4: { cellWidth: 110 },
+      3: { cellWidth: 80 },
+      4: { cellWidth: 80 },
       5: { cellWidth: "auto" },
     },
   });
@@ -307,8 +305,8 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       0: { cellWidth: 32,  halign: "center" },
       1: { cellWidth: 90,  halign: "center" },
       2: { cellWidth: 110, halign: "center" },
-      3: { cellWidth: 110 },
-      4: { cellWidth: 110 },
+      3: { cellWidth: 80 },
+      4: { cellWidth: 80 },
       5: { cellWidth: "auto" },
     },
   });
@@ -345,28 +343,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       y = lineY + SPACING.termItemGap;
     }
   }
-
-  /* ---------- พื้นที่ลายเซ็น (จัดกลุ่มให้อยู่กึ่งกลางหน้า) ---------- */
-  y = Math.max(y, H - SIGN_RESERVE);
-  const gap = 24;
-  const colW = (W - M * 2 - gap) / 2;
-  const boxH2 = 110;
-
-  const groupW = colW * 2 + gap;
-  const startX = (W - groupW) / 2;
-
-  // บริษัท
-  doc.roundedRect(startX, y, colW, boxH2, 6, 6);
-  TXT(doc, "ลงชื่อผู้แทนบริษัท", startX + 12, y + 20);
-  TXT(doc, "(.................................................)", startX + 12, y + 84);
-  if (signatures.companyRep) TXT(doc, `ชื่อ: ${signatures.companyRep}`, startX + 12, y + 100);
-
-  // ลูกค้า
-  const rightX = startX + colW + gap;
-  doc.roundedRect(rightX, y, colW, boxH2, 6, 6);
-  TXT(doc, "ลงชื่อลูกค้า/ผู้ว่าจ้าง", rightX + 12, y + 20);
-  TXT(doc, "(.................................................)", rightX + 12, y + 84);
-  if (signatures.clientRep) TXT(doc, `ชื่อ: ${signatures.clientRep}`, rightX + 12, y + 100);
 
   // บันทึกไฟล์
   doc.save(fileName);
