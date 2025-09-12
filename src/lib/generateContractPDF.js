@@ -62,7 +62,7 @@ async function ensureThaiFont(doc){
  *   contractNumber, contractDate, startDate, endDate,
  *   company: { name, address, phone },
  *   client:  { name, phone, address, facebook },
- *   service: { type, packageName, basePrice, addons:[{name, price}], intervalMonths?:number, autoDueFirstN?:number },
+ *   service: { type, packageName, basePrice, addons:[{name, price}], intervalMonths?:number },
  *   schedule: [ { round, dueDate?, date?, visitDate?, visit?, note? }, ... ], // ใช้เป็นค่ากำหนดเองแทน auto-gen ได้
  *   terms: [ "..." ],
  *   signatures: { companyRep, clientRep },
@@ -86,8 +86,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   } = data;
 
   const intervalMonths = Number(service.intervalMonths ?? 4);
-  const autoDueFirstN  = Number(service.autoDueFirstN ?? 3);
-
+  
   const fileName = opts.fileName || `Contract_${contractNumber || Date.now()}.pdf`;
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: false });
   await ensureThaiFont(doc);
@@ -120,8 +119,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const rightLines = [
     `เลขที่สัญญา: ${contractNumber || "-"}`,
     `วันที่ทำสัญญา: ${fmtThaiDate(contractDate)}`,
-    `เริ่มต้นสัญญา: ${fmtThaiDate(startDate)}`,
-    `สิ้นสุดสัญญา: ${fmtThaiDate(endDate)}`,
+    `วันสิ้นสุดสัญญา: ${fmtThaiDate(endDate)}`,
   ];
   const leftH = pad * 2 + leftLines.length * lineH + 2;
   const rightH = pad * 2 + rightLines.length * lineH + 2;
@@ -149,7 +147,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const s = service || {};
   const addons = Array.isArray(s.addons) ? s.addons : [];
   const pkgLines = [
-    s.type ? `ประเภทบริการ: ${s.type}` : "",
+    s.type ? `ประเภทบริการ: กำจัดปลวก` : "",
     s.packageName ? `แพ็กเกจ: ${s.packageName}` : "",
     (s.basePrice != null) ? `ราคาแพ็กเกจ: ${Number(s.basePrice).toLocaleString("th-TH")} บาท` : "",
   ].filter(Boolean);
@@ -172,23 +170,43 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
   }
 
-  /* ===== ตารางรอบบริการแบบเทมเพลต: 3 แถวบน + 5 แถวล่าง ===== */
-  // เตรียมข้อมูล 8 แถว: ใช้ schedule ถ้ามี, ไม่งั้น auto-gen 'วันครบกำหนด' จาก startDate
-  const MAX_ROWS = 8;
-  const sched = [];
-  for (let i = 0; i < MAX_ROWS; i++) {
-    const item = schedule[i] || {};
-    const dueRaw   = item.dueDate ?? item.due ?? item.date;
-    const visitRaw = item.visitDate ?? item.visit ?? "";
-    const note     = item.note ?? "";
-    let due = fmtThaiDate(dueRaw);
+  /* ===== ตารางรอบบริการ (Top 2 + Bottom 5, ลำดับแยกกัน) ===== */
+  // ค่าพื้นฐาน
+  const MAX_TOP = 2;
+  const MAX_BOTTOM = 5;
+  const mapItem = (it) => ({
+    due:   fmtThaiDate(it?.dueDate ?? it?.due ?? it?.date),
+    visit: fmtThaiDate(it?.visitDate ?? it?.visit ?? ""),
+    note:  it?.note ?? "",
+  });
 
-    // ถ้าไม่มี schedule และมี startDate => เติมอัตโนมัติเฉพาะช่วงแรกตาม autoDueFirstN
-    if (!schedule.length && startDate && i < autoDueFirstN) {
-      const d = addMonths(startDate, intervalMonths * (i + 1));
-      due = fmtThaiDate(d);
-    }
-    sched.push({ due, visit: fmtThaiDate(visitRaw), note });
+  // รองรับ data.scheduleTop / data.scheduleBottom (ถ้ามี)
+  const srcTop = Array.isArray(data.scheduleTop) ? data.scheduleTop : null;
+  const srcBottom = Array.isArray(data.scheduleBottom) ? data.scheduleBottom : null;
+
+  let schedTop = [];
+  let schedBottom = [];
+
+  if (srcTop || srcBottom) {
+    if (srcTop)    schedTop    = srcTop.slice(0, MAX_TOP).map(mapItem);
+    if (srcBottom) schedBottom = srcBottom.slice(0, MAX_BOTTOM).map(mapItem);
+  } else {
+    // ใช้ data.schedule เดิม: แยก 2 แถวแรกให้ตารางบน, ที่เหลือลงตารางล่าง
+    const combined = Array.isArray(schedule) ? schedule : [];
+    schedTop    = combined.slice(0, MAX_TOP).map(mapItem);
+    schedBottom = combined.slice(MAX_TOP, MAX_TOP + MAX_BOTTOM).map(mapItem);
+  }
+
+  // เติม auto-gen หากไม่ครบจำนวน
+  const needTop = MAX_TOP - schedTop.length;
+  for (let i = 0; i < needTop; i++) {
+    const d = startDate ? addMonths(startDate, intervalMonths * (i + 1)) : null;
+    schedTop.push({ due: fmtThaiDate(d), visit: "", note: "" });
+  }
+  const needBottom = MAX_BOTTOM - schedBottom.length;
+  for (let i = 0; i < needBottom; i++) {
+    const d = startDate ? addMonths(startDate, intervalMonths * (i + 1)) : null; // เริ่มรอบที่ 1
+    schedBottom.push({ due: fmtThaiDate(d), visit: "", note: "" });
   }
 
   const headCols = [
@@ -200,25 +218,25 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     "หมายเหตุ",
   ];
 
-  // ตารางบน (3 แถว)
+  // ===== ตารางบน (2 แถว, ลำดับ 1–2) =====
   autoTable(doc, {
     startY: y,
     head: [headCols],
-    body: Array.from({ length: 3 }, (_, i) => [
+    body: schedTop.map((row, i) => ([
       String(i + 1),
-      sched[i]?.due || "",
-      sched[i]?.visit || "",
+      row.due || "",
+      row.visit || "",
       "",
       "",
-      sched[i]?.note || "",
-    ]),
+      row.note || "",
+    ])),
     styles: { font: FAMILY, fontSize: 10, cellPadding: 2 },
     headStyles: { font: FAMILY, fontStyle: "bold", fillColor: [225, 233, 245], textColor: 0 },
     theme: "grid",
     margin: { left: M, right: M },
     columnStyles: {
-      0: { cellWidth: 32, halign: "center" },
-      1: { cellWidth: 90, halign: "center" },
+      0: { cellWidth: 32,  halign: "center" },
+      1: { cellWidth: 90,  halign: "center" },
       2: { cellWidth: 110, halign: "center" },
       3: { cellWidth: 110 },
       4: { cellWidth: 110 },
@@ -227,28 +245,25 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   });
   y = (doc.lastAutoTable?.finalY || y) + 8;
 
-  // ตารางล่าง (5 แถว)
+  // ===== ตารางล่าง (5 แถว, ลำดับ 1–5) =====
   autoTable(doc, {
     startY: y,
     head: [headCols],
-    body: Array.from({ length: 5 }, (_, i) => {
-      const idx = i + 3; // 4..8
-      return [
-        String(idx + 1),
-        sched[idx]?.due || "",
-        sched[idx]?.visit || "",
-        "",
-        "",
-        sched[idx]?.note || "",
-      ];
-    }),
+    body: schedBottom.map((row, i) => ([
+      String(i + 1),
+      row.due || "",
+      row.visit || "",
+      "",
+      "",
+      row.note || "",
+    ])),
     styles: { font: FAMILY, fontSize: 10, cellPadding: 2 },
     headStyles: { font: FAMILY, fontStyle: "bold", fillColor: [225, 233, 245], textColor: 0 },
     theme: "grid",
     margin: { left: M, right: M },
     columnStyles: {
-      0: { cellWidth: 32, halign: "center" },
-      1: { cellWidth: 90, halign: "center" },
+      0: { cellWidth: 32,  halign: "center" },
+      1: { cellWidth: 90,  halign: "center" },
       2: { cellWidth: 110, halign: "center" },
       3: { cellWidth: 110 },
       4: { cellWidth: 110 },
@@ -259,10 +274,11 @@ export default async function generateContractPDF(data = {}, opts = {}) {
 
   /* ---------- ข้อกำหนดและเงื่อนไข (ตัดหน้าให้อัตโนมัติ) ---------- */
   if (terms.length) {
+    y += SPACING.beforeTermsHeader;          // ช่องไฟก่อนหัวข้อ
     doc.setFont(FAMILY, "bold");
     doc.text(T("ข้อกำหนดและเงื่อนไข"), M, y);
     doc.setFont(FAMILY, "normal");
-    y += SPACING.afterTermsHeader;
+    y += SPACING.afterTermsHeader;           // ช่องไฟหลังหัวข้อ
 
     const maxW = W - M * 2;
 
@@ -276,11 +292,11 @@ export default async function generateContractPDF(data = {}, opts = {}) {
         y = 56;
       }
 
-      const baseY = y;
+      // บรรทัดในข้อย่อยใช้ระยะตาม termLine (ชิดขึ้น)
       for (let j = 0; j < lines.length; j++) {
-        doc.text(T(lines[j]), M, baseY + j * SPACING.termLine);
+        doc.text(T(lines[j]), M, y + j * SPACING.termLine);
       }
-      y = baseY + lines.length * SPACING.termLine + SPACING.termItemGap;
+      y += lines.length * SPACING.termLine + SPACING.termItemGap;
     }
   }
 
