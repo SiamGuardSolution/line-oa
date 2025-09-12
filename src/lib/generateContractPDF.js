@@ -262,7 +262,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   ];
 
   const TITLE_GAP = 2;     // เว้นระหว่าง "ชื่อ" กับ "หัวตาราง" (ชิดมาก)
-  const TABLE_GAP = 12;    // เว้นระหว่าง "ตารางบน" กับ "ชื่อของตารางล่าง"
+  const TABLE_GAP = 24;    // เว้นระหว่าง "ตารางบน" กับ "ชื่อของตารางล่าง"
 
   /* ===== ตารางบน (2 แถว = Spray) ===== */
   doc.setFont(FAMILY, "bold");
