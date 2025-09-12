@@ -21,6 +21,19 @@ const addMonths = (date, months) => {
   return d;
 };
 
+// พิมพ์ข้อความแบบปลอดภัย: บังคับชนิดข้อมูล และกัน x,y ที่ไม่ใช่ตัวเลข
+const TXT = (doc, text, x, y, opts) => {
+  const S = v => (v == null ? "" : String(v));
+  const isNum = n => typeof n === "number" && isFinite(n);
+  if (!isNum(x) || !isNum(y)) return; // ถ้าไม่ได้เลข ให้ข้ามเพื่อกันพัง
+  if (Array.isArray(text)) {
+    const lines = text.map(S).filter(Boolean);
+    if (lines.length) doc.text(lines, x, y, opts);
+  } else {
+    doc.text(S(text), x, y, opts);
+  }
+};
+
 /* ---------- spacing presets ---------- */
 const SPACING = {
   afterTable: 22,
@@ -102,7 +115,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
 
   // หัวกระดาษ
   doc.setFont(FAMILY, "bold"); doc.setFontSize(20);
-  doc.text(T("สัญญาบริการกำจัดปลวก"), W / 2, y, { align: "center" });
+  TXT(doc, "สัญญาบริการกำจัดปลวก", W / 2, y, { align: "center" });
   doc.setFont(FAMILY, "normal"); doc.setFontSize(12);
 
   // กล่องข้อมูลบริษัท/สัญญา (สองคอลัมน์)
@@ -128,8 +141,8 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   doc.roundedRect(boxX, boxY, contentW, boxH, 6, 6);
   doc.setDrawColor(230); doc.line(boxX + leftW, boxY, boxX + leftW, boxY + boxH);
 
-  let ly = boxY + pad + 6; leftLines.forEach(t => { doc.text(T(t), boxX + pad, ly); ly += lineH; });
-  let ry = boxY + pad + 6; rightLines.forEach(t => { doc.text(T(t), boxX + leftW + pad, ry); ry += lineH; });
+  let ly = boxY + pad + 6; leftLines.forEach(t => { TXT(doc, t, boxX + pad, ly); ly += lineH; });
+  let ry = boxY + pad + 6; rightLines.forEach(t => { TXT(doc, t, boxX + leftW + pad, ry); ry += lineH; });
 
   y = boxY + boxH + 16;
 
@@ -140,7 +153,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     `โทรศัพท์: ${client.phone || "-"}`,
     client.facebook ? `Facebook/Line: ${client.facebook}` : "",
   ].filter(Boolean);
-  custLines.forEach((t, i) => doc.text(T(t), M, y + i * 16));
+  custLines.forEach((t, i) => TXT(doc, t, M, y + i * 16));
   y += custLines.length * 16 + 10;
 
   // รายละเอียดแพ็กเกจ
@@ -273,32 +286,36 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
 
   /* ---------- ข้อกำหนดและเงื่อนไข (ตัดหน้าให้อัตโนมัติ) ---------- */
-  if (terms.length) {
-    y += SPACING.beforeTermsHeader;          // ช่องไฟก่อนหัวข้อ
-    doc.setFont(FAMILY, "bold");
-    doc.text(T("ข้อกำหนดและเงื่อนไข"), M, y);
-    doc.setFont(FAMILY, "normal");
-    y += SPACING.afterTermsHeader;           // ช่องไฟหลังหัวข้อ
+if (terms.length) {
+  // ถ้าอยากเว้นก่อนหัวข้อเพิ่ม ให้ใส่ y += SPACING.beforeTermsHeader; ได้
+  doc.setFont(FAMILY, "bold");
+  TXT(doc, "ข้อกำหนดและเงื่อนไข", M, y);
+  doc.setFont(FAMILY, "normal");
+  y += SPACING.afterTermsHeader;
 
-    const maxW = W - M * 2;
+  const maxW = W - M * 2;
 
-    for (let i = 0; i < terms.length; i++) {
-      const lines = doc.splitTextToSize(`${i + 1}. ${terms[i]}`, maxW);
-      const needH = lines.length * SPACING.termLine + SPACING.termItemGap;
+  for (let i = 0; i < terms.length; i++) {
+    const text = `${i + 1}. ${String(terms[i] ?? "")}`;
+    const lines = doc.splitTextToSize(text, maxW);
+    const needH = lines.length * SPACING.termLine + SPACING.termItemGap;
 
-      if (y + needH > H - 200) {
-        doc.addPage();
-        await ensureThaiFont(doc);
-        y = 56;
-      }
-
-      // บรรทัดในข้อย่อยใช้ระยะตาม termLine (ชิดขึ้น)
-      for (let j = 0; j < lines.length; j++) {
-        doc.text(T(lines[j]), M, y + j * SPACING.termLine);
-      }
-      y += lines.length * SPACING.termLine + SPACING.termItemGap;
+    // ขึ้นหน้าใหม่ถ้าไม่พอพื้นที่
+    if (y + needH > H - 200) {
+      doc.addPage();
+      await ensureThaiFont(doc);
+      y = 56;
     }
+
+    // ใช้ตัวแปรท้องถิ่นแทน baseY ที่หายไป
+    let lineY = y;
+    for (let j = 0; j < lines.length; j++) {
+      TXT(doc, lines[j], M, lineY);
+      lineY += SPACING.termLine;
+    }
+    y = lineY + SPACING.termItemGap; // ขยับ y ต่อหลังจบข้อ
   }
+}
 
   /* ---------- พื้นที่ลายเซ็น (จัดกลุ่มให้อยู่กึ่งกลางหน้า) ---------- */
   y = Math.max(y, H - 200);
@@ -311,16 +328,16 @@ export default async function generateContractPDF(data = {}, opts = {}) {
 
   // บริษัท
   doc.roundedRect(startX, y, colW, boxH2, 6, 6);
-  doc.text(T("ลงชื่อผู้แทนบริษัท"), startX + 12, y + 20);
-  doc.text(T("(.................................................)"), startX + 12, y + 84);
-  if (signatures.companyRep) doc.text(T(`ชื่อ: ${signatures.companyRep}`), startX + 12, y + 100);
+  TXT(doc, "ลงชื่อผู้แทนบริษัท", startX + 12, y + 20);
+  TXT(doc, "(.................................................)", startX + 12, y + 84);
+   if (signatures.companyRep) TXT(doc, `ชื่อ: ${signatures.companyRep}`, startX + 12, y + 100);
 
   // ลูกค้า
   const rightX = startX + colW + gap;
   doc.roundedRect(rightX, y, colW, boxH2, 6, 6);
-  doc.text(T("ลงชื่อลูกค้า/ผู้ว่าจ้าง"), rightX + 12, y + 20);
-  doc.text(T("(.................................................)"), rightX + 12, y + 84);
-  if (signatures.clientRep) doc.text(T(`ชื่อ: ${signatures.clientRep}`), rightX + 12, y + 100);
+  TXT(doc, "ลงชื่อลูกค้า/ผู้ว่าจ้าง", rightX + 12, y + 20);
+  TXT(doc, "(.................................................)", rightX + 12, y + 84);
+  if (signatures.clientRep) TXT(doc, `ชื่อ: ${signatures.clientRep}`, rightX + 12, y + 100);
 
   // บันทึกไฟล์
   doc.save(fileName);
