@@ -265,10 +265,11 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   doc.setFont(FAMILY, "bold");
   TXT(doc, topTitle, M, y);
   doc.setFont(FAMILY, "normal");
-  y += 14;
+  
+  const TITLE_GAP = 2;
 
   autoTable(doc, {
-    startY: y,
+    startY:  TITLE_GAP,
     head: [headCols],
     body: schedTop.map((row, i) => ([
       String(i + 1),
@@ -297,10 +298,9 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   doc.setFont(FAMILY, "bold");
   TXT(doc, bottomTitle, M, y);
   doc.setFont(FAMILY, "normal");
-  y += 14;
 
   autoTable(doc, {
-    startY: y,
+    startY:  TITLE_GAP,
     head: [headCols],
     body: schedBottom.map((row, i) => ([
       String(i + 1),
