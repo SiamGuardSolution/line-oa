@@ -261,7 +261,8 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     "หมายเหตุ",
   ];
 
-  const TITLE_GAP = 2;
+  const TITLE_GAP = 2;     // เว้นระหว่าง "ชื่อ" กับ "หัวตาราง" (ชิดมาก)
+  const TABLE_GAP = 12;    // เว้นระหว่าง "ตารางบน" กับ "ชื่อของตารางล่าง"
 
   /* ===== ตารางบน (2 แถว = Spray) ===== */
   doc.setFont(FAMILY, "bold");
@@ -292,7 +293,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       5: { cellWidth: "auto" },
     },
   });
-  y = (doc.lastAutoTable?.finalY || y) + 8;
+  y = (doc.lastAutoTable?.finalY || y) + TABLE_GAP; // เว้นให้ห่างก่อนพิมพ์ชื่อของตารางล่าง
 
   /* ===== ตารางล่าง (5 แถว = Bait) ===== */
   doc.setFont(FAMILY, "bold");
