@@ -261,15 +261,16 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     "หมายเหตุ",
   ];
 
+  const TITLE_GAP = 2;
+
   /* ===== ตารางบน (2 แถว = Spray) ===== */
   doc.setFont(FAMILY, "bold");
   TXT(doc, topTitle, M, y);
   doc.setFont(FAMILY, "normal");
-  
-  const TITLE_GAP = 2;
+  y += 14;
 
   autoTable(doc, {
-    startY:  TITLE_GAP,
+    startY: y + TITLE_GAP,
     head: [headCols],
     body: schedTop.map((row, i) => ([
       String(i + 1),
@@ -298,9 +299,10 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   doc.setFont(FAMILY, "bold");
   TXT(doc, bottomTitle, M, y);
   doc.setFont(FAMILY, "normal");
+  y += 14;
 
   autoTable(doc, {
-    startY:  TITLE_GAP,
+    startY: y + TITLE_GAP,
     head: [headCols],
     body: schedBottom.map((row, i) => ([
       String(i + 1),
