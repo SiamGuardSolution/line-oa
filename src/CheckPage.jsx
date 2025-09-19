@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import "./CheckPage.css";
 import generateReceiptPDF from "./lib/generateReceiptPDF";
-import { getPackageLabel, getPackagePrice } from "./config/packages";
+import * as PKG from "./config/packages";
 
 /* ---------------------- CONFIG ---------------------- */
 const HOST = window.location.hostname;
@@ -40,13 +40,21 @@ function derivePkgKey(c) {
   return "spray";
 }
 
-const labelFromContract = (c) => getPackageLabel(derivePkgKey(c));
+const labelFromContract = (c) => {
+  const k = derivePkgKey(c);
+  return typeof PKG.getPackageLabel === "function"
+    ? PKG.getPackageLabel(k)
+    : (PKG.PACKAGE_LABEL?.[k] ?? k);
+};
 
 const priceTextFrom = (c) => {
   // ถ้า API มี text มาอยู่แล้วก็ใช้เลย
   if (c?.priceText) return String(c.priceText);
   // ไม่งั้นแปลงจาก config เป็นข้อความราคา
-  const price = getPackagePrice(derivePkgKey(c)) ?? 0;
+  const priceKey = derivePkgKey(c);
+  const priceFn  = PKG.getPackagePrice;
+  const priceMap = PKG.PACKAGE_PRICE;
+  const price    = (typeof priceFn === "function") ? priceFn(priceKey) : (priceMap?.[priceKey] ?? 0);
   return price ? `${Number(price).toLocaleString('th-TH')} บาท` : "-";
 };
 
@@ -101,11 +109,14 @@ const scanDiscountInStrings = (obj) => {
   return found || 0;
 };
 
-// ราคา base จาก config เป็นหลัก (ถ้า API ส่ง priceText มาเป็นตัวเลข ก็รองรับ)
 const basePriceFrom = (c) => {
   const fromText = toNumberSafe(priceTextFrom(c));
   if (fromText > 0) return fromText;
-  return getPackagePrice(derivePkgKey(c)) ?? 0;
+  const k = derivePkgKey(c);
+  const fn  = PKG.getPackagePrice;
+  const map = PKG.PACKAGE_PRICE;
+  const v   = (typeof fn === "function") ? fn(k) : (map?.[k]);
+  return Number(v ?? 0);
 };
 
 const discountFrom = (c) => {
@@ -477,7 +488,7 @@ export default function CheckPage() {
             }}
             title={labelFromContract(c)}
           >
-            {(c.startDate || "ไม่ทราบวันเริ่ม")} · {getPackageLabel(key)}
+            {(c.startDate || "ไม่ทราบวันเริ่ม")} · {typeof PKG.getPackageLabel === "function" ? PKG.getPackageLabel(key) : (PKG.PACKAGE_LABEL?.[key] ?? key)}
           </button>
         );
       })}

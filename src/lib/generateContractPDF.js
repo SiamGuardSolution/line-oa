@@ -1,9 +1,21 @@
 // src/lib/generateContractPDF.js
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { getPackageLabel, getPackagePrice } from "../config/packages";
+import * as PKG from "../config/packages";
 
 /* ---------- helpers ---------- */
+ const pkgLabel = (k) =>
+  typeof PKG.getPackageLabel === "function"
+    ? PKG.getPackageLabel(k)
+    : (PKG.PACKAGE_LABEL?.[k] ?? String(k));
+
+const pkgPrice = (k) => {
+  const fn  = PKG.getPackagePrice;
+  const map = PKG.PACKAGE_PRICE;
+  const v   = (typeof fn === "function") ? fn(k) : map?.[k];
+  return Number(v ?? 0);
+};
+
 const fmtThaiDate = (d) => {
   try {
     if (!d) return "";
@@ -48,9 +60,9 @@ const derivePkgKey = (service = {}, rawAll = {}) => {
 
   // 3) เดาจากราคา (เผื่อระบบเก่า)
   const p = Number(service.basePrice || 0) || Number((rawAll.priceText || "").replace(/[^\d.]/g, "")) || 0;
-  if (p === getPackagePrice("mix"))   return "mix";
-  if (p === getPackagePrice("bait"))  return "bait";
-  if (p === getPackagePrice("spray")) return "spray";
+  if (p === pkgPrice("mix"))   return "mix";
+  if (p === pkgPrice("bait"))  return "bait";
+  if (p === pkgPrice("spray")) return "spray";
 
   return "mix"; // ค่าเริ่มต้นถือเป็นแพ็กเกจผสม (เพื่อแสดงทั้ง 2 ตาราง)
 };
@@ -123,8 +135,8 @@ export default async function generateContractPDF(data = {}, opts = {}) {
 
   // ===== ผูกกับ config กลาง =====
   const pkgKey     = derivePkgKey(service, data);
-  const pkgName    = service.packageName || getPackageLabel(pkgKey);
-  const basePrice  = (service.basePrice ?? null) !== null ? service.basePrice : getPackagePrice(pkgKey);
+  const pkgName    = service.packageName || pkgLabel(pkgKey);
+  const basePrice  = (service.basePrice ?? null) !== null ? service.basePrice : pkgPrice(pkgKey);
 
   // โหมดตาราง
   const isSpray = pkgKey === "spray";

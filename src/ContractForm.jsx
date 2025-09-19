@@ -3,7 +3,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import "./ContractForm.css";
 import generateReceiptPDF from "./lib/generateReceiptPDF";
 import generateContractPDF from "./lib/generateContractPDF";
-import { getPackageLabel, getPackagePrice } from "./config/packages";
+import * as PKG from "./config/packages";
+
+// helper ปลอดภัย กรณี build แคช export เพี้ยน
+const pkgLabel = (k) =>
+  typeof PKG.getPackageLabel === "function"
+    ? PKG.getPackageLabel(k)
+    : (PKG.PACKAGE_LABEL?.[k] ?? String(k));
 
 const API_URL = "/api/submit-contract";
 
@@ -19,13 +25,9 @@ const COMPANY = {
 // อัตราภาษีสำหรับใบเสร็จ (สัญญาไม่ได้ใช้)
 const VAT_RATE = 0;
 
-/* 
-  NOTE: เก็บเฉพาะ field schedule ของแต่ละแพ็กเกจไว้ที่นี่ 
-  ส่วน "ชื่อแพ็กเกจ" ให้ดึงจาก PACKAGE_LABEL / getPackageLabel เสมอ
-*/
+/* NOTE: เก็บเฉพาะ field schedule ของแต่ละแพ็กเกจไว้ที่นี่ */
 const PACKAGES = {
   spray: {
-    // label จะไม่ใช้ค่าคงที่แล้ว ให้เรียก getPackageLabel(form.package) แทน
     fields: [
       { key: "service1", label: "Service รอบที่ 1" },
       { key: "service2", label: "Service รอบที่ 2" },
@@ -59,7 +61,7 @@ const emptyForm = {
   address: "",
   facebook: "",
   phone: "",
-  taxId: "",            // ✅ เลขผู้เสียภาษี
+  taxId: "",
   startDate: "",
   endDate: "",
   tech: "",
@@ -86,7 +88,6 @@ const addMonths = (d, m) => {
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const addYears = (d, n) => addMonths(d, n * 12);
 
-// ดึงเฉพาะตัวเลขจากเบอร์/เลขผู้เสียภาษี
 const digitsOnly = (s) => String(s || "").replace(/\D/g, "");
 const taxIdDigits = (s) => digitsOnly(s).slice(0, 13);
 
@@ -145,22 +146,17 @@ const makeContractNo = () => {
   return `CT-${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`;
 };
 
-// ====== สร้าง payload สำหรับ generateContractPDF ======
+// ====== payload สำหรับ generateContractPDF ======
 function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
-  // ตารางรอบบริการในรูปแบบที่ generateContractPDF รองรับ
   const schedule = (pkgConf.fields || [])
     .map((f, idx) => {
       const dateStr = form[f.key];
       if (!dateStr) return null;
-      return {
-        round: idx + 1,
-        date: dateStr,
-        note: f.label || "",
-      };
+      return { round: idx + 1, date: dateStr, note: f.label || "" };
     })
     .filter(Boolean);
 
-  const pkgName = getPackageLabel(form.package);
+  const pkgName = pkgLabel(form.package);
 
   const data = {
     contractNumber: makeContractNo(),
@@ -189,15 +185,11 @@ function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
       basePrice: baseServicePrice,
       addons: (addons || [])
         .filter((r) => r && (r.name || r.qty || r.price))
-        .map((r) => ({
-          name: r.name || "รายการเพิ่มเติม",
-          price: Number(r.price || 0) * Number(r.qty || 0),
-        })),
+        .map((r) => ({ name: r.name || "รายการเพิ่มเติม", price: Number(r.price || 0) * Number(r.qty || 0) })),
     },
 
     schedule,
 
-    // เงื่อนไขตัวอย่าง — แก้ไขข้อความให้ตรงกับนโยบายบริษัทได้
     terms: [
       "วันที่ครบกำหนด คือ วันที่ที่ครบกำหนดบริการตามเงื่อนไข เป็นเพียงกำหนดการนัดหมายส่งงานเท่านั้น",
       "วันที่เข้าบริการ คือ วันที่เข้ารับบริการจริง ซึ่งทางบริษัทฯ ได้ทำการนัดหมายลูกค้าอย่างชัดเจน",
@@ -206,7 +198,7 @@ function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
     ],
 
     signatures: {
-      companyRep: form.tech || "", // ใช้ชื่อผู้รับผิดชอบฝั่งบริษัทเป็นตัวแทนลงนาม
+      companyRep: form.tech || "",
       clientRep: form.name || "",
     },
   };
@@ -217,17 +209,18 @@ function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
 export default function ContractForm() {
   const [form, setForm] = useState({ ...emptyForm });
 
-  // ===== ราคาบริการหลักตามแพ็กเกจ (อิง config กลาง) =====
-  const baseServicePrice = useMemo(
-    () => getPackagePrice(form.package),
-    [form.package]
-  );
+  const baseServicePrice = useMemo(() => {
+    const fn  = PKG.getPackagePrice;
+    const map = PKG.PACKAGE_PRICE;
+    const val = (typeof fn === "function") ? fn(form.package) : map?.[form.package];
+    return Number(val ?? 0);
+  }, [form.package]);
 
   // ===== items สำหรับส่ง backend / คิดยอด =====
   const items = useMemo(
     () => [
       {
-        name: `ค่าบริการแพ็กเกจ ${getPackageLabel(form.package)}`,
+        name: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`,
         quantity: 1,
         price: baseServicePrice,
       },
@@ -235,10 +228,8 @@ export default function ContractForm() {
     [form.package, baseServicePrice]
   );
 
-  const itemsSubtotal = useMemo(
-    () => baseServicePrice,
-    [baseServicePrice]
-  );
+  // ไม่ต้อง useMemo ก็พอ
+  const itemsSubtotal = baseServicePrice;
 
   // ===== Add-ons =====
   const [addons, setAddons] = useState([{ name: "", qty: 1, price: 0 }]);
@@ -247,10 +238,7 @@ export default function ContractForm() {
   const onAddonChange = (i, field, value) => {
     setAddons((rows) => {
       const next = [...rows];
-      next[i] = {
-        ...next[i],
-        [field]: field === "qty" || field === "price" ? Number(value || 0) : value,
-      };
+      next[i] = { ...next[i], [field]: field === "qty" || field === "price" ? Number(value || 0) : value };
       return next;
     });
   };
@@ -275,19 +263,14 @@ export default function ContractForm() {
   const validate = () => {
     if (!form.name.trim()) return "กรุณากรอกชื่อลูกค้า";
     if (phoneDigits(form.phone).length < 9) return "กรุณากรอกเบอร์โทรให้ถูกต้อง";
-    if (form.taxId && taxIdDigits(form.taxId).length !== 13) {
-      return "กรุณากรอกเลขประจำตัวผู้เสียภาษีให้ครบ 13 หลัก";
-    }
+    if (form.taxId && taxIdDigits(form.taxId).length !== 13) return "กรุณากรอกเลขประจำตัวผู้เสียภาษีให้ครบ 13 หลัก";
     if (!form.startDate) return "กรุณาเลือกวันที่เริ่มสัญญา";
     if (!form.endDate) return "กรุณาเลือกวันสิ้นสุดสัญญา";
     return "";
   };
 
   const addonsSubtotal = useMemo(
-    () => (addons || []).reduce(
-      (sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0),
-      0
-    ),
+    () => (addons || []).reduce((sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0), 0),
     [addons]
   );
 
@@ -298,7 +281,7 @@ export default function ContractForm() {
   async function handleCreateReceiptPDF() {
     const pdfItems = [
       {
-        description: `ค่าบริการแพ็กเกจ ${getPackageLabel(form.package)}`,
+        description: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`,
         qty: 1,
         unitPrice: baseServicePrice,
       },
@@ -334,10 +317,9 @@ export default function ContractForm() {
       alreadyPaid: 0,
 
       notes: form.note || "",
-      bankRemark:
-        COMPANY.bank
-          ? `ธนาคาร${COMPANY.bank.name} ${COMPANY.bank.account}\n${COMPANY.bank.accountName}`
-          : "",
+      bankRemark: COMPANY.bank
+        ? `ธนาคาร${COMPANY.bank.name} ${COMPANY.bank.account}\n${COMPANY.bank.accountName}`
+        : "",
     };
 
     try {
@@ -351,10 +333,7 @@ export default function ContractForm() {
   // ===== สร้างสัญญา (PDF) โดยไม่บันทึก =====
   async function handleCreateContractPDFOnly() {
     const err = validate();
-    if (err) {
-      alert(err);
-      return;
-    }
+    if (err) { alert(err); return; }
     const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
     try {
       await generateContractPDF(data, { fileName });
@@ -428,9 +407,7 @@ export default function ContractForm() {
       <div className="cf__card">
         <div className="cf__chip">ฟอร์มสัญญา</div>
         <h2 className="cf__title">บันทึกสัญญาลูกค้า</h2>
-        <p className="cf__subtitle">
-          กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ ระบบจะคำนวณให้อัตโนมัติ
-        </p>
+        <p className="cf__subtitle">กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ ระบบจะคำนวณให้อัตโนมัติ</p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button type="button" className="btn btn-secondary" onClick={handleCreateReceiptPDF}>
@@ -452,7 +429,7 @@ export default function ContractForm() {
             >
               {pkgOptions.map((k) => (
                 <option key={k} value={k}>
-                  {getPackageLabel(k)} {/* ← ดึงชื่อจาก config กลาง */}
+                  {pkgLabel(k)}
                 </option>
               ))}
             </select>
