@@ -47,12 +47,11 @@ function bahtText(amount){
   return bahtPart + readNumberThai(satang) + 'สตางค์';
 }
 
-// ===== หมายเหตุเริ่มต้นคงที่ =====
+/* ---------- หมายเหตุค่าเริ่มต้น (ใช้เมื่อไม่มี remarkLines/bankRemark) ---------- */
 const DEFAULT_REMARK_LINES = [
   "ธนาคารกสิกรไทย เลขที่บัญชี 201-8-860778\nRemark: บจก.สยามการ์ดโซลูชั่น (ประเทศไทย) จำกัด",
 ];
 
-const S = v => Array.isArray(v) ? v.map(x => String(x ?? "")) : String(v ?? "");
 function ab2b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s);}
 const money = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtDate = d => { try{ const dd=d instanceof Date?d:new Date(d); return dd.toLocaleDateString("th-TH",{year:"numeric",month:"2-digit",day:"2-digit"});}catch{return String(d||"");}};
@@ -92,7 +91,7 @@ async function ensureThaiFont(doc){
  * options:
  *  - filename?: string
  *  - returnType?: 'save' | 'blob' | 'bloburl' | 'arraybuffer' | 'datauristring'
- *  - autoSave?: boolean  // ถ้า false จะเหมือน returnType='blob'
+ *  - autoSave?: boolean
  */
 export default async function generateReceiptPDF(payload={}, options={}){
   const {
@@ -103,6 +102,9 @@ export default async function generateReceiptPDF(payload={}, options={}){
     contractStartDate, startDate, startYMD, service1Date,
     items=[], discount=0, vatRate=0, alreadyPaid=0,
     footerNotice="สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
+    // ใหม่: หมายเหตุ/ธนาคารแบบกำหนดเอง
+    remarkLines,       // string[] (optional)
+    bankRemark,        // string (optional) เช่น "ธนาคาร... เลขบัญชี... / ชื่อบัญชี..."
   } = payload;
 
   const contractStart =
@@ -147,7 +149,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
     `โทรศัพท์: ${clientPhone || "-"}`,
   ];
 
-  // ใช้ "วันที่เริ่มสัญญา" ตามที่ต้องการ
+  // ใช้ "วันที่เริ่มสัญญา" เป็นข้อมูลอ้างอิง/ครบกำหนด (ถ้าต้องการเปลี่ยน label ส่ง text เองได้)
   const rightLines = [
     `เลขที่: ${receiptNo || "-"}`,
     `วันที่: ${fmtDate(issueDate)}`,
@@ -215,7 +217,12 @@ export default async function generateReceiptPDF(payload={}, options={}){
   doc.text(T("หมายเหตุ:"), M, noteY);
   noteY += 16;
 
-  DEFAULT_REMARK_LINES.forEach(line => {
+  // เลือกบรรทัดหมายเหตุจาก payload ก่อน
+  const remarkBlockLines = Array.isArray(remarkLines) && remarkLines.length > 0
+    ? remarkLines
+    : (bankRemark ? [bankRemark] : DEFAULT_REMARK_LINES);
+
+  remarkBlockLines.forEach(line => {
     noteY = textBlock(doc, line, M, noteY, remarkW);
     noteY += 2;
   });
@@ -259,7 +266,9 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const rows = [
     ["รวมเงิน", money(subTotal), "normal"],
     ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
-    [`ภาษีมูลค่าเพิ่ม 7%`, 0, "normal"],
+    ...(Number(vatRate) > 0
+      ? [[`ภาษีมูลค่าเพิ่ม ${Math.round(Number(vatRate)*100)}%`, money(vat), "normal"]]
+      : []),
     ...(Number(alreadyPaid) > 0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`, "highlight"]] : []),
     ["รวมเงินทั้งสิ้น", money(netTotal), "bold"],
   ];
@@ -310,9 +319,9 @@ export default async function generateReceiptPDF(payload={}, options={}){
   });
 
   doc.setFontSize(11); doc.setFont(FAMILY,"normal");
-  doc.text(S(footerNotice), M, signY + FOOTER_GAP);
+  doc.text(T(footerNotice), M, signY + FOOTER_GAP);
 
-  // === โหมดส่งออกสำหรับให้ลูกค้ากดรับเอง ===
+  // === โหมดส่งออก ===
   const fname = options.filename || `Receipt-${receiptNo || fmtDate(issueDate)}.pdf`;
   const ret = options.returnType || (options.autoSave === false ? 'blob' : 'save');
 

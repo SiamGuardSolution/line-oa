@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import "./CheckPage.css";
 import generateReceiptPDF from "./lib/generateReceiptPDF";
+import { getPackageLabel, getPackagePrice } from "./config/packages";
 
 /* ---------------------- CONFIG ---------------------- */
 const HOST = window.location.hostname;
@@ -17,37 +18,36 @@ function buildCheckUrls(digits) {
   return API_BASES.map(base => `${base}/api/check-contract?phone=${encodeURIComponent(digits)}&v=${v}`);
 }
 
-/** Package helpers (label/price) */
-function derivePkg(c) {
-  if (!c) return "3993";
-  if (c.pkg) {
-    if (c.pkg === "mix")  return "8500";
-    if (c.pkg === "bait") return "5500";
-    return "3993";
+/** Package helpers (key/label/price) */
+// → คืนคีย์แพ็กเกจ "spray" | "bait" | "mix"
+function derivePkgKey(c) {
+  if (!c) return "spray";
+  // 1) ถ้า API/ชีตส่งคีย์มา
+  if (c.pkg && ["spray","bait","mix"].includes(String(c.pkg).toLowerCase())) {
+    return String(c.pkg).toLowerCase();
   }
-  // fallback จากข้อความเก่า
-  const raw = `${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
-    .toLowerCase().replace(/[,\s]/g, "");
-  if (raw.includes("8500") || raw.includes("ผสม") || raw.includes("mix") || raw.includes("combo")) return "8500";
-  if (raw.includes("เหยื่อ") || raw.includes("bait") || raw.includes("5500")) return "5500";
-  return "3993";
+  // 2) เดิมเคยจับจากข้อความ label/ประเภท
+  const raw = `${c?.package || ""}|${c?.packageLabel || ""}|${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
+    .toLowerCase();
+  if (/\bmix|ผสม|combo/.test(raw)) return "mix";
+  if (/\bbait|เหยื่อ/.test(raw)) return "bait";
+  if (/\bspray|ฉีด/.test(raw)) return "spray";
+
+  // 3) สุดท้าย เผื่อระบบเก่าเคยฝังราคาไว้ในข้อความ
+  const text = `${c?.priceText || ""}`.toLowerCase();
+  if (/8500/.test(text)) return "mix";
+  if (/5500/.test(text)) return "bait";
+  return "spray";
 }
 
-const labelFromContract = (c) => {
-  const code = derivePkg(c);
-  return c?.packageLabel ||
-    (code === "8500" ? "ผสมผสาน 8,500 บาท/ปี"
-      : code === "5500" ? "วางเหยื่อ 5,500 บาท"
-      : "อัดน้ำยา+ฉีดพ่น 3,993 บาท/ปี");
-};
+const labelFromContract = (c) => getPackageLabel(derivePkgKey(c));
 
 const priceTextFrom = (c) => {
-  if (!c) return "-";
-  if (c.priceText) return c.priceText;
-  const code = derivePkg(c);
-  if (code === "8500") return "8,500 บาท/ปี";
-  if (code === "5500") return "5,500 บาท";
-  return "3,993 บาท/ปี";
+  // ถ้า API มี text มาอยู่แล้วก็ใช้เลย
+  if (c?.priceText) return String(c.priceText);
+  // ไม่งั้นแปลงจาก config เป็นข้อความราคา
+  const price = getPackagePrice(derivePkgKey(c)) ?? 0;
+  return price ? `${Number(price).toLocaleString('th-TH')} บาท` : "-";
 };
 
 const toNumberSafe = (v) => {
@@ -101,13 +101,11 @@ const scanDiscountInStrings = (obj) => {
   return found || 0;
 };
 
+// ราคา base จาก config เป็นหลัก (ถ้า API ส่ง priceText มาเป็นตัวเลข ก็รองรับ)
 const basePriceFrom = (c) => {
   const fromText = toNumberSafe(priceTextFrom(c));
   if (fromText > 0) return fromText;
-  const code = derivePkg(c);
-  if (code === '8500') return 8500;
-  if (code === '5500') return 5500;
-  return 3993;
+  return getPackagePrice(derivePkgKey(c)) ?? 0;
 };
 
 const discountFrom = (c) => {
@@ -259,11 +257,9 @@ export default function CheckPage() {
     if (!c) return c;
     const out = { ...c };
 
-    // extract date by round index or label: "Service รอบที่ N", "ครั้งที่ N"
     const svc = Array.isArray(c.services) ? c.services : [];
     const getByIndex = (n) => svc[n - 1]?.date || "";
 
-    // ลองจับจาก label เผื่อมีการสลับลำดับ
     const findByLabel = (n) => {
       const re = new RegExp(`(service\\s*รอบที่\\s*${n}|รอบที่\\s*${n}|ครั้งที่\\s*${n})`, 'i');
       const hit = svc.find(x => re.test(String(x?.label || "")));
@@ -273,7 +269,6 @@ export default function CheckPage() {
     for (let i = 1; i <= 6; i++) {
       out[`service${i}`] = firstNonEmpty(findByLabel(i), getByIndex(i), out[`service${i}`]) || "";
     }
-
     return out;
   };
 
@@ -301,12 +296,11 @@ export default function CheckPage() {
       }
       if (!data) throw lastErr || new Error("FETCH_FAILED");
 
-      // ---- ใช้ contracts[] ถ้ามี, รองรับรูปแบบเก่า {contract: {...}} ----
       let list = [];
       if (Array.isArray(data.contracts) && data.contracts.length) list = data.contracts;
       else if (data.contract) list = [data.contract];
 
-      list = list.map(normalizeContractRecord); // << สำคัญ: map service1/2/... จากชีต
+      list = list.map(normalizeContractRecord);
 
       if (list.length) { setContracts(list); setActiveIdx(0); }
       else { setContracts([]); setError("ไม่พบข้อมูลสัญญาตามเบอร์ที่ระบุ"); }
@@ -326,8 +320,8 @@ export default function CheckPage() {
   /** ===== กำหนดการ: ใช้ค่าจากชีตก่อน แล้วค่อย fallback ===== */
   const scheduleGroups = useMemo(() => {
     if (!contract) return [];
-    const pkg   = derivePkg(contract);
-    const start = contract.startDate || "";
+    const pkgKey = derivePkgKey(contract);
+    const start  = contract.startDate || "";
 
     // ใช้วันที่จากชีตที่ normalize แล้วก่อน (service1/service2)
     const sprayS1 = firstNonEmpty(contract.service1) || (start ? addMonths(start, 4) : "");
@@ -340,14 +334,14 @@ export default function CheckPage() {
 
     const end = contract.endDate || (start ? addMonths(start, 12) : "");
 
-    if (pkg === "3993") { // Spray
+    if (pkgKey === "spray") {
       return [
         { title: "ฉีดพ่น (2 ครั้ง/ปี)", kind: "spray", items: makeSprayItems(start, sprayS1, sprayS2) },
         { title: "สิ้นสุดสัญญา",        kind: "end",   items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] },
       ];
     }
 
-    if (pkg === "5500") { // Bait
+    if (pkgKey === "bait") {
       const items = baitDates.length
         ? baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i + 1}`, date: d }))
         : makeBaitItems(start, 5, 20);
@@ -357,7 +351,7 @@ export default function CheckPage() {
       ];
     }
 
-    // Mix
+    // mix
     const baitItems = baitDates.length
       ? baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i + 1}`, date: d }))
       : makeBaitItems(start, 5, 20);
@@ -471,7 +465,7 @@ export default function CheckPage() {
       )}
 
       {contracts.map((c, i) => {
-        const p = derivePkg(c);
+        const key = derivePkgKey(c);
         return (
           <button
             key={i}
@@ -483,7 +477,7 @@ export default function CheckPage() {
             }}
             title={labelFromContract(c)}
           >
-            {(c.startDate || "ไม่ทราบวันเริ่ม")} · {p === "5500" ? "เหยื่อ" : p === "8500" ? "ผสมผสาน" : "ฉีดพ่น"}
+            {(c.startDate || "ไม่ทราบวันเริ่ม")} · {getPackageLabel(key)}
           </button>
         );
       })}
@@ -559,9 +553,9 @@ export default function CheckPage() {
               <h3 className="title">กำหนดการ</h3>
               <span className="pill">
                 {(() => {
-                  const pkg = derivePkg(contract);
-                  if (pkg === "5500") return "วางเหยื่อ: ทุก 20 วัน (5 ครั้ง)";
-                  if (pkg === "3993") return "ฉีดพ่น: 2 ครั้ง / ปี";
+                  const k = derivePkgKey(contract);
+                  if (k === "bait") return "วางเหยื่อ: ทุก 20 วัน (5 ครั้ง)";
+                  if (k === "spray") return "ฉีดพ่น: 2 ครั้ง / ปี";
                   return "ผสมผสาน: เหยื่อ 5 ครั้ง + ฉีดพ่น 2 ครั้ง";
                 })()}
               </span>

@@ -1,6 +1,7 @@
 // src/lib/generateContractPDF.js
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getPackageLabel, getPackagePrice } from "../config/packages";
 
 /* ---------- helpers ---------- */
 const fmtThaiDate = (d) => {
@@ -20,7 +21,7 @@ const addMonths = (date, months) => {
   return d;
 };
 
-// พิมพ์ข้อความแบบปลอดภัย: บังคับชนิดข้อมูล และกัน x,y ที่ไม่ใช่ตัวเลข
+// พิมพ์ข้อความแบบปลอดภัย
 const TXT = (doc, text, x, y, opts) => {
   const S = v => (v == null ? "" : String(v));
   const isNum = n => typeof n === "number" && isFinite(n);
@@ -33,15 +34,35 @@ const TXT = (doc, text, x, y, opts) => {
   }
 };
 
+// เดา pkgKey จากข้อมูลสัญญา ถ้าไม่มีคีย์มา
+const derivePkgKey = (service = {}, rawAll = {}) => {
+  // 1) ใช้คีย์โดยตรงถ้ามี
+  const direct = (service.pkgKey || rawAll.pkg || rawAll.package || "").toString().toLowerCase();
+  if (["spray", "bait", "mix"].includes(direct)) return direct;
+
+  // 2) เดาจากข้อความ
+  const raw = `${service.packageName || ""}|${service.type || ""}|${rawAll.serviceType || ""}`.toLowerCase();
+  if (/mix|ผสม|combo/.test(raw)) return "mix";
+  if (/bait|เหยื่อ/.test(raw))  return "bait";
+  if (/spray|ฉีดพ่น/.test(raw)) return "spray";
+
+  // 3) เดาจากราคา (เผื่อระบบเก่า)
+  const p = Number(service.basePrice || 0) || Number((rawAll.priceText || "").replace(/[^\d.]/g, "")) || 0;
+  if (p === getPackagePrice("mix"))   return "mix";
+  if (p === getPackagePrice("bait"))  return "bait";
+  if (p === getPackagePrice("spray")) return "spray";
+
+  return "mix"; // ค่าเริ่มต้นถือเป็นแพ็กเกจผสม (เพื่อแสดงทั้ง 2 ตาราง)
+};
+
 /* ---------- spacing presets ---------- */
 const SPACING = {
   afterTable: 18,
-  beforeTermsHeader: 14, // เพิ่มช่องไฟก่อนหัวข้อ
-  afterTermsHeader: 18,   // ช่องไฟหลังหัวข้อ
-  termLine: 12,          // ลด line-height ภายในข้อย่อย
-  termItemGap: 4,        // ลดช่องไฟหลังจบแต่ละข้อ
+  beforeTermsHeader: 14,
+  afterTermsHeader: 18,
+  termLine: 12,
+  termItemGap: 4,
 };
-// กันพื้นที่สำหรับบล็อกลายเซ็น (กล่องสูง ~110pt + เผื่อระยะ)
 const SIGN_RESERVE = 150;
 
 /* ---------- font loader (same pattern as generateReceiptPDF) ---------- */
@@ -77,7 +98,7 @@ async function ensureThaiFont(doc){
  *   contractNumber, contractDate, startDate, endDate,
  *   company: { name, address, phone },
  *   client:  { name, phone, address, facebook },
- *   service: { type, packageName, basePrice, addons:[{name, price}], intervalMonths?:number },
+ *   service: { pkgKey?, type, packageName, basePrice, addons:[{name, price}], intervalMonthsSpray?, intervalMonthsBait? },
  *   schedule: [ { round, dueDate?, date?, visitDate?, visit?, note? }, ... ],
  *   terms: [ "..." ],
  *   logoDataUrl?
@@ -99,6 +120,16 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   } = data;
 
   const fileName = opts.fileName || `Contract_${contractNumber || Date.now()}.pdf`;
+
+  // ===== ผูกกับ config กลาง =====
+  const pkgKey     = derivePkgKey(service, data);
+  const pkgName    = service.packageName || getPackageLabel(pkgKey);
+  const basePrice  = (service.basePrice ?? null) !== null ? service.basePrice : getPackagePrice(pkgKey);
+
+  // โหมดตาราง
+  const isSpray = pkgKey === "spray";
+  const isBait  = pkgKey === "bait";
+  
 
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: false });
   await ensureThaiFont(doc);
@@ -155,13 +186,11 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   custLines.forEach((t, i) => TXT(doc, t, M, y + i * 16));
   y += custLines.length * 16 + 10;
 
-  // รายละเอียดแพ็กเกจ
-  const s = service || {};
-  const addons = Array.isArray(s.addons) ? s.addons : [];
+  // รายละเอียดแพ็กเกจ (ชื่อมาจาก config)
+  const addons = Array.isArray(service.addons) ? service.addons : [];
   const pkgLines = [
-    s.type ? `ประเภทบริการ: กำจัดปลวก` : "",
-    s.packageName ? `แพ็กเกจ: ${s.packageName}` : "",
-    (s.basePrice != null) ? `ราคาแพ็กเกจ: ${Number(s.basePrice).toLocaleString("th-TH")} บาท` : "",
+    `แพ็กเกจ: ${pkgName}`,
+    (basePrice != null) ? `ราคาแพ็กเกจ: ${Number(basePrice).toLocaleString("th-TH")} บาท` : "",
   ].filter(Boolean);
   pkgLines.forEach((t, i) => TXT(doc, t, M, y + i * 16));
   y += pkgLines.length * 16 + 6;
@@ -182,7 +211,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
   }
 
-  /* ===== ตารางรอบบริการ (Top 2 = Spray , Bottom 5 = Bait) ===== */
+  /* ===== ตารางรอบบริการ (Top = Spray , Bottom = Bait) ===== */
   const MAX_TOP = 2;
   const MAX_BOTTOM = 5;
 
@@ -192,45 +221,32 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     note:  it?.note ?? "",
   });
 
-  // ---------- ตรวจโหมดบริการ ----------
-  const label = `${(service.type || "")} ${(service.packageName || "")}`.toLowerCase();
-  const isMix   = /mix|ผสม/.test(label) || (!/spray|ฉีดพ่น|bait|เหยื่อ/.test(label)); // default เป็น mix
-  const isSpray = /spray|ฉีดพ่น/.test(label) && !isMix;
-  const isBait  = /bait|เหยื่อ/.test(label) && !isMix;
-
-  // ตารางที่ส่งแยกมาใน service (ถ้ามี)
   const spraySrc = Array.isArray(service.spraySchedule) ? service.spraySchedule : null;
   const baitSrc  = Array.isArray(service.baitSchedule)  ? service.baitSchedule  : null;
 
-  const schedTop = [];     // สำหรับ Spray
-  const schedBottom = [];  // สำหรับ Bait
+  const schedTop = [];     // Spray
+  const schedBottom = [];  // Bait
 
-  // ---------- เติมข้อมูลตามโหมด ----------
   if (isSpray) {
-    // Spray only → แสดงในตารางบนเท่านั้น
     (spraySrc || schedule || []).slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
   } else if (isBait) {
-    // Bait only → แสดงในตารางล่างเท่านั้น
     (baitSrc || schedule || []).slice(0, MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
   } else {
-    // Mix (หรือไม่ได้ระบุชัด) → ใช้แบบเดิม: Spray=ตารางบน, Bait=ตารางล่าง
     if (spraySrc?.length || baitSrc?.length) {
       (spraySrc || []).slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
       (baitSrc  || []).slice(0, MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
     } else {
-      // fallback จาก schedule เดิม: แยก 2 บรรทัดแรกเป็นบน ที่เหลือเป็นล่าง
       const combined = Array.isArray(schedule) ? schedule : [];
       combined.slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
       combined.slice(MAX_TOP, MAX_TOP + MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
     }
   }
 
-  // ---------- เติมออโต้ถ้ายังไม่ครบจำนวนแถว ----------
+  // เติมออโต้ให้ครบจำนวนแถว
   const intSpray = Number(service.intervalMonthsSpray ?? service.intervalMonths ?? 4);
   const intBait  = Number(service.intervalMonthsBait  ?? service.intervalMonths ?? 4);
 
-  // บน (Spray)
-  if (!isBait) { // spray & mix เท่านั้นที่ควร auto-gen ให้บน
+  if (!isBait) {
     for (let i = schedTop.length; i < MAX_TOP; i++) {
       const d = startDate ? addMonths(startDate, intSpray * (i + 1)) : null;
       schedTop.push({ due: fmtThaiDate(d), visit: "", note: "" });
@@ -239,8 +255,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     while (schedTop.length < MAX_TOP) schedTop.push({ due: "", visit: "", note: "" });
   }
 
-  // ล่าง (Bait)
-  if (!isSpray) { // bait & mix เท่านั้นที่ควร auto-gen ให้ล่าง
+  if (!isSpray) {
     for (let i = schedBottom.length; i < MAX_BOTTOM; i++) {
       const d = startDate ? addMonths(startDate, intBait * (i + 1)) : null;
       schedBottom.push({ due: fmtThaiDate(d), visit: "", note: "" });
@@ -249,7 +264,8 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     while (schedBottom.length < MAX_BOTTOM) schedBottom.push({ due: "", visit: "", note: "" });
   }
 
-  const topTitle = service.topTitle ?? "ตารางบริการฉีดพ่น (Spray)";
+  // ชื่อหัวตาราง
+  const topTitle    = service.topTitle    ?? "ตารางบริการฉีดพ่น (Spray)";
   const bottomTitle = service.bottomTitle ?? "ตารางบริการวางเหยื่อ (Bait)";
 
   const headCols = [
@@ -261,10 +277,10 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     "หมายเหตุ",
   ];
 
-  const TITLE_GAP = 2;     // เว้นระหว่าง "ชื่อ" กับ "หัวตาราง" (ชิดมาก)
-  const TABLE_GAP = 24;    // เว้นระหว่าง "ตารางบน" กับ "ชื่อของตารางล่าง"
+  const TITLE_GAP = 2;
+  const TABLE_GAP = 24;
 
-  /* ===== ตารางบน (2 แถว = Spray) ===== */
+  // ตารางบน (Spray)
   doc.setFont(FAMILY, "bold");
   TXT(doc, topTitle, M, y);
   doc.setFont(FAMILY, "normal");
@@ -293,9 +309,9 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       5: { cellWidth: "auto" },
     },
   });
-  y = (doc.lastAutoTable?.finalY || y) + TABLE_GAP; // เว้นให้ห่างก่อนพิมพ์ชื่อของตารางล่าง
+  y = (doc.lastAutoTable?.finalY || y) + TABLE_GAP;
 
-  /* ===== ตารางล่าง (5 แถว = Bait) ===== */
+  // ตารางล่าง (Bait)
   doc.setFont(FAMILY, "bold");
   TXT(doc, bottomTitle, M, y);
   doc.setFont(FAMILY, "normal");
@@ -326,7 +342,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   });
   y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
 
-  /* ---------- ข้อกำหนดและเงื่อนไข (พยายามอัดให้อยู่หน้าเดียว) ---------- */
+  /* ---------- ข้อกำหนดและเงื่อนไข ---------- */
   if (terms.length) {
     y += SPACING.beforeTermsHeader;
     doc.setFont(FAMILY, "bold");
@@ -335,7 +351,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     y += SPACING.afterTermsHeader;
 
     const maxW = W - M * 2;
-    const breakAt = H - SIGN_RESERVE; // อย่าให้ล้นเข้าโซนลายเซ็น
+    const breakAt = H - SIGN_RESERVE;
 
     for (let i = 0; i < terms.length; i++) {
       const text = `${i + 1}. ${String(terms[i] ?? "")}`;
@@ -343,7 +359,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       const needH = lines.length * SPACING.termLine + SPACING.termItemGap;
 
       if (y + needH > breakAt) {
-        // ถ้าเกินจริง ๆ ค่อยขึ้นหน้าใหม่
         doc.addPage();
         await ensureThaiFont(doc);
         y = 56;

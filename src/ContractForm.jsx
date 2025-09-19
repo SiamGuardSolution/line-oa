@@ -1,35 +1,37 @@
 // src/ContractForm.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./ContractForm.css";
 import generateReceiptPDF from "./lib/generateReceiptPDF";
 import generateContractPDF from "./lib/generateContractPDF";
+import { getPackageLabel, getPackagePrice } from "./config/packages";
 
 const API_URL = "/api/submit-contract";
 
-// ราคาพื้นฐานแต่ละแพ็กเกจ
-const BASE_PRICES = { spray: 3993, bait: 5500, mix: 8500 };
-
-// ข้อมูลบริษัท (แก้เป็นข้อมูลจริงของ Siam Guard)
+// ===== ข้อมูลบริษัท (แก้เป็นข้อมูลจริงของ Siam Guard) =====
 const COMPANY = {
   name: "สยามการ์ด โซลูชั่น (ประเทศไทย) จำกัด",
   address: "99 หมู่ 17 ต.คลองหนึ่ง อ.คลองหลวง จ.ปทุมธานี 12120",
   phone: "063-364-5567, 088-792-4027",
+  // taxId: "", // ถ้ามีให้ใส่
   // bank: { name: "", account: "", accountName: "" }, // ถ้ามี
 };
 
 // อัตราภาษีสำหรับใบเสร็จ (สัญญาไม่ได้ใช้)
 const VAT_RATE = 0;
 
+/* 
+  NOTE: เก็บเฉพาะ field schedule ของแต่ละแพ็กเกจไว้ที่นี่ 
+  ส่วน "ชื่อแพ็กเกจ" ให้ดึงจาก PACKAGE_LABEL / getPackageLabel เสมอ
+*/
 const PACKAGES = {
   spray: {
-    label: "ฉีดพ่น (Spray)",
+    // label จะไม่ใช้ค่าคงที่แล้ว ให้เรียก getPackageLabel(form.package) แทน
     fields: [
       { key: "service1", label: "Service รอบที่ 1" },
       { key: "service2", label: "Service รอบที่ 2" },
     ],
   },
   bait: {
-    label: "วางเหยื่อ (Bait)",
     fields: [
       { key: "service1", label: "Service รอบที่ 1" },
       { key: "service2", label: "Service รอบที่ 2" },
@@ -39,7 +41,6 @@ const PACKAGES = {
     ],
   },
   mix: {
-    label: "ผสมผสาน (Mix)",
     fields: [
       { key: "serviceSpray1", label: "Service Spray รอบที่ 1" },
       { key: "serviceSpray2", label: "Service Spray รอบที่ 2" },
@@ -159,6 +160,8 @@ function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
     })
     .filter(Boolean);
 
+  const pkgName = getPackageLabel(form.package);
+
   const data = {
     contractNumber: makeContractNo(),
     contractDate: new Date(),
@@ -181,12 +184,15 @@ function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
     },
 
     service: {
-      type: PACKAGES[form.package]?.label || form.package,
-      packageName: PACKAGES[form.package]?.label || "",
+      type: pkgName,
+      packageName: pkgName,
       basePrice: baseServicePrice,
       addons: (addons || [])
         .filter((r) => r && (r.name || r.qty || r.price))
-        .map((r) => ({ name: r.name || "รายการเพิ่มเติม", price: Number(r.price || 0) * Number(r.qty || 0) })),
+        .map((r) => ({
+          name: r.name || "รายการเพิ่มเติม",
+          price: Number(r.price || 0) * Number(r.qty || 0),
+        })),
     },
 
     schedule,
@@ -211,17 +217,17 @@ function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
 export default function ContractForm() {
   const [form, setForm] = useState({ ...emptyForm });
 
-  // ราคาแพ็กเกจตามที่เลือก
-  const baseServicePrice = React.useMemo(
-    () => BASE_PRICES[form.package] ?? 0,
+  // ===== ราคาบริการหลักตามแพ็กเกจ (อิง config กลาง) =====
+  const baseServicePrice = useMemo(
+    () => getPackagePrice(form.package),
     [form.package]
   );
 
-  // รายการฐานเพื่อส่งให้ backend (รูปแบบ items)
-  const items = React.useMemo(
+  // ===== items สำหรับส่ง backend / คิดยอด =====
+  const items = useMemo(
     () => [
       {
-        name: `ค่าบริการแพ็กเกจ ${PACKAGES[form.package]?.label || ""}`,
+        name: `ค่าบริการแพ็กเกจ ${getPackageLabel(form.package)}`,
         quantity: 1,
         price: baseServicePrice,
       },
@@ -229,8 +235,12 @@ export default function ContractForm() {
     [form.package, baseServicePrice]
   );
 
-  const itemsSubtotal = baseServicePrice;
+  const itemsSubtotal = useMemo(
+    () => baseServicePrice,
+    [baseServicePrice]
+  );
 
+  // ===== Add-ons =====
   const [addons, setAddons] = useState([{ name: "", qty: 1, price: 0 }]);
   const addAddonRow = () => setAddons((rows) => [...rows, { name: "", qty: 1, price: 0 }]);
   const removeAddonRow = (i) => setAddons((rows) => rows.filter((_, idx) => idx !== i));
@@ -252,7 +262,7 @@ export default function ContractForm() {
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
   const phoneDigits = (s) => digitsOnly(s);
 
-  const [discountValue, setDiscountValue] = React.useState("");
+  const [discountValue, setDiscountValue] = useState("");
 
   // Auto-generate ตารางบริการ / endDate จาก startDate
   useEffect(() => {
@@ -273,9 +283,12 @@ export default function ContractForm() {
     return "";
   };
 
-  const addonsSubtotal = (addons || []).reduce(
-    (sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0),
-    0
+  const addonsSubtotal = useMemo(
+    () => (addons || []).reduce(
+      (sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0),
+      0
+    ),
+    [addons]
   );
 
   const discountNum = discountValue === "" ? 0 : Number(discountValue);
@@ -285,7 +298,7 @@ export default function ContractForm() {
   async function handleCreateReceiptPDF() {
     const pdfItems = [
       {
-        description: `ค่าบริการแพ็กเกจ ${PACKAGES[form.package]?.label || ""}`,
+        description: `ค่าบริการแพ็กเกจ ${getPackageLabel(form.package)}`,
         qty: 1,
         unitPrice: baseServicePrice,
       },
@@ -343,8 +356,9 @@ export default function ContractForm() {
       return;
     }
     const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
-    try { 
-      await generateContractPDF(data, { fileName }); } catch (e) {
+    try {
+      await generateContractPDF(data, { fileName });
+    } catch (e) {
       console.error(e);
       alert("สร้างสัญญาไม่สำเร็จ: " + (e?.message || e));
     }
@@ -407,6 +421,8 @@ export default function ContractForm() {
     }
   };
 
+  const pkgOptions = Object.keys(PACKAGES);
+
   return (
     <div className="cf">
       <div className="cf__card">
@@ -434,8 +450,10 @@ export default function ContractForm() {
               value={form.package}
               onChange={(e) => setVal("package", e.target.value)}
             >
-              {Object.entries(PACKAGES).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
+              {pkgOptions.map((k) => (
+                <option key={k} value={k}>
+                  {getPackageLabel(k)} {/* ← ดึงชื่อจาก config กลาง */}
+                </option>
               ))}
             </select>
           </div>
@@ -568,7 +586,7 @@ export default function ContractForm() {
           <fieldset className="cf__fieldset">
             <legend className="cf__legend">กำหนดการบริการ</legend>
             <div className="cf__services">
-              {pkgConf.fields.map(({ key, label }) => (
+              {(pkgConf.fields || []).map(({ key, label }) => (
                 <div className="cf__field" key={key}>
                   <label className="cf__label">{label}</label>
                   <input type="date" className="cf__input" value={form[key] || ""} onChange={(e) => setVal(key, e.target.value)} />
@@ -594,7 +612,11 @@ export default function ContractForm() {
             <button type="submit" className="cf__btn cf__btn--primary" disabled={loading}>
               {loading ? "กำลังบันทึก..." : "บันทึกข้อมูลสัญญา"}
             </button>
-            <button type="button" className="cf__btn cf__btn--ghost" onClick={() => setForm({ ...emptyForm, package: form.package })}>
+            <button
+              type="button"
+              className="cf__btn cf__btn--ghost"
+              onClick={() => setForm({ ...emptyForm, package: form.package })}
+            >
               ล้างฟอร์ม
             </button>
           </div>
