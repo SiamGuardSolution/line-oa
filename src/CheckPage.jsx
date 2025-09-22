@@ -328,50 +328,55 @@ export default function CheckPage() {
     await searchByDigits(digits);
   };
 
+  // อ่านวันที่รอบ Spray (คีย์ใหม่ก่อน → คีย์เก่า → คำนวณ)
+  const readSprayDates = (c, start) => {
+    const s1 = firstNonEmpty(c?.serviceSpray1, c?.service1) || (start ? addMonths(start, 4) : "");
+    const s2 = firstNonEmpty(c?.serviceSpray2, c?.service2) || (s1 ? addMonths(s1, 4) : (start ? addMonths(start, 8) : ""));
+    return { s1, s2 };
+  };
+
+  // อ่านวันที่รอบ Bait: ลอง serviceBait1..5 ก่อน → services[] → คำนวณ
+  const readBaitDates = (c, start) => {
+    const keys = ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"];
+    const fromKeys = keys.map(k => c?.[k]).filter(Boolean);
+    if (fromKeys.length) return fromKeys;
+
+    const fromServices = (c?.services || [])
+      .filter(s => /(bait|เหยื่อ|ครั้งที่|รอบที่)/i.test(s?.label || "") && s?.date)
+      .map(s => s.date);
+    if (fromServices.length) return fromServices;
+
+    // fallback: คำนวณทุก 20 วัน 5 ครั้ง
+    return makeBaitItems(start, 5, 20).map(x => x.date);
+  };
+
   /** ===== กำหนดการ: ใช้ค่าจากชีตก่อน แล้วค่อย fallback ===== */
   const scheduleGroups = useMemo(() => {
     if (!contract) return [];
     const pkgKey = derivePkgKey(contract);
     const start  = contract.startDate || "";
+    const end    = contract.endDate || (start ? addMonths(start, 12) : "");
 
-    // ใช้วันที่จากชีตที่ normalize แล้วก่อน (service1/service2)
-    const sprayS1 = firstNonEmpty(contract.service1) || (start ? addMonths(start, 4) : "");
-    const sprayS2 = firstNonEmpty(contract.service2) || (sprayS1 ? addMonths(sprayS1, 4) : (start ? addMonths(start, 8) : ""));
+    // อ่านรอบจากคีย์ใหม่ (มี fallback ใน helper)
+    const { s1: sprayS1, s2: sprayS2 } = readSprayDates(contract, start);
+    const baitDates = readBaitDates(contract, start);
 
-    // bait จาก services[] ตามลำดับ/label
-    const baitDates = (contract?.services || [])
-      .filter(s => /(bait|เหยื่อ|ครั้งที่|รอบที่)/i.test(s.label || "") && s.date)
-      .map(s => s.date);
-
-    const end = contract.endDate || (start ? addMonths(start, 12) : "");
+    const sprayGroup = { title: "ฉีดพ่น (2 ครั้ง/ปี)",            kind: "spray", items: makeSprayItems(start, sprayS1, sprayS2) };
+    const baitGroup  = { title: "วางเหยื่อ (ทุก 20 วัน 5 ครั้ง)", kind: "bait",  items: baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i + 1}`, date: d })) };
+    const endGroup   = { title: "สิ้นสุดสัญญา",                   kind: "end",   items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] };
 
     if (pkgKey === "spray") {
-      return [
-        { title: "ฉีดพ่น (2 ครั้ง/ปี)", kind: "spray", items: makeSprayItems(start, sprayS1, sprayS2) },
-        { title: "สิ้นสุดสัญญา",        kind: "end",   items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] },
-      ];
+      // Spray: แสดงเฉพาะ Spray + End
+      return [sprayGroup, endGroup];
     }
 
     if (pkgKey === "bait") {
-      const items = baitDates.length
-        ? baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i + 1}`, date: d }))
-        : makeBaitItems(start, 5, 20);
-      return [
-        { title: "วางเหยื่อ (ทุก 20 วัน 5 ครั้ง)", kind: "bait", items },
-        { title: "สิ้นสุดสัญญา",                    kind: "end",  items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] },
-      ];
+      // ✅ Bait: แสดงทั้ง Bait + Spray + End (เหมือน Mix)
+      return [baitGroup, sprayGroup, endGroup];
     }
 
-    // mix
-    const baitItems = baitDates.length
-      ? baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i + 1}`, date: d }))
-      : makeBaitItems(start, 5, 20);
-
-    return [
-      { title: "วางเหยื่อ (ทุก 20 วัน 5 ครั้ง)", kind: "bait",  items: baitItems },
-      { title: "ฉีดพ่น (2 ครั้ง/ปี)",            kind: "spray", items: makeSprayItems(start, sprayS1, sprayS2) },
-      { title: "สิ้นสุดสัญญา",                  kind: "end",   items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] },
-    ];
+    // Mix: Bait + Spray + End
+    return [baitGroup, sprayGroup, endGroup];
   }, [contract]);
 
   const contractStatus = useMemo(() => {
@@ -565,8 +570,9 @@ export default function CheckPage() {
               <span className="pill">
                 {(() => {
                   const k = derivePkgKey(contract);
-                  if (k === "bait") return "วางเหยื่อ: ทุก 20 วัน (5 ครั้ง)";
                   if (k === "spray") return "ฉีดพ่น: 2 ครั้ง / ปี";
+                  // ✅ Bait = ผสมผสาน เหมือน Mix
+                  if (k === "bait") return "ผสมผสาน: เหยื่อ 5 ครั้ง + ฉีดพ่น 2 ครั้ง";
                   return "ผสมผสาน: เหยื่อ 5 ครั้ง + ฉีดพ่น 2 ครั้ง";
                 })()}
               </span>

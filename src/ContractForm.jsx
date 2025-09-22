@@ -18,42 +18,52 @@ const COMPANY = {
   name: "สยามการ์ด โซลูชั่น (ประเทศไทย) จำกัด",
   address: "99 หมู่ 17 ต.คลองหนึ่ง อ.คลองหลวง จ.ปทุมธานี 12120",
   phone: "063-364-5567, 088-792-4027",
-  // taxId: "", // ถ้ามีให้ใส่
-  // bank: { name: "", account: "", accountName: "" }, // ถ้ามี
+  // taxId: "",
+  // bank: { name: "", account: "", accountName: "" },
 };
 
 // อัตราภาษีสำหรับใบเสร็จ (สัญญาไม่ได้ใช้)
 const VAT_RATE = 0;
 
-/* NOTE: เก็บเฉพาะ field schedule ของแต่ละแพ็กเกจไว้ที่นี่ */
+// ---------- โครง groups ----------
+const SPRAY_FIELDS = [
+  { key: "serviceSpray1", label: "Service Spray รอบที่ 1" },
+  { key: "serviceSpray2", label: "Service Spray รอบที่ 2" },
+];
+
+const BAIT_FIELDS = [
+  { key: "serviceBait1", label: "Service Bait รอบที่ 1" },
+  { key: "serviceBait2", label: "Service Bait รอบที่ 2" },
+  { key: "serviceBait3", label: "Service Bait รอบที่ 3" },
+  { key: "serviceBait4", label: "Service Bait รอบที่ 4" },
+  { key: "serviceBait5", label: "Service Bait รอบที่ 5" },
+];
+
+// PACKAGES แบบ groups (+ fields fallback)
 const PACKAGES = {
   spray: {
-    fields: [
-      { key: "service1", label: "Service รอบที่ 1" },
-      { key: "service2", label: "Service รอบที่ 2" },
-    ],
+    groups: [{ type: "spray", title: "Service Spray", fields: SPRAY_FIELDS }],
   },
   bait: {
-    fields: [
-      { key: "service1", label: "Service รอบที่ 1" },
-      { key: "service2", label: "Service รอบที่ 2" },
-      { key: "service3", label: "Service รอบที่ 3" },
-      { key: "service4", label: "Service รอบที่ 4" },
-      { key: "service5", label: "Service รอบที่ 5" },
+    // ✅ bait = Spray + Bait เหมือน mix
+    groups: [
+      { type: "spray", title: "Service Spray", fields: SPRAY_FIELDS },
+      { type: "bait", title: "Service Bait", fields: BAIT_FIELDS },
     ],
   },
   mix: {
-    fields: [
-      { key: "serviceSpray1", label: "Service Spray รอบที่ 1" },
-      { key: "serviceSpray2", label: "Service Spray รอบที่ 2" },
-      { key: "serviceBait1", label: "Service Bait รอบที่ 1" },
-      { key: "serviceBait2", label: "Service Bait รอบที่ 2" },
-      { key: "serviceBait3", label: "Service Bait รอบที่ 3" },
-      { key: "serviceBait4", label: "Service Bait รอบที่ 4" },
-      { key: "serviceBait5", label: "Service Bait รอบที่ 5" },
+    groups: [
+      { type: "spray", title: "Service Spray", fields: SPRAY_FIELDS },
+      { type: "bait", title: "Service Bait", fields: BAIT_FIELDS },
     ],
   },
 };
+
+// flatten fields จาก groups (รองรับ fallback .fields)
+const getAllFields = (pkgConf) =>
+  (pkgConf.groups
+    ? pkgConf.groups.flatMap((g) => g.fields || [])
+    : (pkgConf.fields || []));
 
 const emptyForm = {
   package: "spray",
@@ -91,7 +101,7 @@ const addYears = (d, n) => addMonths(d, n * 12);
 const digitsOnly = (s) => String(s || "").replace(/\D/g, "");
 const taxIdDigits = (s) => digitsOnly(s).slice(0, 13);
 
-// คำนวณตารางบริการตามแพ็กเกจ
+// คำนวณตารางบริการตามแพ็กเกจ (เขียนทั้ง “คีย์ใหม่” และ “legacy” ให้พร้อม)
 function computeSchedule(pkg, startStr) {
   if (!startStr) return {};
   const start = new Date(startStr);
@@ -100,39 +110,31 @@ function computeSchedule(pkg, startStr) {
   const out = {};
   out.endDate = toISO(addYears(start, 1)); // +1 ปี
 
+  const s1 = addMonths(start, 4);
+  const s2 = addMonths(s1, 4);
+
   if (pkg === "spray") {
-    const s1 = addMonths(start, 4);
-    const s2 = addMonths(s1, 4);
-    out.service1 = toISO(s1);
-    out.service2 = toISO(s2);
-  } else if (pkg === "bait") {
-    const b1 = addDays(start, 20);
-    const b2 = addDays(b1, 20);
-    const b3 = addDays(b2, 20);
-    const b4 = addDays(b3, 20);
-    const b5 = addDays(b4, 20);
-    out.service1 = toISO(b1);
-    out.service2 = toISO(b2);
-    out.service3 = toISO(b3);
-    out.service4 = toISO(b4);
-    out.service5 = toISO(b5);
-  } else if (pkg === "mix") {
-    const s1 = addMonths(start, 4);
-    const s2 = addMonths(s1, 4);
     out.serviceSpray1 = toISO(s1);
     out.serviceSpray2 = toISO(s2);
-
-    const b1 = addDays(start, 20);
-    const b2 = addDays(b1, 20);
-    const b3 = addDays(b2, 20);
-    const b4 = addDays(b3, 20);
-    const b5 = addDays(b4, 20);
-    out.serviceBait1 = toISO(b1);
-    out.serviceBait2 = toISO(b2);
-    out.serviceBait3 = toISO(b3);
-    out.serviceBait4 = toISO(b4);
-    out.serviceBait5 = toISO(b5);
+    return out;
   }
+
+  // bait & mix มีทั้ง Spray + Bait
+  out.serviceSpray1 = toISO(s1);
+  out.serviceSpray2 = toISO(s2);
+
+  const b1 = addDays(start, 20);
+  const b2 = addDays(b1, 20);
+  const b3 = addDays(b2, 20);
+  const b4 = addDays(b3, 20);
+  const b5 = addDays(b4, 20);
+
+  out.serviceBait1 = toISO(b1);
+  out.serviceBait2 = toISO(b2);
+  out.serviceBait3 = toISO(b3);
+  out.serviceBait4 = toISO(b4);
+  out.serviceBait5 = toISO(b5);
+
   return out;
 }
 
@@ -148,13 +150,14 @@ const makeContractNo = () => {
 
 // ====== payload สำหรับ generateContractPDF ======
 function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
-  const schedule = (pkgConf.fields || [])
-    .map((f, idx) => {
+  const groups = pkgConf.groups || [{ title: "", fields: pkgConf.fields || [] }];
+  const schedule = groups.flatMap((g) =>
+    (g.fields || []).map((f, idx) => {
       const dateStr = form[f.key];
       if (!dateStr) return null;
-      return { round: idx + 1, date: dateStr, note: f.label || "" };
-    })
-    .filter(Boolean);
+      return { round: idx + 1, date: dateStr, note: f.label || g.title || "" };
+    }).filter(Boolean)
+  );
 
   const pkgName = pkgLabel(form.package);
 
@@ -210,7 +213,7 @@ export default function ContractForm() {
   const [form, setForm] = useState({ ...emptyForm });
 
   const baseServicePrice = useMemo(() => {
-    const fn  = PKG.getPackagePrice;
+    const fn = PKG.getPackagePrice;
     const map = PKG.PACKAGE_PRICE;
     const val = (typeof fn === "function") ? fn(form.package) : map?.[form.package];
     return Number(val ?? 0);
@@ -228,7 +231,6 @@ export default function ContractForm() {
     [form.package, baseServicePrice]
   );
 
-  // ไม่ต้อง useMemo ก็พอ
   const itemsSubtotal = baseServicePrice;
 
   // ===== Add-ons =====
@@ -334,6 +336,7 @@ export default function ContractForm() {
   async function handleCreateContractPDFOnly() {
     const err = validate();
     if (err) { alert(err); return; }
+    // อัปเกรดคีย์ bait (กรณีฟอร์มยังมี legacy)
     const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
     try {
       await generateContractPDF(data, { fileName });
@@ -351,6 +354,7 @@ export default function ContractForm() {
     const err = validate();
     if (err) return setMsg({ text: err, ok: false });
 
+    // เตรียม payload
     const payload = {
       package: form.package,
       name: form.name,
@@ -372,7 +376,9 @@ export default function ContractForm() {
       netBeforeVat,
     };
 
-    (pkgConf.fields || []).forEach(({ key }) => (payload[key] = form[key] || ""));
+    // เขียนคีย์ตารางบริการจาก groups (หรือ fields fallback)
+    const allFields = getAllFields(pkgConf);
+    allFields.forEach(({ key }) => (payload[key] = form[key] || ""));
 
     try {
       setLoading(true);
@@ -523,7 +529,7 @@ export default function ContractForm() {
               <input className="cf__input" value={form.address} onChange={(e) => setVal("address", e.target.value)} />
             </div>
 
-            {/* ✅ เลขผู้เสียภาษี */}
+            {/* เลขผู้เสียภาษี */}
             <div className="cf__field">
               <label className="cf__label">เลขประจำตัวผู้เสียภาษี</label>
               <input
@@ -559,17 +565,28 @@ export default function ContractForm() {
             </div>
           </div>
 
-          {/* ตารางบริการ */}
+          {/* ตารางบริการ: groups */}
           <fieldset className="cf__fieldset">
             <legend className="cf__legend">กำหนดการบริการ</legend>
-            <div className="cf__services">
-              {(pkgConf.fields || []).map(({ key, label }) => (
-                <div className="cf__field" key={key}>
-                  <label className="cf__label">{label}</label>
-                  <input type="date" className="cf__input" value={form[key] || ""} onChange={(e) => setVal(key, e.target.value)} />
+
+            {(pkgConf.groups || [{ title: "", fields: pkgConf.fields || [] }]).map((group, gi) => (
+              <div key={group.type || gi} className="cf__service-group">
+                {group.title ? <h4 className="cf__group-title">{group.title}</h4> : null}
+                <div className="cf__services">
+                  {(group.fields || []).map(({ key, label }) => (
+                    <div className="cf__field" key={key}>
+                      <label className="cf__label">{label}</label>
+                      <input
+                        type="date"
+                        className="cf__input"
+                        value={form[key] || ""}
+                        onChange={(e) => setVal(key, e.target.value)}
+                      />
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </fieldset>
 
           {/* หมายเหตุ + สถานะ */}

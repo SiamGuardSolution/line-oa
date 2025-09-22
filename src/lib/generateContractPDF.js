@@ -4,15 +4,15 @@ import autoTable from "jspdf-autotable";
 import * as PKG from "../config/packages";
 
 /* ---------- helpers ---------- */
- const pkgLabel = (k) =>
+const pkgLabel = (k) =>
   typeof PKG.getPackageLabel === "function"
     ? PKG.getPackageLabel(k)
     : (PKG.PACKAGE_LABEL?.[k] ?? String(k));
 
 const pkgPrice = (k) => {
-  const fn  = PKG.getPackagePrice;
+  const fn = PKG.getPackagePrice;
   const map = PKG.PACKAGE_PRICE;
-  const v   = (typeof fn === "function") ? fn(k) : map?.[k];
+  const v = (typeof fn === "function") ? fn(k) : map?.[k];
   return Number(v ?? 0);
 };
 
@@ -23,6 +23,7 @@ const fmtThaiDate = (d) => {
     return dd.toLocaleDateString("th-TH", { year: "numeric", month: "2-digit", day: "2-digit" });
   } catch { return String(d || ""); }
 };
+
 const addMonths = (date, months) => {
   if (!date) return null;
   const d = date instanceof Date ? new Date(date) : new Date(date);
@@ -30,6 +31,14 @@ const addMonths = (date, months) => {
   const day = d.getDate();
   d.setMonth(d.getMonth() + months);
   if (d.getDate() < day) d.setDate(0); // รักษาวันสิ้นเดือน
+  return d;
+};
+
+const addDays = (date, days) => {
+  if (!date) return null;
+  const d = date instanceof Date ? new Date(date) : new Date(date);
+  if (isNaN(d)) return null;
+  d.setDate(d.getDate() + Number(days || 0));
   return d;
 };
 
@@ -110,7 +119,12 @@ async function ensureThaiFont(doc){
  *   contractNumber, contractDate, startDate, endDate,
  *   company: { name, address, phone },
  *   client:  { name, phone, address, facebook },
- *   service: { pkgKey?, type, packageName, basePrice, addons:[{name, price}], intervalMonthsSpray?, intervalMonthsBait? },
+ *   service: {
+ *     pkgKey?, type, packageName, basePrice, addons:[{name, price}],
+ *     spraySchedule?: Array, baitSchedule?: Array,
+ *     intervalMonthsSpray?, intervalDaysBait?,
+ *     topTitle?, bottomTitle?
+ *   },
  *   schedule: [ { round, dueDate?, date?, visitDate?, visit?, note? }, ... ],
  *   terms: [ "..." ],
  *   logoDataUrl?
@@ -138,10 +152,8 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const pkgName    = service.packageName || pkgLabel(pkgKey);
   const basePrice  = (service.basePrice ?? null) !== null ? service.basePrice : pkgPrice(pkgKey);
 
-  // โหมดตาราง
-  const isSpray = pkgKey === "spray";
-  const isBait  = pkgKey === "bait";
-  
+  // โหมดแสดงตาราง
+  const showBothTables = (pkgKey === "bait" || pkgKey === "mix"); // bait/mix = แสดง 2 ตาราง
 
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: false });
   await ensureThaiFont(doc);
@@ -239,41 +251,33 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const schedTop = [];     // Spray
   const schedBottom = [];  // Bait
 
-  if (isSpray) {
-    (spraySrc || schedule || []).slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
-  } else if (isBait) {
-    (baitSrc || schedule || []).slice(0, MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
+  // ถ้ามีแยกเป็น spraySchedule/baitSchedule ให้ใช้ก่อน
+  if (spraySrc?.length || baitSrc?.length) {
+    (spraySrc || []).slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
+    (baitSrc  || []).slice(0, MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
   } else {
-    if (spraySrc?.length || baitSrc?.length) {
-      (spraySrc || []).slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
-      (baitSrc  || []).slice(0, MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
-    } else {
-      const combined = Array.isArray(schedule) ? schedule : [];
-      combined.slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
-      combined.slice(MAX_TOP, MAX_TOP + MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
-    }
+    // ไม่มี src แยก → ใช้ data.schedule (สมมติเรียง Spray ก่อน Bait ตาม groups)
+    const combined = Array.isArray(schedule) ? schedule : [];
+    combined.slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
+    combined.slice(MAX_TOP, MAX_TOP + MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
   }
 
-  // เติมออโต้ให้ครบจำนวนแถว
-  const intSpray = Number(service.intervalMonthsSpray ?? service.intervalMonths ?? 4);
-  const intBait  = Number(service.intervalMonthsBait  ?? service.intervalMonths ?? 4);
+  // เติมออโต้ให้ครบจำนวนแถวตามโหมด
+  const intMonthsSpray = Number(service.intervalMonthsSpray ?? service.intervalMonths ?? 4);
+  const intDaysBait    = Number(service.intervalDaysBait    ?? 20); // ✅ Bait = 20 วัน
 
-  if (!isBait) {
-    for (let i = schedTop.length; i < MAX_TOP; i++) {
-      const d = startDate ? addMonths(startDate, intSpray * (i + 1)) : null;
-      schedTop.push({ due: fmtThaiDate(d), visit: "", note: "" });
-    }
-  } else {
-    while (schedTop.length < MAX_TOP) schedTop.push({ due: "", visit: "", note: "" });
+  // เติม Spray
+  for (let i = schedTop.length; i < MAX_TOP; i++) {
+    const d = startDate ? addMonths(startDate, intMonthsSpray * (i + 1)) : null;
+    schedTop.push({ due: fmtThaiDate(d), visit: "", note: "" });
   }
 
-  if (!isSpray) {
+  // เติม Bait (เฉพาะแพ็กเกจที่ต้องมี Bait)
+  if (showBothTables) {
     for (let i = schedBottom.length; i < MAX_BOTTOM; i++) {
-      const d = startDate ? addMonths(startDate, intBait * (i + 1)) : null;
+      const d = startDate ? addDays(startDate, intDaysBait * (i + 1)) : null;
       schedBottom.push({ due: fmtThaiDate(d), visit: "", note: "" });
     }
-  } else {
-    while (schedBottom.length < MAX_BOTTOM) schedBottom.push({ due: "", visit: "", note: "" });
   }
 
   // ชื่อหัวตาราง
@@ -292,7 +296,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const TITLE_GAP = 2;
   const TABLE_GAP = 24;
 
-  // ตารางบน (Spray)
+  // ตารางบน (Spray) — แสดงเสมอ
   doc.setFont(FAMILY, "bold");
   TXT(doc, topTitle, M, y);
   doc.setFont(FAMILY, "normal");
@@ -323,36 +327,38 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   });
   y = (doc.lastAutoTable?.finalY || y) + TABLE_GAP;
 
-  // ตารางล่าง (Bait)
-  doc.setFont(FAMILY, "bold");
-  TXT(doc, bottomTitle, M, y);
-  doc.setFont(FAMILY, "normal");
+  // ตารางล่าง (Bait) — แสดงเฉพาะ bait/mix
+  if (showBothTables) {
+    doc.setFont(FAMILY, "bold");
+    TXT(doc, bottomTitle, M, y);
+    doc.setFont(FAMILY, "normal");
 
-  autoTable(doc, {
-    startY: y + TITLE_GAP,
-    head: [headCols],
-    body: schedBottom.map((row, i) => ([
-      String(i + 1),
-      row.due || "",
-      row.visit || "",
-      "",
-      "",
-      row.note || "",
-    ])),
-    styles: { font: FAMILY, fontSize: 10, cellPadding: 2 },
-    headStyles: { font: FAMILY, fontStyle: "bold", fillColor: [225, 233, 245], textColor: 0 },
-    theme: "grid",
-    margin: { left: M, right: M },
-    columnStyles: {
-      0: { cellWidth: 32,  halign: "center" },
-      1: { cellWidth: 90,  halign: "center" },
-      2: { cellWidth: 110, halign: "center" },
-      3: { cellWidth: 80 },
-      4: { cellWidth: 80 },
-      5: { cellWidth: "auto" },
-    },
-  });
-  y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
+    autoTable(doc, {
+      startY: y + TITLE_GAP,
+      head: [headCols],
+      body: schedBottom.map((row, i) => ([
+        String(i + 1),
+        row.due || "",
+        row.visit || "",
+        "",
+        "",
+        row.note || "",
+      ])),
+      styles: { font: FAMILY, fontSize: 10, cellPadding: 2 },
+      headStyles: { font: FAMILY, fontStyle: "bold", fillColor: [225, 233, 245], textColor: 0 },
+      theme: "grid",
+      margin: { left: M, right: M },
+      columnStyles: {
+        0: { cellWidth: 32,  halign: "center" },
+        1: { cellWidth: 90,  halign: "center" },
+        2: { cellWidth: 110, halign: "center" },
+        3: { cellWidth: 80 },
+        4: { cellWidth: 80 },
+        5: { cellWidth: "auto" },
+      },
+    });
+    y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
+  }
 
   /* ---------- ข้อกำหนดและเงื่อนไข ---------- */
   if (terms.length) {
