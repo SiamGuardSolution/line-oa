@@ -277,8 +277,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
     ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
     ["ราคาก่อนภาษี", money(afterDiscount), "normal"],                 // ✅ แสดงให้ชัด
     ...(vatEnabled && Number(vatRate) > 0
-      ? [[`ภาษีมูลค่าเพิ่ม ${Math.round(Number(vatRate)*100)}%`, money(vat), "normal"]]
-      : [["หมายเหตุ: ราคานี้ยังไม่รวมภาษีมูลค่าเพิ่ม (VAT)", "", "note"]]), // ✅ แจ้งเมื่อปิด VAT
+      [[`ภาษีมูลค่าเพิ่ม ${Math.round(Number(vatRate)*100)}%`, money(vat), "normal"]]), // ✅ แจ้งเมื่อปิด VAT
     ...(Number(alreadyPaid) > 0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`, "highlight"]] : []),
     ["รวมเงินทั้งสิ้น", money(netTotal), "bold"],
   ];

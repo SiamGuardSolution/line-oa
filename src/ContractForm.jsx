@@ -551,12 +551,6 @@ export default function ContractForm() {
               <div className="total-line" style={{ marginTop: 6 }}>
                 ยอดรวมสุทธิ (ใบเสร็จ): <b>{receiptGrandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b>
               </div>
-
-              {!receiptVatEnabled && (
-                <div className="cf-hint" style={{ marginTop: 4 }}>
-                  * หมายเหตุ: ราคานี้ยังไม่รวม VAT สำหรับการออกใบกำกับภาษี ให้เปิดการคิด VAT
-                </div>
-              )}
             </div>
           </div>
 
