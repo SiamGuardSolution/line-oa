@@ -92,6 +92,8 @@ async function ensureThaiFont(doc){
  *  - filename?: string
  *  - returnType?: 'save' | 'blob' | 'bloburl' | 'arraybuffer' | 'datauristring'
  *  - autoSave?: boolean
+ *  - vatEnabled?: boolean   // ✅ override ได้จาก options
+ *  - vatRate?: number       // ✅ override ได้จาก options
  */
 export default async function generateReceiptPDF(payload={}, options={}){
   const {
@@ -100,12 +102,19 @@ export default async function generateReceiptPDF(payload={}, options={}){
     receiptNo="", issueDate=new Date(),
     // วันเริ่มสัญญา (รองรับหลายคีย์)
     contractStartDate, startDate, startYMD, service1Date,
-    items=[], discount=0, vatRate=0, alreadyPaid=0,
+    items=[], discount=0,
+    vatEnabled: _vatEnabled = false,   // ✅ ใหม่: เปิด/ปิด VAT จาก payload
+    vatRate: _vatRate = 0,             // ✅ อัตรา VAT จาก payload
+    alreadyPaid=0,
     footerNotice="สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
     // ใหม่: หมายเหตุ/ธนาคารแบบกำหนดเอง
     remarkLines,       // string[] (optional)
     bankRemark,        // string (optional) เช่น "ธนาคาร... เลขบัญชี... / ชื่อบัญชี..."
   } = payload;
+
+  // ✅ อนุญาต override จาก options
+  const vatEnabled = (options.vatEnabled ?? _vatEnabled) ? true : false;
+  const vatRate    = Number(options.vatRate ?? _vatRate ?? 0) || 0;
 
   const contractStart =
     contractStartDate ??
@@ -172,7 +181,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   /* ===== คำนวณยอด ===== */
   const subTotal=(items||[]).reduce((s,it)=> s + Number(it.qty??it.quantity??1)*Number(it.unitPrice??it.price??0), 0);
   const afterDiscount=Math.max(0, subTotal-Number(discount||0));
-  const vat=Math.max(0, afterDiscount*Number(vatRate||0));
+  const vat = vatEnabled ? Math.max(0, afterDiscount*Number(vatRate||0)) : 0;   // ✅ คิด VAT เฉพาะตอนเปิด
   const grandTotal=afterDiscount+vat;
   const netTotal=Math.max(0, grandTotal-Number(alreadyPaid||0));
 
@@ -266,9 +275,10 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const rows = [
     ["รวมเงิน", money(subTotal), "normal"],
     ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
-    ...(Number(vatRate) > 0
+    ["ราคาก่อนภาษี", money(afterDiscount), "normal"],                 // ✅ แสดงให้ชัด
+    ...(vatEnabled && Number(vatRate) > 0
       ? [[`ภาษีมูลค่าเพิ่ม ${Math.round(Number(vatRate)*100)}%`, money(vat), "normal"]]
-      : []),
+      : [["หมายเหตุ: ราคานี้ยังไม่รวมภาษีมูลค่าเพิ่ม (VAT)", "", "note"]]), // ✅ แจ้งเมื่อปิด VAT
     ...(Number(alreadyPaid) > 0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`, "highlight"]] : []),
     ["รวมเงินทั้งสิ้น", money(netTotal), "bold"],
   ];
@@ -276,11 +286,19 @@ export default async function generateReceiptPDF(payload={}, options={}){
   rows.forEach(([label, val, style]) => {
     if (style === "highlight") { doc.setFillColor(200, 228, 245); doc.rect(totalsX, ty, totalsW, rowH, "F"); }
     else { doc.setDrawColor(230); doc.rect(totalsX, ty, totalsW, rowH); }
+
     const mid = totalsX + totalsW - 110;
-    doc.setFont(FAMILY, style === "bold" ? "bold" : "normal");
-    doc.text(T(label), totalsX + 10, ty + 16);
-    doc.text(T(val),   totalsX + totalsW - 10, ty + 16, { align: "right" });
-    doc.setDrawColor(235); doc.line(mid, ty, mid, ty + rowH);
+
+    if (style === "note") {
+      // แถวหมายเหตุ: แสดงข้อความฝั่งซ้ายให้กินทั้งบรรทัด
+      doc.setFont(FAMILY, "normal");
+      doc.text(T(label), totalsX + 10, ty + 16);
+    } else {
+      doc.setFont(FAMILY, style === "bold" ? "bold" : "normal");
+      doc.text(T(label), totalsX + 10, ty + 16);
+      doc.text(T(val),   totalsX + totalsW - 10, ty + 16, { align: "right" });
+      doc.setDrawColor(235); doc.line(mid, ty, mid, ty + rowH);
+    }
     ty += rowH;
   });
   const totalsEndY = ty;
