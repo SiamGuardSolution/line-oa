@@ -42,10 +42,6 @@ const addDays = (date, days) => {
   return d;
 };
 
-const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
-const fmtBaht = (n) =>
-  (Number(n) || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
 // พิมพ์ข้อความแบบปลอดภัย
 const TXT = (doc, text, x, y, opts) => {
   const S = v => (v == null ? "" : String(v));
@@ -116,24 +112,6 @@ async function ensureThaiFont(doc){
   REGISTERED.add(doc); doc.setFont(FAMILY, "normal");
 }
 
-/* ---------- ราคา/ภาษี helpers ---------- */
-function getAddonsTotal(addons) {
-  if (!Array.isArray(addons) || !addons.length) return 0;
-  return addons.reduce((sum, a) => sum + Number(a?.price || 0), 0);
-}
-function getNetBeforeVat(data, basePrice) {
-  // priority: opts/meta/netBeforeVat | data.netBeforeVat | คำนวณจาก basePrice + addons - discount
-  const fromMeta = Number(data?.meta?.netBeforeVat ?? NaN);
-  if (!isNaN(fromMeta)) return fromMeta;
-
-  const inRoot = Number(data?.netBeforeVat ?? NaN);
-  if (!isNaN(inRoot)) return inRoot;
-
-  const addonsTotal = getAddonsTotal(data?.service?.addons);
-  const discount    = Number(data?.discount || 0); // เผื่อมีฟิลด์ส่วนลดใน payload
-  return Math.max(0, Number(basePrice || 0) + addonsTotal - discount);
-}
-
 /* ---------- main ---------- */
 /**
  * @param {Object} data
@@ -149,10 +127,9 @@ function getNetBeforeVat(data, basePrice) {
  *   },
  *   schedule: [ { round, dueDate?, date?, visitDate?, visit?, note? }, ... ],
  *   terms: [ "..." ],
- *   logoDataUrl?,
- *   discount?, netBeforeVat?, meta?: { vatEnabled?, vatRate?, netBeforeVat? }
+ *   logoDataUrl?
  * }
- * @param {Object} opts  { fileName, vatEnabled?, vatRate?, netBeforeVat? }
+ * @param {Object} opts  { fileName }
  */
 export default async function generateContractPDF(data = {}, opts = {}) {
   const {
@@ -174,28 +151,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const pkgKey     = derivePkgKey(service, data);
   const pkgName    = service.packageName || pkgLabel(pkgKey);
   const basePrice  = (service.basePrice ?? null) !== null ? service.basePrice : pkgPrice(pkgKey);
-
-  // ===== VAT options (เปิด/ปิดต่อฉบับ) =====
-  const vatEnabled = Boolean(
-    opts.vatEnabled ??
-    data?.meta?.vatEnabled ??
-    data?.vatEnabled ??
-    false
-  );
-  const vatRate = Number(
-    opts.vatRate ??
-    data?.meta?.vatRate ??
-    data?.vatRate ??
-    0
-  ) || 0;
-
-  // ===== ยอดก่อนภาษี / VAT / สุทธิ =====
-  const netBeforeVat =
-    Number(opts.netBeforeVat ?? data?.meta?.netBeforeVat ?? data?.netBeforeVat ?? NaN);
-  const computedNetBeforeVat = isNaN(netBeforeVat) ? getNetBeforeVat(data, basePrice) : netBeforeVat;
-
-  const vatAmount  = vatEnabled ? round2(computedNetBeforeVat * vatRate) : 0;
-  const grandTotal = round2(computedNetBeforeVat + vatAmount);
 
   // โหมดแสดงตาราง
   const showBothTables = (pkgKey === "bait" || pkgKey === "mix"); // bait/mix = แสดง 2 ตาราง
@@ -279,28 +234,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     });
     y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
   }
-
-  /* ===== สรุปราคา: ก่อนภาษี / VAT / สุทธิ ===== */
-  autoTable(doc, {
-    startY: y,
-    margin: { left: M, right: M },
-    tableWidth: contentW,
-    head: [["สรุปราคา", "จำนวนเงิน (บาท)"]],
-    body: [
-      ["ราคารวม (ก่อนภาษี)", fmtBaht(computedNetBeforeVat)],
-      ...(vatEnabled ? [[`ภาษีมูลค่าเพิ่ม ${round2(vatRate * 100)}%`, fmtBaht(vatAmount)]] : []),
-      [{ content: "ยอดรวมสุทธิ", styles: { fontStyle: "bold" } }, { content: fmtBaht(grandTotal), styles: { fontStyle: "bold" } }],
-      ...(!vatEnabled ? [["หมายเหตุ", "ราคานี้ยังไม่รวมภาษีมูลค่าเพิ่ม (หากต้องการใบกำกับภาษี โปรดแจ้ง)"]] : []),
-    ],
-    styles: { font: FAMILY, fontSize: 12, cellPadding: 6 },
-    headStyles: { font: FAMILY, fontStyle: "bold", fillColor: [225, 233, 245], textColor: 0 },
-    theme: "grid",
-    columnStyles: {
-      0: { cellWidth: "auto" },
-      1: { cellWidth: 160, halign: "right" },
-    },
-  });
-  y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
 
   /* ===== ตารางรอบบริการ (Top = Spray , Bottom = Bait) ===== */
   const MAX_TOP = 2;
