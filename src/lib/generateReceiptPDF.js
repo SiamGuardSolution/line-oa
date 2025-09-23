@@ -273,14 +273,15 @@ export default async function generateReceiptPDF(payload={}, options={}){
   // กล่องสรุปด้านขวา
   let ty = tableEndY + 6;
   const rows = [
-    ["รวมเงิน", money(subTotal), "normal"],
+    ["รวม", money(subTotal), "normal"],
     ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
-    ["ราคาก่อนภาษี", money(afterDiscount), "normal"],                 // ✅ แสดงให้ชัด
-    ...(vatEnabled && Number(vatRate) > 0
-      ? [[`ภาษีมูลค่าเพิ่ม ${Math.round(Number(vatRate)*100)}%`, money(vat), "normal"]]
-      : [[]]),
+    [
+      "ภาษีมูลค่าเพิ่ม (VAT) ", 
+      (vatEnabled && Number(vatRate) > 0) ? money(vat) : "-",
+      "normal"
+    ],
     ...(Number(alreadyPaid) > 0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`, "highlight"]] : []),
-    ["รวมเงินทั้งสิ้น", money(netTotal), "bold"],
+    ["ราคาสุทธิ", money(netTotal), "bold"],
   ];
 
   rows.forEach(([label, val, style]) => {
