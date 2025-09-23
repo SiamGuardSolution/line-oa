@@ -254,6 +254,11 @@ export default function ContractForm() {
 
   const [discountValue, setDiscountValue] = useState("");
 
+  // ใกล้ๆ state อื่นๆ
+  const [vatEnabled, setVatEnabled] = useState(false);
+  const CONTRACT_VAT_RATE = 0.07; // 7% เฉพาะ "สัญญา"
+
+
   // Auto-generate ตารางบริการ / endDate จาก startDate
   useEffect(() => {
     if (!form.startDate) return;
@@ -278,6 +283,17 @@ export default function ContractForm() {
 
   const discountNum = discountValue === "" ? 0 : Number(discountValue);
   const netBeforeVat = itemsSubtotal - discountNum + addonsSubtotal;
+
+  // คำนวณ VAT/Grand total สำหรับ "สัญญา"
+  const vatAmount = useMemo(() => {
+    if (!vatEnabled) return 0;
+    const amt = Number(netBeforeVat || 0) * CONTRACT_VAT_RATE;
+    return Math.round((amt + Number.EPSILON) * 100) / 100;
+  }, [vatEnabled, netBeforeVat, CONTRACT_VAT_RATE]);
+
+  const grandTotal = useMemo(() => {
+    return Math.round(((Number(netBeforeVat || 0) + Number(vatAmount || 0)) + Number.EPSILON) * 100) / 100;
+  }, [netBeforeVat, vatAmount]);
 
   // ===== ใบเสร็จ (PDF) =====
   async function handleCreateReceiptPDF() {
@@ -339,7 +355,11 @@ export default function ContractForm() {
     // อัปเกรดคีย์ bait (กรณีฟอร์มยังมี legacy)
     const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
     try {
-      await generateContractPDF(data, { fileName });
+      await generateContractPDF(data, {
+        fileName,
+        vatEnabled,
+        vatRate: vatEnabled ? CONTRACT_VAT_RATE : 0,
+      });
     } catch (e) {
       console.error(e);
       alert("สร้างสัญญาไม่สำเร็จ: " + (e?.message || e));
@@ -374,6 +394,8 @@ export default function ContractForm() {
       itemsSubtotal,
       addonsSubtotal,
       netBeforeVat,
+      vatEnabled,
+      vatRate: vatEnabled ? CONTRACT_VAT_RATE : 0,
     };
 
     // เขียนคีย์ตารางบริการจาก groups (หรือ fields fallback)
@@ -504,13 +526,37 @@ export default function ContractForm() {
             <button type="button" className="btn-add" onClick={addAddonRow}>
               ➕ เพิ่ม Add-on
             </button>
-
             <div className="totals">
               <div>ยอดบริการหลัก: <b>{itemsSubtotal.toLocaleString()}</b></div>
               <div>ส่วนลด: <b>-{discountNum.toLocaleString()}</b></div>
               <div>ค่าบริการเพิ่มเติม (Add-on): <b>+{addonsSubtotal.toLocaleString()}</b></div>
               <hr />
-              <div className="total-line">ราคาสุทธิ: <b>{netBeforeVat.toLocaleString()}</b></div>
+              <div className="total-line">ราคาก่อนภาษี: <b>{netBeforeVat.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b></div>
+
+              <label className="cf__checkbox" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={vatEnabled}
+                  onChange={(e) => setVatEnabled(e.target.checked)}
+                />
+                คิดภาษีมูลค่าเพิ่ม (VAT) 7% สำหรับ “ใบสัญญา” ฉบับนี้
+              </label>
+
+              {vatEnabled && (
+                <div style={{ marginTop: 6 }}>
+                  <div>ภาษีมูลค่าเพิ่ม 7%: <b>{vatAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b></div>
+                </div>
+              )}
+
+              <div className="total-line" style={{ marginTop: 6 }}>
+                ยอดรวมสุทธิ: <b>{grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b>
+              </div>
+
+              {!vatEnabled && (
+                <div className="cf-hint" style={{ marginTop: 4 }}>
+                  * หมายเหตุ: ราคานี้ยังไม่รวม VAT หากลูกค้าต้องการใบกำกับภาษี ให้เปิดการคิด VAT
+                </div>
+              )}
             </div>
           </div>
 
