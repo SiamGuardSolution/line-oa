@@ -242,31 +242,36 @@ export default async function generateReceiptPDF(payload={}, options={}){
 
   const padX = 6, padY = 6;
   const lineHeight = 16;
-  const boxWidth  = remarkW + padX * 2;
-  const boxHeight = lineHeight + padY * 2;
-  const boxLeft   = M - padX;
-  const boxTop    = noteY - (lineHeight - 12) - padY;
 
+  // จำกัดความกว้างข้อความให้พอเหมาะ (จะขึ้นบรรทัดใหม่อัตโนมัติถ้าเกิน)
+  const maxTextW = Math.min(remarkW, 300);  // ปรับได้ตามต้องการ
+  const lines    = doc.splitTextToSize(T(textLabel), maxTextW);
+
+  // คำนวณความกว้างจริงจากบรรทัดที่ยาวที่สุด
+  const textW = Math.max(...lines.map(ln => doc.getTextWidth(ln)));
+  const boxWidth  = textW + padX * 2;
+  const boxHeight = lines.length * lineHeight + padY * 2;
+
+  // ✅ ผูกขอบขวากล่องกับขอบขวาตารางสรุป (แนวเดียวกับ “ราคาสุทธิ”)
+  const tableRight = totalsX + totalsW;
+  const boxLeft    = tableRight - boxWidth;
+
+  // วางกล่องใต้ “หมายเหตุ” เหมือนเดิม
+  const boxTop = noteY - (lineHeight - 12) - padY;
+
+  // วาดกล่อง + ข้อความ
   doc.setFillColor(142, 169, 219);
   doc.roundedRect(boxLeft, boxTop, boxWidth, boxHeight, 4, 4, "F");
 
-  const centerX = boxLeft + boxWidth / 2;
-  const centerY = boxTop  + boxHeight / 2;
-  const lines   = doc.splitTextToSize(T(textLabel), remarkW);
-  const totalH  = lines.length * lineHeight;
-
   doc.setFont(FAMILY, "bold");
   lines.forEach((ln, i) => {
-    const yLine = centerY - totalH / 2 + (i + 0.5) * lineHeight;
-    try {
-      doc.text(T(ln), centerX, yLine, { align: "center", baseline: "middle" });
-    } catch {
-      const fs = doc.getFontSize();
-      doc.text(T(ln), centerX, yLine + fs * 0.35, { align: "center" });
-    }
+    const yLine = boxTop + padY + (i + 1) * lineHeight - 4;
+    // จัดกึ่งกลางในกรอบ
+    doc.text(T(ln), boxLeft + boxWidth / 2, yLine, { align: "center" });
   });
   doc.setFont(FAMILY, "normal");
 
+  // อัปเดตตำแหน่ง noteY ต่อจากกรอบ
   noteY = boxTop + boxHeight + 3;
   const noteEndY = noteY + 12;
 
