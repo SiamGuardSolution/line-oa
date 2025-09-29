@@ -12,9 +12,6 @@ const API_BASES = (HOST === "localhost" || HOST === "127.0.0.1") ? ["", PROXY] :
 const LS_LAST_PHONE_KEY = "sg_lastPhone";
 const AUTORUN_LAST = true;
 
-// อัตราภาษีมูลค่าเพิ่มมาตรฐาน
-const VAT_RATE = 0.07;
-
 /* ---------------------- LIFF helpers (บนสุดของไฟล์ นอกคอมโพเนนต์) ---------------------- */
 const LIFF_ID = process.env.REACT_APP_LIFF_ID || ""; // ตั้งค่าใน .env (REACT_APP_LIFF_ID)
 
@@ -299,14 +296,6 @@ export default function CheckPage() {
     })();
   }, []);
 
-  // สวิตช์ VAT (จำค่าไว้ใน localStorage)
-  const [vatEnabled, setVatEnabled] = useState(() => {
-    try { return localStorage.getItem("sg_vatEnabled") === "1"; } catch { return false; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem("sg_vatEnabled", vatEnabled ? "1" : "0"); } catch {}
-  }, [vatEnabled]);
-
   // หลายสัญญา + index ที่เลือก
   const [contracts, setContracts] = useState([]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -462,9 +451,8 @@ export default function CheckPage() {
   const addonsSubtotal = useMemo(() => addonsSubtotalFrom(contract), [contract]);
   const addonsArr = useMemo(() => addonsFrom(contract), [contract]);
 
-  const subTotal = useMemo(() => netTotalFrom(contract), [contract]); // รวมก่อน VAT
-  const vatAmount = useMemo(() => (vatEnabled ? Math.round(subTotal * VAT_RATE) : 0), [subTotal, vatEnabled]);
-  const grandTotal = useMemo(() => subTotal + vatAmount, [subTotal, vatAmount]);
+  const subTotal = useMemo(() => netTotalFrom(contract), [contract]);
+  const grandTotal = subTotal;
 
   // ลิงก์จ่ายเงิน → ใช้ยอดสุทธิหลัง VAT
   const payUrl = useMemo(() => {
@@ -515,7 +503,8 @@ export default function CheckPage() {
         receiptNo, issueDate: new Date(), contractStartDate,
         items,
         discount: toNumberSafe(discountFrom(current)),
-        vatRate: vatEnabled ? 0.07 : 0,  // ใช้สวิตช์หน้าเว็บ
+        vatEnabled: false,
+        vatRate: 0,
         alreadyPaid: toNumberSafe(current.deposit || current.alreadyPaid || 0),
       };
 
@@ -618,16 +607,6 @@ export default function CheckPage() {
                 {downloading ? "กำลังสร้าง..." : (inLineApp ? "ส่งใบเสร็จเข้าแชท" : "รับใบเสร็จ (PDF)")}
               </button>
             </div>
-
-            <label className="field" style={{marginTop: 8}}>
-              <input
-                type="checkbox"
-                checked={vatEnabled}
-                onChange={(e) => setVatEnabled(e.target.checked)}
-              />
-              คิดภาษีมูลค่าเพิ่ม (VAT) 7%
-            </label>
-
             <div className="bill">
               <div className="bill__row">
                 <div>ส่วนลด</div>
@@ -644,14 +623,6 @@ export default function CheckPage() {
                 <div>รวม</div>
                 <div className="bill__val">{Number(subTotal || 0).toLocaleString('th-TH')}</div>
               </div>
-
-              {vatEnabled && (
-                <div className="bill__row">
-                  <div>ภาษีมูลค่าเพิ่ม 7%</div>
-                  <div className="bill__val">{Number(vatAmount || 0).toLocaleString('th-TH')}</div>
-                </div>
-              )}
-
               <div className="bill__row bill__row--total">
                 <div>ราคาสุทธิ</div>
                 <div className="bill__val">{Number(grandTotal || 0).toLocaleString('th-TH')}</div>
