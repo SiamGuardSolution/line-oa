@@ -29,14 +29,18 @@ const ensureLiffReady = async () => {
   return true;
 };
 
-/* ---------------------- HELPERS ---------------------- */
+// ===== Upload API (ใช้ Worker R2) =====
+const UPLOAD_API =
+  process.env.REACT_APP_UPLOAD_API ||
+  "https://siamguard-upload.phet67249.workers.dev/api/upload";
+
 async function uploadPdfAndGetUrl(blob, filename) {
   const form = new FormData();
   form.append("file", blob, filename);
-  const res = await fetch("/api/upload", { method: "POST", body: form });
-  if (!res.ok) throw new Error("UPLOAD_FAILED");
+  const res = await fetch(UPLOAD_API, { method: "POST", body: form });
+  if (!res.ok) throw new Error(`UPLOAD_FAILED_${res.status}`);
   const { url } = await res.json();
-  return url; // ต้องเป็น https://.../xxx.pdf
+  return url; // https://.../receipts/xxx.pdf
 }
 
 function buildReceiptFlex(pdfUrl) {
@@ -514,35 +518,50 @@ export default function CheckPage() {
       // --- หลังได้ blob แล้ว ---
       const isLineUA = /Line\/|LIFF/i.test(navigator.userAgent);
 
-      // อัปโหลดเสมอ (เพื่อให้มีลิงก์จริง ใช้ได้ทั้งแชร์และเปิดภายนอก)
-      const pdfUrl = await uploadPdfAndGetUrl(blob, filename);
+      // อัปโหลดก่อนเสมอ เพื่อให้ได้ลิงก์ใช้งานได้ใน LINE
+      let pdfUrl = "";
+      try {
+        pdfUrl = await uploadPdfAndGetUrl(blob, filename);
+      } catch (e) {
+        console.error("UPLOAD_FAILED", e);
+        // ถ้าอัปโหลดล้มเหลว และไม่ได้อยู่ใน LINE → ดาวน์โหลดจาก blob เป็นทางเลือกสุดท้าย
+        if (!isLineUA) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = filename;
+          document.body.appendChild(a); a.click();
+          a.remove(); URL.revokeObjectURL(url);
+          return;
+        }
+        alert("อัปโหลดใบเสร็จไม่สำเร็จ กรุณาลองใหม่");
+        return;
+      }
 
-      // พยายามแชร์เข้าแชทก่อน (ถ้าเปิดในแอป LINE และ API ใช้ได้)
+      // พยายามแชร์เข้าแชทก่อน ถ้าอยู่ใน LINE และมี API
       let shared = false;
       try {
-        const liffReady = await ensureLiffReady();
-        if (liffReady && window.liff.isInClient() && window.liff.isApiAvailable("shareTargetPicker")) {
+        const ready = await ensureLiffReady();
+        if (ready && window.liff.isInClient() && window.liff.isApiAvailable("shareTargetPicker")) {
           const flex = buildReceiptFlex(pdfUrl);
           await window.liff.shareTargetPicker([flex]);
           shared = true;
         }
-      } catch (e) {
-        console.warn("shareTargetPicker failed:", e);
+      } catch (err) {
+        console.warn("shareTargetPicker failed:", err);
       }
 
-      // ถ้าแชร์ไม่ได้ และกำลังอยู่ใน LINE → เปิดภายนอกแทน (ไม่ดาวน์โหลด blob)
+      // ถ้าแชร์ไม่ได้แต่เปิดใน LINE → เปิดลิงก์ภายนอก
       if (!shared && (isLineUA || (hasLiff() && window.liff.isInClient()))) {
         try {
           await ensureLiffReady();
           window.liff.openWindow({ url: pdfUrl, external: true });
         } catch {
-          // fallback สุดท้าย
           window.location.href = pdfUrl;
         }
-        return; // <-- สำคัญ: อย่าตกไปเส้นทางดาวน์โหลด blob
+        return; // อย่าตกลงไปดาวน์โหลด blob
       }
 
-      // นอก LINE หรือ UA อื่น ๆ → ดาวน์โหลดแบบปกติได้
+      // กรณีนอก LINE → ดาวน์โหลดไฟล์จาก blob ตามเดิม
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = filename;
