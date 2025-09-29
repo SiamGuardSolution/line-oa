@@ -15,7 +15,61 @@ const AUTORUN_LAST = true;
 // อัตราภาษีมูลค่าเพิ่มมาตรฐาน
 const VAT_RATE = 0.07;
 
+/* ---------------------- LIFF helpers (บนสุดของไฟล์ นอกคอมโพเนนต์) ---------------------- */
+const LIFF_ID = process.env.REACT_APP_LIFF_ID || ""; // ตั้งค่าใน .env (REACT_APP_LIFF_ID)
+
+const hasLiff = () => typeof window !== "undefined" && !!window.liff;
+
+const ensureLiffReady = async () => {
+  if (!hasLiff() || !LIFF_ID) return false;
+  const liff = window.liff;
+  // ป้องกัน init ซ้ำ
+  if (!liff._sgInited) {
+    try { await liff.init({ liffId: LIFF_ID }); } catch (e) { /* ignore */ }
+    liff._sgInited = true;
+  }
+  try { await liff.ready; } catch (e) { /* ignore */ }
+  return true;
+};
+
 /* ---------------------- HELPERS ---------------------- */
+async function uploadPdfAndGetUrl(blob, filename) {
+  const form = new FormData();
+  form.append("file", blob, filename);
+  const res = await fetch("/api/upload", { method: "POST", body: form });
+  if (!res.ok) throw new Error("UPLOAD_FAILED");
+  const { url } = await res.json();
+  return url; // ต้องเป็น https://.../xxx.pdf
+}
+
+function buildReceiptFlex(pdfUrl) {
+  return {
+    type: "flex",
+    altText: "ใบเสร็จรับเงิน Siam Guard",
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          { type: "text", text: "ใบเสร็จรับเงิน", weight: "bold", size: "lg" },
+          { type: "text", text: "กดปุ่มเพื่อดาวน์โหลดไฟล์ PDF", size: "sm", color: "#666666" }
+        ]
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          { type: "button", style: "primary", action: { type: "uri", label: "ดาวน์โหลด PDF", uri: pdfUrl } }
+        ],
+        flex: 0
+      }
+    }
+  };
+}
+
 function buildCheckUrls(digits) {
   const v = Date.now();
   return API_BASES.map(base => `${base}/api/check-contract?phone=${encodeURIComponent(digits)}&v=${v}`);
@@ -236,6 +290,15 @@ export default function CheckPage() {
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
 
+  // อยู่ใน LINE app ไหม (เพื่อเปลี่ยนโหมดปุ่ม)
+  const [inLineApp, setInLineApp] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const ok = await ensureLiffReady();
+      if (ok && window.liff.isInClient()) setInLineApp(true);
+    })();
+  }, []);
+
   // สวิตช์ VAT (จำค่าไว้ใน localStorage)
   const [vatEnabled, setVatEnabled] = useState(() => {
     try { return localStorage.getItem("sg_vatEnabled") === "1"; } catch { return false; }
@@ -424,29 +487,19 @@ export default function CheckPage() {
         current.startDate || current.startYMD || current.service1Date || current.firstServiceDate || current.beginDate || null;
 
       const basePrice = basePriceFrom(current);
+      const addOnsArr = addonsFrom(current);
+      const addOnsSubtotal = addonsSubtotalFrom(current);
 
-      // --- ดึง Add-on ทั้งแบบรายการย่อย และแบบยอดรวม ---
-      const addOnsArr = addonsFrom(current);                 // [{ name, qty, price }, ...] อาจว่าง
-      const addOnsSubtotal = addonsSubtotalFrom(current);    // ยอดรวม Add-on (เช่น 1000)
-
-      // --- สร้าง items สำหรับ PDF ---
       const items = [
         { description: labelFromContract(current), qty: 1, unitPrice: basePrice },
-        // ถ้ามีรายการย่อย ก็ map ตามปกติ
         ...addOnsArr.map(a => ({
           description: a.name || "บริการเพิ่มเติม",
           qty: toNumberSafe(a.qty) || 1,
           unitPrice: toNumberSafe(a.price) || 0
         })),
       ];
-
-      // ถ้าไม่มีรายการย่อย แต่มียอดรวม → ใส่เป็น 1 บรรทัดรวม เพื่อให้ PDF คิดยอดตรงกับหน้าเว็บ
       if (addOnsArr.length === 0 && toNumberSafe(addOnsSubtotal) > 0) {
-        items.push({
-          description: "ค่าบริการเพิ่มเติม (รวม)",
-          qty: 1,
-          unitPrice: toNumberSafe(addOnsSubtotal)
-        });
+        items.push({ description: "ค่าบริการเพิ่มเติม (รวม)", qty: 1, unitPrice: toNumberSafe(addOnsSubtotal) });
       }
 
       const receiptNo =
@@ -462,17 +515,27 @@ export default function CheckPage() {
         receiptNo, issueDate: new Date(), contractStartDate,
         items,
         discount: toNumberSafe(discountFrom(current)),
-        // เปิด/ปิด VAT จากสวิตช์หน้าเว็บ
-        vatRate: vatEnabled ? 0.07 : 0,
+        vatRate: vatEnabled ? 0.07 : 0,  // ใช้สวิตช์หน้าเว็บ
         alreadyPaid: toNumberSafe(current.deposit || current.alreadyPaid || 0),
       };
 
       const filename = `Receipt-${receiptNo}.pdf`;
       const blob = await generateReceiptPDF(payload, { returnType: "blob", filename });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    } finally { setDownloading(false); }
+
+      if (inLineApp && hasLiff() && window.liff.isApiAvailable("shareTargetPicker")) {
+        const pdfUrl = await uploadPdfAndGetUrl(blob, filename);
+        const flex = buildReceiptFlex(pdfUrl);
+        await window.liff.shareTargetPicker([flex]);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        a.remove(); URL.revokeObjectURL(url);
+      }
+    } finally {
+      setDownloading(false);
+    }
   }
 
   /* ---------------------- RENDER ---------------------- */
@@ -550,9 +613,9 @@ export default function CheckPage() {
                 onClick={() => handleDownloadReceipt(contract)}
                 disabled={downloading}
                 style={{ padding: "10px 14px", borderRadius: 10, border: "none", background: "#2a7de1", color: "#fff", fontWeight: 700, boxShadow: "0 2px 8px rgba(42,125,225,.25)", cursor: downloading ? "not-allowed" : "pointer" }}
-                title="ดาวน์โหลดใบเสร็จ PDF"
+                title={inLineApp ? "ส่งเข้าแชท LINE" : "ดาวน์โหลดใบเสร็จ PDF"}
               >
-                {downloading ? "กำลังสร้าง..." : "รับใบเสร็จ (PDF)"}
+                {downloading ? "กำลังสร้าง..." : (inLineApp ? "ส่งใบเสร็จเข้าแชท" : "รับใบเสร็จ (PDF)")}
               </button>
             </div>
 

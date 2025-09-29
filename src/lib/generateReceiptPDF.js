@@ -103,25 +103,22 @@ export default async function generateReceiptPDF(payload={}, options={}){
     // วันเริ่มสัญญา (รองรับหลายคีย์)
     contractStartDate, startDate, startYMD, service1Date,
     items=[], discount=0,
-    vatEnabled: _vatEnabled = false,   // ✅ ใหม่: เปิด/ปิด VAT จาก payload
+    vatEnabled: _vatEnabled = false,   // ✅ เปิด/ปิด VAT จาก payload
     vatRate: _vatRate = 0,             // ✅ อัตรา VAT จาก payload
     alreadyPaid=0,
     footerNotice="สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
     // ใหม่: หมายเหตุ/ธนาคารแบบกำหนดเอง
     remarkLines,       // string[] (optional)
-    bankRemark,        // string (optional) เช่น "ธนาคาร... เลขบัญชี... / ชื่อบัญชี..."
+    bankRemark,        // string (optional)
   } = payload;
 
-  // ✅ อนุญาต override จาก options
+  // ✅ อนุญาต override จาก options (+ fallback 7% เมื่อเปิด VAT แต่ไม่ได้ส่งอัตรามา)
   const vatEnabled = (options.vatEnabled ?? _vatEnabled) ? true : false;
-  const vatRate    = Number(options.vatRate ?? _vatRate ?? 0) || 0;
+  const rawRate    = Number(options.vatRate ?? _vatRate ?? 0);
+  const vatRate    = vatEnabled ? (rawRate > 0 ? rawRate : 0.07) : 0;
 
   const contractStart =
-    contractStartDate ??
-    startDate ??
-    startYMD ??
-    service1Date ??
-    issueDate;
+    contractStartDate ?? startDate ?? startYMD ?? service1Date ?? issueDate;
 
   const doc = new jsPDF({ unit:"pt", format:"a4", compress:false });
   await ensureThaiFont(doc);
@@ -158,7 +155,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
     `โทรศัพท์: ${clientPhone || "-"}`,
   ];
 
-  // ใช้ "วันที่เริ่มสัญญา" เป็นข้อมูลอ้างอิง/ครบกำหนด (ถ้าต้องการเปลี่ยน label ส่ง text เองได้)
+  // ใช้ "วันที่เริ่มสัญญา" เป็นข้อมูลอ้างอิง/ครบกำหนด
   const rightLines = [
     `เลขที่: ${receiptNo || "-"}`,
     `วันที่: ${fmtDate(issueDate)}`,
@@ -181,7 +178,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   /* ===== คำนวณยอด ===== */
   const subTotal=(items||[]).reduce((s,it)=> s + Number(it.qty??it.quantity??1)*Number(it.unitPrice??it.price??0), 0);
   const afterDiscount=Math.max(0, subTotal-Number(discount||0));
-  const vat = vatEnabled ? Math.max(0, afterDiscount*Number(vatRate||0)) : 0;   // ✅ คิด VAT เฉพาะตอนเปิด
+  const vat = vatEnabled ? Math.max(0, afterDiscount*Number(vatRate||0)) : 0;
   const grandTotal=afterDiscount+vat;
   const netTotal=Math.max(0, grandTotal-Number(alreadyPaid||0));
 
@@ -226,7 +223,6 @@ export default async function generateReceiptPDF(payload={}, options={}){
   doc.text(T("หมายเหตุ:"), M, noteY);
   noteY += 16;
 
-  // เลือกบรรทัดหมายเหตุจาก payload ก่อน
   const remarkBlockLines = Array.isArray(remarkLines) && remarkLines.length > 0
     ? remarkLines
     : (bankRemark ? [bankRemark] : DEFAULT_REMARK_LINES);
@@ -246,7 +242,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const boxHeight = lineHeight + padY * 2;
   const boxLeft   = M - padX;
   const boxTop    = noteY - (lineHeight - 12) - padY;
-  
+
   doc.setFillColor(142, 169, 219);
   doc.roundedRect(boxLeft, boxTop, boxWidth, boxHeight, 4, 4, "F");
 
@@ -266,7 +262,6 @@ export default async function generateReceiptPDF(payload={}, options={}){
     }
   });
   doc.setFont(FAMILY, "normal");
-  // อัปเดตตำแหน่ง noteY ต่อจากกรอบ
   noteY = boxTop + boxHeight + 3;
   const noteEndY = noteY + 12;
 
@@ -275,11 +270,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   const rows = [
     ["รวม", money(subTotal), "normal"],
     ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
-    [
-      "ภาษีมูลค่าเพิ่ม (VAT) ", 
-      (vatEnabled && Number(vatRate) > 0) ? money(vat) : "-",
-      "normal"
-    ],
+    ["ภาษีมูลค่าเพิ่ม (VAT) ", (vatEnabled && Number(vatRate) > 0) ? money(vat) : "-", "normal"],
     ...(Number(alreadyPaid) > 0 ? [["หักมัดจำ", `-${money(alreadyPaid)}`, "highlight"]] : []),
     ["ราคาสุทธิ", money(netTotal), "bold"],
   ];
@@ -291,7 +282,6 @@ export default async function generateReceiptPDF(payload={}, options={}){
     const mid = totalsX + totalsW - 110;
 
     if (style === "note") {
-      // แถวหมายเหตุ: แสดงข้อความฝั่งซ้ายให้กินทั้งบรรทัด
       doc.setFont(FAMILY, "normal");
       doc.text(T(label), totalsX + 10, ty + 16);
     } else {
