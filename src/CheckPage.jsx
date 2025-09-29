@@ -511,17 +511,43 @@ export default function CheckPage() {
       const filename = `Receipt-${receiptNo}.pdf`;
       const blob = await generateReceiptPDF(payload, { returnType: "blob", filename });
 
-      if (inLineApp && hasLiff() && window.liff.isApiAvailable("shareTargetPicker")) {
-        const pdfUrl = await uploadPdfAndGetUrl(blob, filename);
-        const flex = buildReceiptFlex(pdfUrl);
-        await window.liff.shareTargetPicker([flex]);
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click();
-        a.remove(); URL.revokeObjectURL(url);
+      // --- หลังได้ blob แล้ว ---
+      const isLineUA = /Line\/|LIFF/i.test(navigator.userAgent);
+
+      // อัปโหลดเสมอ (เพื่อให้มีลิงก์จริง ใช้ได้ทั้งแชร์และเปิดภายนอก)
+      const pdfUrl = await uploadPdfAndGetUrl(blob, filename);
+
+      // พยายามแชร์เข้าแชทก่อน (ถ้าเปิดในแอป LINE และ API ใช้ได้)
+      let shared = false;
+      try {
+        const liffReady = await ensureLiffReady();
+        if (liffReady && window.liff.isInClient() && window.liff.isApiAvailable("shareTargetPicker")) {
+          const flex = buildReceiptFlex(pdfUrl);
+          await window.liff.shareTargetPicker([flex]);
+          shared = true;
+        }
+      } catch (e) {
+        console.warn("shareTargetPicker failed:", e);
       }
+
+      // ถ้าแชร์ไม่ได้ และกำลังอยู่ใน LINE → เปิดภายนอกแทน (ไม่ดาวน์โหลด blob)
+      if (!shared && (isLineUA || (hasLiff() && window.liff.isInClient()))) {
+        try {
+          await ensureLiffReady();
+          window.liff.openWindow({ url: pdfUrl, external: true });
+        } catch {
+          // fallback สุดท้าย
+          window.location.href = pdfUrl;
+        }
+        return; // <-- สำคัญ: อย่าตกไปเส้นทางดาวน์โหลด blob
+      }
+
+      // นอก LINE หรือ UA อื่น ๆ → ดาวน์โหลดแบบปกติได้
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      a.remove(); URL.revokeObjectURL(url);
     } finally {
       setDownloading(false);
     }
