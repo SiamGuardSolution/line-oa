@@ -12,6 +12,9 @@ const API_BASES = (HOST === "localhost" || HOST === "127.0.0.1") ? ["", PROXY] :
 const LS_LAST_PHONE_KEY = "sg_lastPhone";
 const AUTORUN_LAST = true;
 
+// อัตราภาษีมูลค่าเพิ่มมาตรฐาน
+const VAT_RATE = 0.07;
+
 /* ---------------------- HELPERS ---------------------- */
 function buildCheckUrls(digits) {
   const v = Date.now();
@@ -22,18 +25,14 @@ function buildCheckUrls(digits) {
 // → คืนคีย์แพ็กเกจ "spray" | "bait" | "mix"
 function derivePkgKey(c) {
   if (!c) return "spray";
-  // 1) ถ้า API/ชีตส่งคีย์มา
   if (c.pkg && ["spray","bait","mix"].includes(String(c.pkg).toLowerCase())) {
     return String(c.pkg).toLowerCase();
   }
-  // 2) เดิมเคยจับจากข้อความ label/ประเภท
   const raw = `${c?.package || ""}|${c?.packageLabel || ""}|${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
     .toLowerCase();
   if (/\bmix|ผสม|combo/.test(raw)) return "mix";
   if (/\bbait|เหยื่อ/.test(raw)) return "bait";
   if (/\bspray|ฉีด/.test(raw)) return "spray";
-
-  // 3) สุดท้าย เผื่อระบบเก่าเคยฝังราคาไว้ในข้อความ
   const text = `${c?.priceText || ""}`.toLowerCase();
   if (/8500/.test(text)) return "mix";
   if (/5500/.test(text)) return "bait";
@@ -48,9 +47,7 @@ const labelFromContract = (c) => {
 };
 
 const priceTextFrom = (c) => {
-  // ถ้า API มี text มาอยู่แล้วก็ใช้เลย
   if (c?.priceText) return String(c.priceText);
-  // ไม่งั้นแปลงจาก config เป็นข้อความราคา
   const priceKey = derivePkgKey(c);
   const priceFn  = PKG.getPackagePrice;
   const priceMap = PKG.PACKAGE_PRICE;
@@ -162,8 +159,6 @@ const netTotalFrom = (c) => {
   return Math.max(0, Math.round(basePriceFrom(c) - discountFrom(c) + addonsSubtotalFrom(c)));
 };
 
-const netAmountFrom = (c) => netTotalFrom(c);
-
 const SHOW_PAY_LINK = true;
 
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
@@ -241,6 +236,14 @@ export default function CheckPage() {
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
 
+  // สวิตช์ VAT (จำค่าไว้ใน localStorage)
+  const [vatEnabled, setVatEnabled] = useState(() => {
+    try { return localStorage.getItem("sg_vatEnabled") === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("sg_vatEnabled", vatEnabled ? "1" : "0"); } catch {}
+  }, [vatEnabled]);
+
   // หลายสัญญา + index ที่เลือก
   const [contracts, setContracts] = useState([]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -267,16 +270,13 @@ export default function CheckPage() {
   const normalizeContractRecord = (c) => {
     if (!c) return c;
     const out = { ...c };
-
     const svc = Array.isArray(c.services) ? c.services : [];
     const getByIndex = (n) => svc[n - 1]?.date || "";
-
     const findByLabel = (n) => {
       const re = new RegExp(`(service\\s*รอบที่\\s*${n}|รอบที่\\s*${n}|ครั้งที่\\s*${n})`, 'i');
       const hit = svc.find(x => re.test(String(x?.label || "")));
       return hit?.date || "";
     };
-
     for (let i = 1; i <= 6; i++) {
       out[`service${i}`] = firstNonEmpty(findByLabel(i), getByIndex(i), out[`service${i}`]) || "";
     }
@@ -335,7 +335,7 @@ export default function CheckPage() {
     return { s1, s2 };
   };
 
-  // อ่านวันที่รอบ Bait: ลอง serviceBait1..5 ก่อน → services[] → คำนวณ
+  // อ่านวันที่รอบ Bait
   const readBaitDates = (c, start) => {
     const keys = ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"];
     const fromKeys = keys.map(k => c?.[k]).filter(Boolean);
@@ -346,18 +346,16 @@ export default function CheckPage() {
       .map(s => s.date);
     if (fromServices.length) return fromServices;
 
-    // fallback: คำนวณทุก 20 วัน 5 ครั้ง
     return makeBaitItems(start, 5, 20).map(x => x.date);
   };
 
-  /** ===== กำหนดการ: ใช้ค่าจากชีตก่อน แล้วค่อย fallback ===== */
+  /** ===== กำหนดการ ===== */
   const scheduleGroups = useMemo(() => {
     if (!contract) return [];
     const pkgKey = derivePkgKey(contract);
     const start  = contract.startDate || "";
     const end    = contract.endDate || (start ? addMonths(start, 12) : "");
 
-    // อ่านรอบจากคีย์ใหม่ (มี fallback ใน helper)
     const { s1: sprayS1, s2: sprayS2 } = readSprayDates(contract, start);
     const baitDates = readBaitDates(contract, start);
 
@@ -366,16 +364,11 @@ export default function CheckPage() {
     const endGroup   = { title: "สิ้นสุดสัญญา",                   kind: "end",   items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] };
 
     if (pkgKey === "spray") {
-      // Spray: แสดงเฉพาะ Spray + End
       return [sprayGroup, endGroup];
     }
-
     if (pkgKey === "bait") {
-      // ✅ Bait: แสดงทั้ง Bait + Spray + End (เหมือน Mix)
       return [baitGroup, sprayGroup, endGroup];
     }
-
-    // Mix: Bait + Spray + End
     return [baitGroup, sprayGroup, endGroup];
   }, [contract]);
 
@@ -401,18 +394,22 @@ export default function CheckPage() {
     return alt || "";
   }, [contract]);
 
-  const netAmount = useMemo(() => netAmountFrom(contract), [contract]);
-  const payUrl = useMemo(() => {
-    if (!contractRef) return "";
-    const parts = [`/pay?ref=${encodeURIComponent(contractRef)}`];
-    if (netAmount > 0) parts.push(`amt=${encodeURIComponent(netAmount.toFixed(2))}`);
-    return parts.join("&");
-  }, [contractRef, netAmount]);
-
+  // ====== ค่าใช้จ่าย (ก่อน/หลัง VAT) ======
   const discount = useMemo(() => discountFrom(contract), [contract]);
   const addonsSubtotal = useMemo(() => addonsSubtotalFrom(contract), [contract]);
   const addonsArr = useMemo(() => addonsFrom(contract), [contract]);
-  const netTotal = useMemo(() => netTotalFrom(contract), [contract]);
+
+  const subTotal = useMemo(() => netTotalFrom(contract), [contract]); // รวมก่อน VAT
+  const vatAmount = useMemo(() => (vatEnabled ? Math.round(subTotal * VAT_RATE) : 0), [subTotal, vatEnabled]);
+  const grandTotal = useMemo(() => subTotal + vatAmount, [subTotal, vatAmount]);
+
+  // ลิงก์จ่ายเงิน → ใช้ยอดสุทธิหลัง VAT
+  const payUrl = useMemo(() => {
+    if (!contractRef) return "";
+    const parts = [`/pay?ref=${encodeURIComponent(contractRef)}`];
+    if (grandTotal > 0) parts.push(`amt=${encodeURIComponent(grandTotal.toFixed(2))}`);
+    return parts.join("&");
+  }, [contractRef, grandTotal]);
 
   async function handleDownloadReceipt(current) {
     if (!current) return;
@@ -427,11 +424,30 @@ export default function CheckPage() {
         current.startDate || current.startYMD || current.service1Date || current.firstServiceDate || current.beginDate || null;
 
       const basePrice = basePriceFrom(current);
-      const addOns = addonsFrom(current);
+
+      // --- ดึง Add-on ทั้งแบบรายการย่อย และแบบยอดรวม ---
+      const addOnsArr = addonsFrom(current);                 // [{ name, qty, price }, ...] อาจว่าง
+      const addOnsSubtotal = addonsSubtotalFrom(current);    // ยอดรวม Add-on (เช่น 1000)
+
+      // --- สร้าง items สำหรับ PDF ---
       const items = [
         { description: labelFromContract(current), qty: 1, unitPrice: basePrice },
-        ...addOns.map(a => ({ description: a.name || "บริการเพิ่มเติม", qty: toNumberSafe(a.qty) || 1, unitPrice: toNumberSafe(a.price) || 0 })),
+        // ถ้ามีรายการย่อย ก็ map ตามปกติ
+        ...addOnsArr.map(a => ({
+          description: a.name || "บริการเพิ่มเติม",
+          qty: toNumberSafe(a.qty) || 1,
+          unitPrice: toNumberSafe(a.price) || 0
+        })),
       ];
+
+      // ถ้าไม่มีรายการย่อย แต่มียอดรวม → ใส่เป็น 1 บรรทัดรวม เพื่อให้ PDF คิดยอดตรงกับหน้าเว็บ
+      if (addOnsArr.length === 0 && toNumberSafe(addOnsSubtotal) > 0) {
+        items.push({
+          description: "ค่าบริการเพิ่มเติม (รวม)",
+          qty: 1,
+          unitPrice: toNumberSafe(addOnsSubtotal)
+        });
+      }
 
       const receiptNo =
         firstNonEmpty(current.receiptNo, current.invoiceNumber, current.quotationNumber) ||
@@ -444,7 +460,11 @@ export default function CheckPage() {
         clientAddress: current.address || current.clientAddress || "-",
         clientTaxId: current.taxId || current.clientTaxId || "",
         receiptNo, issueDate: new Date(), contractStartDate,
-        items, discount: discountFrom(current), vatRate: 0, alreadyPaid: toNumberSafe(current.deposit || current.alreadyPaid || 0),
+        items,
+        discount: toNumberSafe(discountFrom(current)),
+        // เปิด/ปิด VAT จากสวิตช์หน้าเว็บ
+        vatRate: vatEnabled ? 0.07 : 0,
+        alreadyPaid: toNumberSafe(current.deposit || current.alreadyPaid || 0),
       };
 
       const filename = `Receipt-${receiptNo}.pdf`;
@@ -536,11 +556,43 @@ export default function CheckPage() {
               </button>
             </div>
 
+            <label className="field" style={{marginTop: 8}}>
+              <input
+                type="checkbox"
+                checked={vatEnabled}
+                onChange={(e) => setVatEnabled(e.target.checked)}
+              />
+              คิดภาษีมูลค่าเพิ่ม (VAT) 7%
+            </label>
+
             <div className="bill">
-              <div className="bill__row"><div>ส่วนลด</div><div className="bill__val">-{Number(discount || 0).toLocaleString('th-TH')}</div></div>
-              <div className="bill__row"><div>ค่าบริการเพิ่มเติม (Add-on)</div><div className="bill__val">+{Number(addonsSubtotal || 0).toLocaleString('th-TH')}</div></div>
+              <div className="bill__row">
+                <div>ส่วนลด</div>
+                <div className="bill__val">-{Number(discount || 0).toLocaleString('th-TH')}</div>
+              </div>
+              <div className="bill__row">
+                <div>ค่าบริการเพิ่มเติม (Add-on)</div>
+                <div className="bill__val">+{Number(addonsSubtotal || 0).toLocaleString('th-TH')}</div>
+              </div>
+
               <hr className="bill__sep" />
-              <div className="bill__row bill__row--total"><div>ราคาสุทธิ</div><div className="bill__val">{Number(netTotal || 0).toLocaleString('th-TH')}</div></div>
+
+              <div className="bill__row">
+                <div>รวม</div>
+                <div className="bill__val">{Number(subTotal || 0).toLocaleString('th-TH')}</div>
+              </div>
+
+              {vatEnabled && (
+                <div className="bill__row">
+                  <div>ภาษีมูลค่าเพิ่ม 7%</div>
+                  <div className="bill__val">{Number(vatAmount || 0).toLocaleString('th-TH')}</div>
+                </div>
+              )}
+
+              <div className="bill__row bill__row--total">
+                <div>ราคาสุทธิ</div>
+                <div className="bill__val">{Number(grandTotal || 0).toLocaleString('th-TH')}</div>
+              </div>
             </div>
 
             {addonsArr.length > 0 && (
@@ -571,7 +623,6 @@ export default function CheckPage() {
                 {(() => {
                   const k = derivePkgKey(contract);
                   if (k === "spray") return "ฉีดพ่น: 2 ครั้ง / ปี";
-                  // ✅ Bait = ผสมผสาน เหมือน Mix
                   if (k === "bait") return "ผสมผสาน: เหยื่อ 5 ครั้ง + ฉีดพ่น 2 ครั้ง";
                   return "ผสมผสาน: เหยื่อ 5 ครั้ง + ฉีดพ่น 2 ครั้ง";
                 })()}
