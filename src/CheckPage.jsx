@@ -244,6 +244,8 @@ const addMonths = (dateStr, n) => {
   return toYMD(d);
 };
 
+const SCHEDULE_MODE = 'hybrid';
+
 /* -------- schedule helpers -------- */
 const makeBaitItems = (base, count = 5, stepDays = 20) =>
   Array.from({ length: count }).map((_, i) => ({
@@ -383,26 +385,75 @@ export default function CheckPage() {
     try { localStorage.setItem(LS_LAST_PHONE_KEY, digits); } catch {}
     await searchByDigits(digits);
   };
-
-  // อ่านวันที่รอบ Spray (คีย์ใหม่ก่อน → คีย์เก่า → คำนวณ)
+  
+  // Spray: fixed rule = start+4m, +4m จากครั้งที่ 1
+  // HYBRID: ถ้าชีตกรอก serviceSpray1/2 หรือมีใน services[] (ที่มีคำว่า "spray|ฉีดพ่น") ให้ใช้ก่อน
   const readSprayDates = (c, start) => {
-    const s1 = firstNonEmpty(c?.serviceSpray1, c?.service1) || (start ? addMonths(start, 4) : "");
-    const s2 = firstNonEmpty(c?.serviceSpray2, c?.service2) || (s1 ? addMonths(s1, 4) : (start ? addMonths(start, 8) : ""));
+    if (!start) return { s1: "", s2: "" };
+
+    if (SCHEDULE_MODE === 'hybrid') {
+      // ใช้เฉพาะคีย์ที่ "เป็นสเปรย์จริง ๆ" เท่านั้น
+      const s1d = c?.serviceSpray1 || "";
+      const s2d = c?.serviceSpray2 || "";
+      if (s1d && s2d) return { s1: s1d, s2: s2d };
+      if (s1d) return { s1: s1d, s2: addMonths(s1d, 4) };
+
+      // มองหาใน services[] เฉพาะรายการที่มีคำว่า spray|ฉีดพ่น
+      if (Array.isArray(c?.services) && c.services.length) {
+        const pick = (n) => {
+          const re = new RegExp(`(spray|ฉีดพ่น).*(ครั้งที่|รอบที่)\\s*${n}`, 'i');
+          const hit = c.services.find(s => re.test(String(s?.label || "")) && s?.date);
+          return hit?.date || "";
+        };
+        const s1x = pick(1);
+        const s2x = pick(2);
+        if (s1x && s2x) return { s1: s1x, s2: s2x };
+        if (s1x) return { s1: s1x, s2: addMonths(s1x, 4) };
+      }
+    }
+
+    // fallback สูตรตายตัวจาก start
+    const s1 = addMonths(start, 4);
+    const s2 = addMonths(s1, 4);
     return { s1, s2 };
   };
 
-  // อ่านวันที่รอบ Bait
+  // Bait: fixed rule = start+20d ต่อเนื่องรวม 5 ครั้ง
+  // HYBRID: ถ้ามี serviceBait1..5 หรือ services[] ที่ label มี "bait|เหยื่อ" ให้ใช้ก่อน
   const readBaitDates = (c, start) => {
-    const keys = ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"];
-    const fromKeys = keys.map(k => c?.[k]).filter(Boolean);
-    if (fromKeys.length) return fromKeys;
+    if (!start) return [];
 
-    const fromServices = (c?.services || [])
-      .filter(s => /(bait|เหยื่อ|ครั้งที่|รอบที่)/i.test(s?.label || "") && s?.date)
-      .map(s => s.date);
-    if (fromServices.length) return fromServices;
+    const out = new Array(5).fill("");
 
-    return makeBaitItems(start, 5, 20).map(x => x.date);
+    if (SCHEDULE_MODE === 'hybrid') {
+      // 1) เติมจากคีย์ตรง serviceBait1..5 เท่านั้น
+      ["serviceBait1","serviceBait2","serviceBait3","serviceBait4","serviceBait5"]
+        .forEach((k, i) => { if (c?.[k]) out[i] = c[k]; });
+
+      // 2) ถ้ายังว่าง ลองดึงจาก services[] แต่ "ต้องมีคำว่า bait|เหยื่อ" เท่านั้น
+      if (Array.isArray(c?.services) && c.services.length) {
+        c.services.forEach(s => {
+          const label = String(s?.label || "");
+          const m = label.match(/(bait|เหยื่อ).*?(?:ครั้งที่|รอบที่)\s*(\d+)/i);
+          if (m && s?.date) {
+            const idx = Math.max(1, Math.min(5, parseInt(m[2], 10))) - 1;
+            if (!out[idx]) out[idx] = s.date;
+          }
+        });
+      }
+    }
+
+    // 3) ช่องไหนยังว่าง → เติมด้วยสูตรตายตัวจาก start (+20 วันต่อครั้ง)
+    for (let i = 0; i < 5; i++) {
+      if (!out[i]) out[i] = addDays(start, 20 * (i + 1));
+    }
+
+    const fallback = makeBaitItems(start, 5, 20).map(x => x.date);
+    for (let i = 0; i < 5; i++) {
+      if (!out[i]) out[i] = fallback[i];
+    }
+    
+    return out.slice(0, 5);
   };
 
   /** ===== กำหนดการ ===== */
@@ -412,8 +463,8 @@ export default function CheckPage() {
     const start  = contract.startDate || "";
     const end    = contract.endDate || (start ? addMonths(start, 12) : "");
 
-    const { s1: sprayS1, s2: sprayS2 } = readSprayDates(contract, start);
     const baitDates = readBaitDates(contract, start);
+    const { s1: sprayS1, s2: sprayS2 } = readSprayDates(contract, start);
 
     const sprayGroup = { title: "ฉีดพ่น (2 ครั้ง/ปี)",            kind: "spray", items: makeSprayItems(start, sprayS1, sprayS2) };
     const baitGroup  = { title: "วางเหยื่อ (ทุก 20 วัน 5 ครั้ง)", kind: "bait",  items: baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i + 1}`, date: d })) };
