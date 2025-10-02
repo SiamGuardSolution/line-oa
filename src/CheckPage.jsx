@@ -244,20 +244,23 @@ const addMonths = (dateStr, n) => {
   return toYMD(d);
 };
 
-const SCHEDULE_MODE = 'hybrid';
-
-/* -------- schedule helpers -------- */
-const makeBaitItems = (base, count = 5, stepDays = 20) =>
-  Array.from({ length: count }).map((_, i) => ({
-    kind: "bait",
-    label: `ครั้งที่ ${i + 1}`,
-    date: addDays(base, stepDays * (i + 1)),
-  }));
-
-const makeSprayItems = (start, s1, s2) => [
-  { kind: "spray", label: "ครั้งที่ 1 (+4 เดือน)", date: s1 },
-  { kind: "spray", label: "ครั้งที่ 2 (+4 เดือนจากครั้งที่ 1)", date: s2 },
-];
+// ==== อ่านข้อมูลรอบบริการจาก JSON ใหม่ (ถ้ามี) ====
+function readScheduleJsonArrays(c) {
+  try {
+    const raw =
+      c?.serviceScheduleJson ||
+      c?.service_schedule_json ||
+      c?.serviceSchedule ||
+      "";
+    if (!raw) return { spray: [], bait: [] };
+    const obj = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const spray = Array.isArray(obj?.spray) ? obj.spray.filter(Boolean) : [];
+    const bait  = Array.isArray(obj?.bait)  ? obj.bait.filter(Boolean)  : [];
+    return { spray, bait };
+  } catch {
+    return { spray: [], bait: [] };
+  }
+}
 
 /* ---------------------- COMPONENTS ---------------------- */
 const NotesFlex = ({ payUrl }) => (
@@ -386,74 +389,56 @@ export default function CheckPage() {
     await searchByDigits(digits);
   };
   
-  // Spray: fixed rule = start+4m, +4m จากครั้งที่ 1
-  // HYBRID: ถ้าชีตกรอก serviceSpray1/2 หรือมีใน services[] (ที่มีคำว่า "spray|ฉีดพ่น") ให้ใช้ก่อน
+  // Spray แบบไดนามิก: ใช้ JSON ใหม่ก่อน → legacy → สูตร (start+4m,+8m)
   const readSprayDates = (c, start) => {
-    if (!start) return { s1: "", s2: "" };
+    // 1) JSON ใหม่
+    const json = readScheduleJsonArrays(c).spray;
+    if (json.length) return json;
 
-    if (SCHEDULE_MODE === 'hybrid') {
-      // ใช้เฉพาะคีย์ที่ "เป็นสเปรย์จริง ๆ" เท่านั้น
-      const s1d = c?.serviceSpray1 || "";
-      const s2d = c?.serviceSpray2 || "";
-      if (s1d && s2d) return { s1: s1d, s2: s2d };
-      if (s1d) return { s1: s1d, s2: addMonths(s1d, 4) };
-
-      // มองหาใน services[] เฉพาะรายการที่มีคำว่า spray|ฉีดพ่น
-      if (Array.isArray(c?.services) && c.services.length) {
-        const pick = (n) => {
-          const re = new RegExp(`(spray|ฉีดพ่น).*(ครั้งที่|รอบที่)\\s*${n}`, 'i');
-          const hit = c.services.find(s => re.test(String(s?.label || "")) && s?.date);
-          return hit?.date || "";
-        };
-        const s1x = pick(1);
-        const s2x = pick(2);
-        if (s1x && s2x) return { s1: s1x, s2: s2x };
-        if (s1x) return { s1: s1x, s2: addMonths(s1x, 4) };
-      }
+    // 2) legacy keys/services[]
+    const out = [];
+    if (c?.serviceSpray1) out.push(c.serviceSpray1);
+    if (c?.serviceSpray2) out.push(c.serviceSpray2);
+    if (Array.isArray(c?.services)) {
+      const arr = c.services
+        .filter(s => /(spray|ฉีดพ่น)/i.test(String(s?.label||"")) && s?.date)
+        .sort((a,b)=>String(a.label).localeCompare(String(b.label)))
+        .map(s => s.date);
+      arr.forEach(d => { if (!out.includes(d)) out.push(d); });
     }
+    if (out.length) return out;
 
-    // fallback สูตรตายตัวจาก start
+    // 3) สูตร fallback
+    if (!start) return [];
     const s1 = addMonths(start, 4);
     const s2 = addMonths(s1, 4);
-    return { s1, s2 };
+    return [s1, s2];
   };
 
-  // Bait: fixed rule = start+20d ต่อเนื่องรวม 5 ครั้ง
-  // HYBRID: ถ้ามี serviceBait1..5 หรือ services[] ที่ label มี "bait|เหยื่อ" ให้ใช้ก่อน
+  // Bait แบบไดนามิก: ใช้ JSON ใหม่ก่อน → legacy → สูตร 20 วัน * 5
   const readBaitDates = (c, start) => {
+    // 1) JSON ใหม่
+    const json = readScheduleJsonArrays(c).bait;
+    if (json.length) return json;
+
+    // 2) legacy keys/services[]
+    const out = [];
+    for (let i=1;i<=5;i++) {
+      const k = `serviceBait${i}`;
+      if (c?.[k]) out.push(c[k]);
+    }
+    if (Array.isArray(c?.services)) {
+      const arr = c.services
+        .filter(s => /(bait|เหยื่อ)/i.test(String(s?.label||"")) && s?.date)
+        .sort((a,b)=>String(a.label).localeCompare(String(b.label)))
+        .map(s => s.date);
+      arr.forEach(d => { if (!out.includes(d)) out.push(d); });
+    }
+    if (out.length) return out;
+
+    // 3) สูตร fallback
     if (!start) return [];
-
-    const out = new Array(5).fill("");
-
-    if (SCHEDULE_MODE === 'hybrid') {
-      // 1) เติมจากคีย์ตรง serviceBait1..5 เท่านั้น
-      ["serviceBait1","serviceBait2","serviceBait3","serviceBait4","serviceBait5"]
-        .forEach((k, i) => { if (c?.[k]) out[i] = c[k]; });
-
-      // 2) ถ้ายังว่าง ลองดึงจาก services[] แต่ "ต้องมีคำว่า bait|เหยื่อ" เท่านั้น
-      if (Array.isArray(c?.services) && c.services.length) {
-        c.services.forEach(s => {
-          const label = String(s?.label || "");
-          const m = label.match(/(bait|เหยื่อ).*?(?:ครั้งที่|รอบที่)\s*(\d+)/i);
-          if (m && s?.date) {
-            const idx = Math.max(1, Math.min(5, parseInt(m[2], 10))) - 1;
-            if (!out[idx]) out[idx] = s.date;
-          }
-        });
-      }
-    }
-
-    // 3) ช่องไหนยังว่าง → เติมด้วยสูตรตายตัวจาก start (+20 วันต่อครั้ง)
-    for (let i = 0; i < 5; i++) {
-      if (!out[i]) out[i] = addDays(start, 20 * (i + 1));
-    }
-
-    const fallback = makeBaitItems(start, 5, 20).map(x => x.date);
-    for (let i = 0; i < 5; i++) {
-      if (!out[i]) out[i] = fallback[i];
-    }
-    
-    return out.slice(0, 5);
+    return [20,40,60,80,100].map(d => addDays(start, d));
   };
 
   /** ===== กำหนดการ ===== */
@@ -463,20 +448,28 @@ export default function CheckPage() {
     const start  = contract.startDate || "";
     const end    = contract.endDate || (start ? addMonths(start, 12) : "");
 
-    const baitDates = readBaitDates(contract, start);
-    const { s1: sprayS1, s2: sprayS2 } = readSprayDates(contract, start);
+    const sprayDates = readSprayDates(contract, start);
+    const baitDates  = readBaitDates(contract, start);
+    
+    const sprayGroup = {
+      title: `ฉีดพ่น (${sprayDates.length} ครั้ง)`,
+      kind: "spray",
+      items: sprayDates.map((d, i) => ({ kind: "spray", label: `ครั้งที่ ${i+1}`, date: d }))
+    };
+    const baitGroup = {
+      title: `วางเหยื่อ (${baitDates.length} ครั้ง)`,
+      kind: "bait",
+      items: baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i+1}`, date: d }))
+    };
+    const endGroup = {
+      title: "สิ้นสุดสัญญา",
+      kind: "end",
+      items: [{ kind: "end", label: "สิ้นสุดสัญญา", date: end, isEnd: true }]
+    };
 
-    const sprayGroup = { title: "ฉีดพ่น (2 ครั้ง/ปี)",            kind: "spray", items: makeSprayItems(start, sprayS1, sprayS2) };
-    const baitGroup  = { title: "วางเหยื่อ (ทุก 20 วัน 5 ครั้ง)", kind: "bait",  items: baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i + 1}`, date: d })) };
-    const endGroup   = { title: "สิ้นสุดสัญญา",                   kind: "end",   items: [{ kind: "end", label: "สิ้นสุดสัญญา (+1 ปี)", date: end, isEnd: true }] };
-
-    if (pkgKey === "spray") {
-      return [sprayGroup, endGroup];
-    }
-    if (pkgKey === "bait") {
-      return [baitGroup, sprayGroup, endGroup];
-    }
-    return [baitGroup, sprayGroup, endGroup];
+    if (pkgKey === "spray") return [sprayGroup, endGroup];
+    if (pkgKey === "bait")  return [baitGroup, sprayGroup, endGroup];
+    return [baitGroup, sprayGroup, endGroup]; // mix
   }, [contract]);
 
   const contractStatus = useMemo(() => {
@@ -752,9 +745,12 @@ export default function CheckPage() {
               <span className="pill">
                 {(() => {
                   const k = derivePkgKey(contract);
-                  if (k === "spray") return "ฉีดพ่น: 2 ครั้ง / ปี";
-                  if (k === "bait") return "ผสมผสาน: เหยื่อ 5 ครั้ง + ฉีดพ่น 2 ครั้ง";
-                  return "ผสมผสาน: เหยื่อ 5 ครั้ง + ฉีดพ่น 2 ครั้ง";
+                  const sg = scheduleGroups;
+                  const spray = sg.find(g => g.kind === "spray")?.items?.length || 0;
+                  const bait  = sg.find(g => g.kind === "bait")?.items?.length  || 0;
+                  if (k === "spray") return `ฉีดพ่น: ${spray} ครั้ง`;
+                  if (k === "bait")  return `วางเหยื่อ: ${bait} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
+                  return `ผสมผสาน · เหยื่อ: ${bait} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
                 })()}
               </span>
             </div>

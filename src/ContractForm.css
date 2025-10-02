@@ -304,3 +304,61 @@ html, body { background: var(--sg-bg); color: var(--sg-text); }
   }
   .addon-amount{ text-align:left; }
 }
+
+/* ───────── Toolbar ───────── */
+.cf-toolbar{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:12px; padding:10px; border:1px solid #eef2f7; border-radius:12px; background:#f9fbff; margin-bottom:12px;
+}
+.cf-toolbar__left{ display:flex; gap:8px; flex-wrap:wrap; }
+.cf-toolbar__right{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+
+/* Chips */
+.cf-chip{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px; border-radius:999px; background:#fff; border:1px solid #e6ecf5; color:#334155; font-size:.85rem; font-weight:600;
+}
+.cf-chip--muted{ color:#6b7280; }
+.cf-chip--spray{ background:#eef7ff; border-color:#d7e9ff; color:#1e40af; }
+.cf-chip--bait { background:#f3fff1; border-color:#dcfce7; color:#166534; }
+
+/* ───────── Tabs ───────── */
+.cf-tabs{ display:flex; gap:6px; margin:8px 0 12px; }
+.cf-tab{
+  padding:8px 12px; border:1px solid #e6ecf5; background:#fff; border-radius:10px; font-weight:600; color:#334155;
+}
+.cf-tab--active{ background:#eef7ff; border-color:#cfe4ff; color:#0f3a8d; }
+
+/* ───────── Panel & Groups ───────── */
+.cf-panel{ display:block; }
+.cf-panel__header{ display:flex; align-items:center; justify-content:space-between; margin-top:12px; }
+.cf-group-title{ margin:6px 0 8px; font-size:1rem; color:#0f172a; }
+
+/* ───────── Grid of rounds ───────── */
+.service-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap:12px;
+}
+@media (max-width: 680px){
+  .service-grid{ grid-template-columns: 1fr; }
+}
+
+.round{
+  background:#fff; border:1px solid #e6ecf5; border-radius:12px; padding:10px 12px;
+  box-shadow: 0 1px 0 rgba(16,24,40,.02);
+}
+.round__badge{
+  width:28px; height:28px; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:#eaf3ff; color:#0f3a8d; font-weight:800; margin-bottom:6px; font-size:.9rem;
+}
+
+/* inline actions */
+.cf-actions-inline{ display:flex; gap:6px; }
+
+/* empty state */
+.cf-empty{
+  border:1px dashed #dbe4f0; background:#f8fbff; color:#64748b;
+  padding:10px 12px; border-radius:10px; font-size:.9rem;
+}
