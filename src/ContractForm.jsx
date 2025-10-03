@@ -5,17 +5,17 @@ import generateReceiptPDF from "./lib/generateReceiptPDF";
 import generateContractPDF from "./lib/generateContractPDF";
 import * as PKG from "./config/packages";
 
+// ====== API (โพสต์ไปบันทึกชีต) ======
+const API_BASE = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
+const API_URL  = `${API_BASE}/api/submit-contract`;
+
 // helper ปลอดภัย กรณี build แคช export เพี้ยน
 const pkgLabel = (k) =>
   typeof PKG.getPackageLabel === "function"
     ? PKG.getPackageLabel(k)
     : (PKG.PACKAGE_LABEL?.[k] ?? String(k));
 
-// ใช้ BASE จาก .env (เช่น https://siamguards-proxy.phet67249.workers.dev)
-const API_BASE = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
-const API_URL  = `${API_BASE}/api/submit-contract`;
-
-// ===== ข้อมูลบริษัท (แก้เป็นข้อมูลจริงของ Siam Guard) =====
+// ===== ข้อมูลบริษัท =====
 const COMPANY = {
   name: "สยามการ์ด โซลูชั่น (ประเทศไทย) จำกัด",
   address: "99 หมู่ 17 ต.คลองหนึ่ง อ.คลองหลวง จ.ปทุมธานี 12120",
@@ -38,13 +38,11 @@ const BAIT_FIELDS = [
   { key: "serviceBait5", label: "Service Bait รอบที่ 5" },
 ];
 
-// PACKAGES แบบ groups (+ fields fallback)
 const PACKAGES = {
   spray: {
     groups: [{ type: "spray", title: "Service Spray", fields: SPRAY_FIELDS }],
   },
   bait: {
-    // ✅ bait = Spray + Bait เหมือน mix
     groups: [
       { type: "spray", title: "Service Spray", fields: SPRAY_FIELDS },
       { type: "bait", title: "Service Bait", fields: BAIT_FIELDS },
@@ -58,12 +56,7 @@ const PACKAGES = {
   },
 };
 
-// flatten fields จาก groups (รองรับ fallback .fields)
-const getAllFields = (pkgConf) =>
-  (pkgConf.groups
-    ? pkgConf.groups.flatMap((g) => g.fields || [])
-    : (pkgConf.fields || []));
-  const emptyForm = {
+const emptyForm = {
   package: "spray",
   name: "",
   address: "",
@@ -98,7 +91,7 @@ const addMonths = (d, m) => {
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const addYears = (d, n) => addMonths(d, n * 12);
 
-/* ===== Even Spacing (ช่วงเท่ากัน) ===== */
+/* ===== Even Spacing ===== */
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function toDateOnly(d) {
@@ -131,7 +124,7 @@ function evenSpacedDatesInclusive(start, end, n) {
 const digitsOnly = (s) => String(s || "").replace(/\D/g, "");
 const taxIdDigits = (s) => digitsOnly(s).slice(0, 13);
 
-// คำนวณตารางบริการตามแพ็กเกจ (เขียนทั้ง “คีย์ใหม่” และ “legacy” ให้พร้อม)
+// คำนวณตารางบริการตามแพ็กเกจ
 function computeSchedule(pkg, startStr) {
   if (!startStr) return {};
   const start = new Date(startStr);
@@ -241,6 +234,8 @@ function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
 
 export default function ContractForm() {
   const [form, setForm] = useState({ ...emptyForm });
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState({ text: "", ok: false });
 
   const baseServicePrice = useMemo(() => {
     const fn = PKG.getPackagePrice;
@@ -249,18 +244,13 @@ export default function ContractForm() {
     return Number(val ?? 0);
   }, [form.package]);
 
-  // ===== items สำหรับส่ง backend / คิดยอด =====
+  // ===== items สำหรับคิดยอด / ใบเสร็จ =====
   const items = useMemo(
     () => [
-      {
-        name: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`,
-        quantity: 1,
-        price: baseServicePrice,
-      },
+      { name: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`, quantity: 1, price: baseServicePrice },
     ],
     [form.package, baseServicePrice]
   );
-
   const itemsSubtotal = baseServicePrice;
 
   // ===== Add-ons =====
@@ -275,27 +265,23 @@ export default function ContractForm() {
     });
   };
 
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState({ text: "", ok: false });
-
   const pkgConf = PACKAGES[form.package] || PACKAGES["spray"];
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
   const phoneDigits = (s) => digitsOnly(s);
 
   const [discountValue, setDiscountValue] = useState("");
-  
+
   // แท็บสำหรับสลับมุมมอง Service
   const [activeTab, setActiveTab] = useState(form.package === "bait" ? "bait" : "spray");
-
   useEffect(() => {
-  setActiveTab(form.package === "bait" ? "bait" : "spray");
-}, [form.package]);
+    setActiveTab(form.package === "bait" ? "bait" : "spray");
+  }, [form.package]);
 
   // === ใบเสร็จ (Receipt) VAT ===
   const [receiptVatEnabled, setReceiptVatEnabled] = useState(false);
-  const RECEIPT_VAT_RATE = 0.07; // 7% สำหรับใบเสร็จ
+  const RECEIPT_VAT_RATE = 0.07;
 
-  // ===== รอบบริการแบบยืดหยุ่น (Extras สำหรับเกินช่องคงที่) =====
+  // ===== รอบบริการแบบยืดหยุ่น =====
   const [sprayExtras, setSprayExtras] = useState([]); // ['YYYY-MM-DD', ...]
   const [baitExtras, setBaitExtras]   = useState([]); // ['YYYY-MM-DD', ...]
 
@@ -304,14 +290,14 @@ export default function ContractForm() {
   const sprayCount = sprayFixedCount + sprayExtras.length;
   const baitCount  = baitFixedCount  + baitExtras.length;
 
-  // Auto-generate ตารางบริการ / endDate จาก startDate (สูตรเดิม)
+  // Auto-generate ตารางบริการ / endDate
   useEffect(() => {
     if (!form.startDate) return;
     const auto = computeSchedule(form.package, form.startDate);
     if (Object.keys(auto).length) setForm((s) => ({ ...s, ...auto }));
   }, [form.package, form.startDate]);
 
-  // ---- ปุ่ม: กระจาย (เฉพาะ Spray) เท่าๆ กัน โดยนับ start/end เป็นจุดด้วย ----
+  // ---- ปุ่ม: กระจาย (เฉพาะสเปรย์) ----
   const distributeSprayEqualFromStartEnd = () => {
     const start = form.startDate;
     const end   = form.endDate || (form.startDate ? toISO(addYears(new Date(form.startDate), 1)) : "");
@@ -319,35 +305,28 @@ export default function ContractForm() {
       alert("กรุณากำหนดวันเริ่ม/สิ้นสุดสัญญาให้ครบก่อน");
       return;
     }
-
-    // จุดรวม = จำนวนรอบสเปรย์ + 2 (start/end)
     const totalPoints = sprayCount + 2;
     if (totalPoints < 3) { alert("จำนวนรอบฉีดพ่นต้องไม่น้อยกว่า 1"); return; }
-
     const dates = evenSpacedDatesInclusive(start, end, totalPoints);
-    const midDates = dates.slice(1, dates.length - 1); // วันที่สำหรับรอบสเปรย์เท่านั้น
+    const midDates = dates.slice(1, dates.length - 1);
 
     const patch = {};
     patch.serviceSpray1 = midDates[0] || "";
     patch.serviceSpray2 = midDates[1] || "";
-
     const extra = midDates.slice(2);
     setSprayExtras(extra);
 
     setForm((s) => ({ ...s, ...patch, endDate: dates[dates.length - 1] || end }));
   };
 
-  // ---- ปุ่ม: รีเซ็ตตามสูตรแพ็กเกจเดิม (ไม่ยุ่ง Extras) ----
+  // ---- ปุ่ม: รีเซ็ตตามสูตรแพ็กเกจ ----
   const resetByPackageFormula = () => {
-    if (!form.startDate) {
-      alert("กรุณาเลือกวันที่เริ่มสัญญาก่อน");
-      return;
-    }
+    if (!form.startDate) { alert("กรุณาเลือกวันที่เริ่มสัญญาก่อน"); return; }
     const auto = computeSchedule(form.package, form.startDate);
     if (Object.keys(auto).length) setForm((s) => ({ ...s, ...auto }));
   };
 
-  // ตรวจความถูกต้องก่อนบันทึก/พิมพ์
+  // ตรวจความถูกต้อง
   const validate = () => {
     if (!form.name.trim()) return "กรุณากรอกชื่อลูกค้า";
     if (phoneDigits(form.phone).length < 9) return "กรุณากรอกเบอร์โทรให้ถูกต้อง";
@@ -379,11 +358,7 @@ export default function ContractForm() {
   // ===== ใบเสร็จ (PDF) =====
   async function handleCreateReceiptPDF() {
     const pdfItems = [
-      {
-        description: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`,
-        qty: 1,
-        unitPrice: baseServicePrice,
-      },
+      { description: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`, qty: 1, unitPrice: baseServicePrice },
       ...addons
         .filter((r) => r && (r.name || r.qty || r.price))
         .map((r) => ({
@@ -401,7 +376,7 @@ export default function ContractForm() {
 
       customerCode: "",
       clientName: form.name || "",
-      clientPhone: phoneDigits(form.phone) || "",
+      clientPhone: digitsOnly(form.phone) || "",
       clientAddress: form.address || "",
       clientTaxId: taxIdDigits(form.taxId) || "",
 
@@ -413,7 +388,6 @@ export default function ContractForm() {
       items: pdfItems,
       discount: Number(discountNum || 0),
 
-      // ✅ VAT สำหรับ "ใบเสร็จ" เท่านั้น
       vatEnabled: receiptVatEnabled,
       vatRate: receiptVatEnabled ? 0.07 : 0,
 
@@ -433,13 +407,12 @@ export default function ContractForm() {
     }
   }
 
-  // ===== สร้างสัญญา (PDF) โดยไม่บันทึก =====
+  // ===== สร้างสัญญา (PDF) =====
   async function handleCreateContractPDFOnly() {
     const err = validate();
     if (err) { alert(err); return; }
     const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
     try {
-      // ❌ ไม่ส่ง VAT เข้า generateContractPDF อีกต่อไป
       await generateContractPDF(data, { fileName });
     } catch (e) {
       console.error(e);
@@ -447,15 +420,17 @@ export default function ContractForm() {
     }
   }
 
-  // ===== บันทึกลง API แล้วค่อยสร้างสัญญา (PDF) =====
-  const handleSubmit = async (e) => {
+  // ===== บันทึกลง GAS ผ่าน /api/submit-contract =====
+  const isBaitLike = form.package === "bait" || form.package === "mix";
+
+  const handleSubmitAndSave = async (e) => {
     e.preventDefault();
     setMsg({ text: "", ok: false });
 
     const err = validate();
     if (err) return setMsg({ text: err, ok: false });
 
-    // เตรียม payload
+    // เขียน payload สำหรับบันทึกชีต (ไม่พึ่งชีต Contract)
     const payload = {
       package: form.package,
       name: form.name,
@@ -469,35 +444,41 @@ export default function ContractForm() {
       note: form.note,
       status: form.status || "ใช้งานอยู่",
 
+      // สรุปยอด
       items,
       discount: discountValue === "" ? "" : Number(discountValue),
       addons,
       itemsSubtotal,
       addonsSubtotal,
       netBeforeVat,
+
+      // เขียนคีย์ตารางบริการตรง ๆ (ให้ GAS map ไปชีต Spray/Bait/Mix ตามที่คุณทำไว้)
+      serviceSpray1: form.serviceSpray1 || "",
+      serviceSpray2: form.serviceSpray2 || "",
+      serviceBait1:  form.serviceBait1  || "",
+      serviceBait2:  form.serviceBait2  || "",
+      serviceBait3:  form.serviceBait3  || "",
+      serviceBait4:  form.serviceBait4  || "",
+      serviceBait5:  form.serviceBait5  || "",
+
+      // แนบ JSON รอบบริการทั้งหมด (รวม extras)
+      serviceScheduleJson: JSON.stringify({
+        startDate: form.startDate,
+        endDate:   form.endDate,
+        spray: [
+          form.serviceSpray1 || "",
+          form.serviceSpray2 || "",
+          ...sprayExtras
+        ].filter(Boolean),
+        bait: isBaitLike
+          ? [
+              form.serviceBait1 || "", form.serviceBait2 || "", form.serviceBait3 || "",
+              form.serviceBait4 || "", form.serviceBait5 || "",
+              ...baitExtras
+            ].filter(Boolean)
+          : [],
+      }),
     };
-
-    // เขียนคีย์ตารางบริการจาก groups (หรือ fields fallback)
-    const allFields = getAllFields(pkgConf);
-    allFields.forEach(({ key }) => (payload[key] = form[key] || ""));
-
-    // ✅ แนบ JSON รวมทุกรอบ (เกินช่องคงที่ก็เก็บครบ)
-    payload.serviceScheduleJson = JSON.stringify({
-      startDate: form.startDate,
-      endDate:   form.endDate,
-      spray: [
-        form.serviceSpray1 || "",
-        form.serviceSpray2 || "",
-        ...sprayExtras
-      ].filter(Boolean),
-      bait: isBaitLike
-        ? [
-            form.serviceBait1 || "", form.serviceBait2 || "", form.serviceBait3 || "",
-            form.serviceBait4 || "", form.serviceBait5 || "",
-            ...baitExtras
-          ].filter(Boolean)
-        : [],
-    });
 
     try {
       setLoading(true);
@@ -514,6 +495,8 @@ export default function ContractForm() {
       if (!res.ok || json?.ok === false) throw new Error(json?.error || "save-failed");
 
       setMsg({ text: "บันทึกสำเร็จ", ok: true });
+
+      // reset ฟอร์มหลังบันทึก
       setForm({ ...emptyForm, package: form.package });
       setAddons([{ name: "", qty: 1, price: 0 }]);
       setDiscountValue("");
@@ -529,15 +512,12 @@ export default function ContractForm() {
 
   const pkgOptions = Object.keys(PACKAGES);
 
-  // แพ็กเกจที่มีบริการ Bait
-  const isBaitLike = form.package === "bait" || form.package === "mix";
-
   return (
     <div className="cf">
       <div className="cf__card">
         <div className="cf__chip">ฟอร์มสัญญา</div>
-        <h2 className="cf__title">บันทึกสัญญาลูกค้า</h2>
-        <p className="cf__subtitle">กรอกข้อมูลลูกค้าและกำหนดการบริการตามแพ็กเกจ ระบบจะคำนวณให้อัตโนมัติ</p>
+        <h2 className="cf__title">บันทึกสัญญาลูกค้า + สร้าง PDF</h2>
+        <p className="cf__subtitle">บันทึกข้อมูลไปยัง Google Sheet ผ่าน /api/submit-contract และดาวน์โหลดสัญญา/ใบเสร็จเป็น PDF</p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button type="button" className="btn btn-secondary" onClick={handleCreateReceiptPDF}>
@@ -548,7 +528,7 @@ export default function ContractForm() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="cf__form">
+        <form onSubmit={handleSubmitAndSave} className="cf__form">
           {/* แพ็กเกจ */}
           <div className="cf__field">
             <label className="cf__label">แพ็กเกจ</label>
@@ -634,7 +614,7 @@ export default function ContractForm() {
               <div>ส่วนลด: <b>-{discountNum.toLocaleString()}</b></div>
               <div>ค่าบริการเพิ่มเติม (Add-on): <b>+{addonsSubtotal.toLocaleString()}</b></div>
               <hr />
-              <div className="total-line">ราคาก่อนภาษี: <b>{netBeforeVat.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b></div>
+              <div className="total-line">ราคาก่อนภาษี: <b>{(Math.round((netBeforeVat + Number.EPSILON) * 100) / 100).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b></div>
 
               {/* ✅ สวิตช์ VAT สำหรับ "ใบเสร็จ" */}
               <label className="cf__checkbox" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
@@ -709,7 +689,7 @@ export default function ContractForm() {
             </div>
           </div>
 
-          {/* ตารางบริการ: groups */}
+          {/* ตารางบริการ */}
           <fieldset className="cf__fieldset">
             <legend className="cf__legend">กำหนดการบริการ</legend>
 
@@ -727,7 +707,7 @@ export default function ContractForm() {
                 <span className="cf-chip">เริ่ม {form.startDate || "-"}</span>
                 <span className="cf-chip cf-chip--muted">สิ้นสุด {form.endDate || "-"}</span>
                 <span className="cf-chip cf-chip--spray">Spray {sprayCount} ครั้ง</span>
-                {isBaitLike && (
+                {(form.package === "bait" || form.package === "mix") && (
                   <span className="cf-chip cf-chip--bait">Bait {baitCount} ครั้ง</span>
                 )}
               </div>
@@ -742,7 +722,7 @@ export default function ContractForm() {
               >
                 Spray ({sprayCount})
               </button>
-              {isBaitLike && (
+              {(form.package === "bait" || form.package === "mix") && (
                 <button
                   type="button"
                   className={`cf-tab ${activeTab === "bait" ? "cf-tab--active" : ""}`}
@@ -756,7 +736,6 @@ export default function ContractForm() {
             {/* === SPRAY PANEL === */}
             {activeTab === "spray" && (
               <div className="cf-panel">
-                {/* มาตรฐาน 2 รอบ */}
                 <h4 className="cf-group-title">รอบมาตรฐาน</h4>
                 <div className="service-grid">
                   <div className="round">
@@ -782,7 +761,6 @@ export default function ContractForm() {
                   </div>
                 </div>
 
-                {/* เพิ่มเติม */}
                 <div className="cf-panel__header">
                   <h4 className="cf-group-title">รอบเพิ่มเติม</h4>
                   <div className="cf-actions-inline">
@@ -829,9 +807,8 @@ export default function ContractForm() {
             )}
 
             {/* === BAIT PANEL === */}
-            {isBaitLike && activeTab === "bait" && (
+            {(form.package === "bait" || form.package === "mix") && activeTab === "bait" && (
               <div className="cf-panel">
-                {/* มาตรฐาน 5 รอบ */}
                 <h4 className="cf-group-title">รอบมาตรฐาน</h4>
                 <div className="service-grid">
                   {BAIT_FIELDS.map(({ key, label }, idx) => (
@@ -848,57 +825,52 @@ export default function ContractForm() {
                   ))}
                 </div>
 
-                {/* ▸ แสดง "รอบเพิ่มเติม" + ปุ่ม +/- เฉพาะแพ็กเกจที่มี Bait เท่านั้น */}
-                {isBaitLike ? (
-                  <>
-                    <div className="cf-panel__header">
-                      <h4 className="cf-group-title">รอบเพิ่มเติม</h4>
-                      <div className="cf-actions-inline">
-                        <button
-                          type="button"
-                          className="btn-outline"
-                          disabled={baitExtras.length === 0}
-                          onClick={() => setBaitExtras(ex => ex.slice(0, Math.max(0, ex.length - 1)))}
-                        >
-                          – ลด
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-outline"
-                          onClick={() => setBaitExtras(ex => [...ex, ""])}
-                        >
-                          + เพิ่ม
-                        </button>
-                      </div>
-                    </div>
+                <div className="cf-panel__header">
+                  <h4 className="cf-group-title">รอบเพิ่มเติม</h4>
+                  <div className="cf-actions-inline">
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      disabled={baitExtras.length === 0}
+                      onClick={() => setBaitExtras(ex => ex.slice(0, Math.max(0, ex.length - 1)))}
+                    >
+                      – ลด
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={() => setBaitExtras(ex => [...ex, ""])}
+                    >
+                      + เพิ่ม
+                    </button>
+                  </div>
+                </div>
 
-                    {baitExtras.length === 0 ? (
-                      <div className="cf-empty">ยังไม่มีรอบเพิ่มเติม</div>
-                    ) : (
-                      <div className="service-grid">
-                        {baitExtras.map((d, i) => (
-                          <div className="round" key={`baitExtra-${i}`}>
-                            <div className="round__badge">#{i + 6}</div>
-                            <label className="cf__label">Bait เพิ่มเติม #{i + 6}</label>
-                            <input
-                              type="date"
-                              className="cf__input"
-                              value={d || ""}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setBaitExtras(arr => {
-                                  const next = [...arr];
-                                  next[i] = v;
-                                  return next;
-                                });
-                              }}
-                            />
-                          </div>
-                        ))}
+                {baitExtras.length === 0 ? (
+                  <div className="cf-empty">ยังไม่มีรอบเพิ่มเติม</div>
+                ) : (
+                  <div className="service-grid">
+                    {baitExtras.map((d, i) => (
+                      <div className="round" key={`baitExtra-${i}`}>
+                        <div className="round__badge">#{i + 6}</div>
+                        <label className="cf__label">Bait เพิ่มเติม #{i + 6}</label>
+                        <input
+                          type="date"
+                          className="cf__input"
+                          value={d || ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setBaitExtras(arr => {
+                              const next = [...arr];
+                              next[i] = v;
+                              return next;
+                            });
+                          }}
+                        />
                       </div>
-                    )}
-                  </>
-                ) : null}
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </fieldset>
@@ -918,7 +890,10 @@ export default function ContractForm() {
 
           <div className="cf__actions">
             <button type="submit" className="cf__btn cf__btn--primary" disabled={loading}>
-              {loading ? "กำลังบันทึก..." : "บันทึกข้อมูลสัญญา"}
+              {loading ? "กำลังบันทึก..." : "บันทึกข้อมูลสัญญา (POST /api/submit-contract)"}
+            </button>
+            <button type="button" className="cf__btn" onClick={handleCreateContractPDFOnly}>
+              ดาวน์โหลดสัญญา (PDF)
             </button>
             <button
               type="button"
