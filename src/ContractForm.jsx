@@ -5,9 +5,7 @@ import generateReceiptPDF from "./lib/generateReceiptPDF";
 import generateContractPDF from "./lib/generateContractPDF";
 import * as PKG from "./config/packages";
 
-// ====== API (โพสต์ไปบันทึกชีต) ======
-const API_BASE = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
-const API_URL  = `${API_BASE}/api/submit-contract`;
+const API_URL = "/api/submit-contract";
 
 // helper ปลอดภัย กรณี build แคช export เพี้ยน
 const pkgLabel = (k) =>
@@ -432,6 +430,7 @@ export default function ContractForm() {
 
     // เขียน payload สำหรับบันทึกชีต (ไม่พึ่งชีต Contract)
     const payload = {
+      servicePackage: form.package,
       package: form.package,
       name: form.name,
       address: form.address,
