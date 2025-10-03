@@ -26,7 +26,7 @@ module.exports = async (req, res) => {
     // ปลอดภัย: map servicePackage -> package เผื่อ GAS ใช้ชื่อเดิม
     const payload = { ...body, package: body.servicePackage ?? body.package };
 
-    const response = await fetch(`${GOOGLE_SCRIPT_URL}?path=submit`, {
+    const response = await fetch(`${GOOGLE_SCRIPT_URL}?path=submit&debug=1`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
