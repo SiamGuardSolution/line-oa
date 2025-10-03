@@ -516,7 +516,7 @@ export default function ContractForm() {
       <div className="cf__card">
         <div className="cf__chip">ฟอร์มสัญญา</div>
         <h2 className="cf__title">บันทึกสัญญาลูกค้า + สร้าง PDF</h2>
-        <p className="cf__subtitle">บันทึกข้อมูลไปยัง Google Sheet ผ่าน /api/submit-contract และดาวน์โหลดสัญญา/ใบเสร็จเป็น PDF</p>
+        <p className="cf__subtitle">บันทึกข้อมูลสัญญา</p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button type="button" className="btn btn-secondary" onClick={handleCreateReceiptPDF}>
@@ -889,7 +889,7 @@ export default function ContractForm() {
 
           <div className="cf__actions">
             <button type="submit" className="cf__btn cf__btn--primary" disabled={loading}>
-              {loading ? "กำลังบันทึก..." : "บันทึกข้อมูลสัญญา (POST /api/submit-contract)"}
+              {loading ? "กำลังบันทึก..." : "บันทึกข้อมูลสัญญา"}
             </button>
             <button type="button" className="cf__btn" onClick={handleCreateContractPDFOnly}>
               ดาวน์โหลดสัญญา (PDF)
