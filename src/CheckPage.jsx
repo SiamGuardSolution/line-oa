@@ -8,6 +8,12 @@ const HOST = window.location.hostname;
 const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
 const API_BASES = (HOST === "localhost" || HOST === "127.0.0.1") ? ["", PROXY] : [PROXY];
 
+// สำหรับสร้างลิงก์ภายนอก (จ่ายเงิน ฯลฯ)
+const APP_BASE_URL =
+  (HOST === "localhost" || HOST === "127.0.0.1")
+  ? "http://localhost:3000"
+  : (process.env.REACT_APP_PROD_URL || "https://contract.siamguards.com");
+
 // localStorage: เบอร์ล่าสุด + auto-run
 const LS_LAST_PHONE_KEY = "sg_lastPhone";
 const AUTORUN_LAST = true;
@@ -505,9 +511,9 @@ export default function CheckPage() {
   // ลิงก์จ่ายเงิน → ใช้ยอดสุทธิหลัง VAT
   const payUrl = useMemo(() => {
     if (!contractRef) return "";
-    const parts = [`/pay?ref=${encodeURIComponent(contractRef)}`];
-    if (grandTotal > 0) parts.push(`amt=${encodeURIComponent(grandTotal.toFixed(2))}`);
-    return parts.join("&");
+    const q = new URLSearchParams({ ref: contractRef });
+    if (grandTotal > 0) q.set("amt", grandTotal.toFixed(2));
+    return `${APP_BASE_URL}/pay?${q.toString()}`;
   }, [contractRef, grandTotal]);
 
   async function handleDownloadReceipt(current) {

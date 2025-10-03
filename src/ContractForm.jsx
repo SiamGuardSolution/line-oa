@@ -11,7 +11,9 @@ const pkgLabel = (k) =>
     ? PKG.getPackageLabel(k)
     : (PKG.PACKAGE_LABEL?.[k] ?? String(k));
 
-const API_URL = "/api/submit-contract";
+// ใช้ BASE จาก .env (เช่น https://siamguards-proxy.phet67249.workers.dev)
+const API_BASE = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
+const API_URL  = `${API_BASE}/api/submit-contract`;
 
 // ===== ข้อมูลบริษัท (แก้เป็นข้อมูลจริงของ Siam Guard) =====
 const COMPANY = {
