@@ -89,6 +89,12 @@ const addMonths = (d, m) => {
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const addYears = (d, n) => addMonths(d, n * 12);
 
+const askConfirm = (msg) =>
+  (typeof window !== "undefined" && typeof window.confirm === "function")
+    ? window.confirm(msg)
+    : true; // เผื่อรันใน env ที่ไม่มี window
+
+
 /* ===== Even Spacing ===== */
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -122,7 +128,7 @@ function evenSpacedDatesInclusive(start, end, n) {
 const digitsOnly = (s) => String(s || "").replace(/\D/g, "");
 const taxIdDigits = (s) => digitsOnly(s).slice(0, 13);
 
-// คำนวณตารางบริการตามแพ็กเกจ
+// คำนวณตารางบริการตามแพ็กเกจ (เต็มจำนวนสูงสุด)
 function computeSchedule(pkg, startStr) {
   if (!startStr) return {};
   const start = new Date(startStr);
@@ -172,13 +178,16 @@ const makeContractNo = () => {
 // ====== payload สำหรับ generateContractPDF ======
 function buildContractPdfData(form, pkgConf, baseServicePrice, addons) {
   const groups = pkgConf.groups || [{ title: "", fields: pkgConf.fields || [] }];
-  const schedule = groups.flatMap((g) =>
-    (g.fields || []).map((f, idx) => {
-      const dateStr = form[f.key];
-      if (!dateStr) return null;
-      return { round: idx + 1, date: dateStr, note: f.label || g.title || "" };
-    }).filter(Boolean)
-  );
+  const schedule = groups
+    .flatMap((g) =>
+      (g.fields || [])
+        .map((f, idx) => {
+          const dateStr = form[f.key];
+          if (!dateStr) return null;
+          return { round: idx + 1, date: dateStr, note: f.label || g.title || "" };
+        })
+        .filter(Boolean)
+    );
 
   const pkgName = pkgLabel(form.package);
 
@@ -238,15 +247,13 @@ export default function ContractForm() {
   const baseServicePrice = useMemo(() => {
     const fn = PKG.getPackagePrice;
     const map = PKG.PACKAGE_PRICE;
-    const val = (typeof fn === "function") ? fn(form.package) : map?.[form.package];
+    const val = typeof fn === "function" ? fn(form.package) : map?.[form.package];
     return Number(val ?? 0);
   }, [form.package]);
 
   // ===== items สำหรับคิดยอด / ใบเสร็จ =====
   const items = useMemo(
-    () => [
-      { name: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`, quantity: 1, price: baseServicePrice },
-    ],
+    () => [{ name: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`, quantity: 1, price: baseServicePrice }],
     [form.package, baseServicePrice]
   );
   const itemsSubtotal = baseServicePrice;
@@ -271,9 +278,6 @@ export default function ContractForm() {
 
   // แท็บสำหรับสลับมุมมอง Service
   const [activeTab, setActiveTab] = useState(form.package === "bait" ? "bait" : "spray");
-  useEffect(() => {
-    setActiveTab(form.package === "bait" ? "bait" : "spray");
-  }, [form.package]);
 
   // === ใบเสร็จ (Receipt) VAT ===
   const [receiptVatEnabled, setReceiptVatEnabled] = useState(false);
@@ -281,54 +285,146 @@ export default function ContractForm() {
 
   // ===== รอบบริการแบบยืดหยุ่น =====
   const [sprayExtras, setSprayExtras] = useState([]); // ['YYYY-MM-DD', ...]
-  const [baitExtras, setBaitExtras]   = useState([]); // ['YYYY-MM-DD', ...]
+  const [baitExtras, setBaitExtras] = useState([]);   // ['YYYY-MM-DD', ...]
 
-  const sprayFixedCount = 2;
-  const baitFixedCount  = 5;
-  const sprayCount = sprayFixedCount + sprayExtras.length;
-  const baitCount  = baitFixedCount  + baitExtras.length;
+  // --- จำนวนรอบมาตรฐานที่ "ใช้จริง" (ลด/เพิ่มได้) ---
+  const SPRAY_STD_MAX = 2;
+  const BAIT_STD_MAX = 5;
 
-  // Auto-generate ตารางบริการ / endDate
+  const [sprayStdUsed, setSprayStdUsed] = useState(SPRAY_STD_MAX);
+  const [baitStdUsed, setBaitStdUsed] = useState(BAIT_STD_MAX);
+
+  // ปรับ activeTab + reset จำนวนรอบมาตรฐาน เมื่อเปลี่ยนแพ็กเกจ
+  useEffect(() => {
+    setActiveTab(form.package === "bait" ? "bait" : "spray");
+    setSprayStdUsed(SPRAY_STD_MAX);
+    setBaitStdUsed(BAIT_STD_MAX);
+  }, [form.package]);
+
+  // เมื่อ "ลด" รอบมาตรฐาน ให้ล้างค่ารอบท้ายทิ้ง (Spray)
+  useEffect(() => {
+    const keys = ["serviceSpray1", "serviceSpray2"];
+    setForm((s) => {
+      const n = { ...s };
+      keys.forEach((k, i) => {
+        if (i >= sprayStdUsed) n[k] = "";
+      });
+      return n;
+    });
+  }, [sprayStdUsed]);
+
+  // เมื่อ "ลด" รอบมาตรฐาน ให้ล้างค่ารอบท้ายทิ้ง (Bait)
+  useEffect(() => {
+    const keys = ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"];
+    setForm((s) => {
+      const n = { ...s };
+      keys.forEach((k, i) => {
+        if (i >= baitStdUsed) n[k] = "";
+      });
+      return n;
+    });
+  }, [baitStdUsed]);
+
+  // นับจำนวนครั้งจริง (มาตรฐานที่ใช้จริง + extras)
+  const sprayCount = sprayStdUsed + sprayExtras.length;
+  const baitCount =
+    form.package === "bait" || form.package === "mix" ? baitStdUsed + baitExtras.length : 0;
+
+  // Auto-generate ตารางบริการ / endDate แล้วตัดตามจำนวนที่ใช้จริง
   useEffect(() => {
     if (!form.startDate) return;
     const auto = computeSchedule(form.package, form.startDate);
-    if (Object.keys(auto).length) setForm((s) => ({ ...s, ...auto }));
-  }, [form.package, form.startDate]);
+    if (!Object.keys(auto).length) return;
+
+    const trimmed = { ...auto };
+
+    ["serviceSpray1", "serviceSpray2"].forEach((k, i) => {
+      if (i >= sprayStdUsed) trimmed[k] = "";
+    });
+
+    if (form.package === "bait" || form.package === "mix") {
+      ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].forEach(
+        (k, i) => {
+          if (i >= baitStdUsed) trimmed[k] = "";
+        }
+      );
+    } else {
+      ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].forEach(
+        (k) => (trimmed[k] = "")
+      );
+    }
+
+    setForm((s) => ({ ...s, ...trimmed }));
+  }, [form.package, form.startDate, sprayStdUsed, baitStdUsed]);
 
   // ---- ปุ่ม: กระจาย (เฉพาะสเปรย์) ----
   const distributeSprayEqualFromStartEnd = () => {
     const start = form.startDate;
-    const end   = form.endDate || (form.startDate ? toISO(addYears(new Date(form.startDate), 1)) : "");
+    const end =
+      form.endDate || (form.startDate ? toISO(addYears(new Date(form.startDate), 1)) : "");
     if (!start || !end) {
       alert("กรุณากำหนดวันเริ่ม/สิ้นสุดสัญญาให้ครบก่อน");
       return;
     }
-    const totalPoints = sprayCount + 2;
-    if (totalPoints < 3) { alert("จำนวนรอบฉีดพ่นต้องไม่น้อยกว่า 1"); return; }
+
+    const totalRounds = sprayStdUsed + sprayExtras.length; // รอบที่จะกระจายจริง
+    if (totalRounds < 1) {
+      alert("ต้องมีอย่างน้อย 1 รอบฉีดพ่นเพื่อกระจายระยะ");
+      return;
+    }
+
+    const totalPoints = totalRounds + 2;
     const dates = evenSpacedDatesInclusive(start, end, totalPoints);
     const midDates = dates.slice(1, dates.length - 1);
 
     const patch = {};
-    patch.serviceSpray1 = midDates[0] || "";
-    patch.serviceSpray2 = midDates[1] || "";
-    const extra = midDates.slice(2);
+    const stdKeys = ["serviceSpray1", "serviceSpray2"].slice(0, sprayStdUsed);
+    stdKeys.forEach((k, i) => {
+      patch[k] = midDates[i] || "";
+    });
+
+    const extra = midDates.slice(sprayStdUsed);
     setSprayExtras(extra);
 
     setForm((s) => ({ ...s, ...patch, endDate: dates[dates.length - 1] || end }));
   };
 
-  // ---- ปุ่ม: รีเซ็ตตามสูตรแพ็กเกจ ----
+  // ---- ปุ่ม: รีเซ็ตตามสูตรแพ็กเกจ (เคารพจำนวนที่ใช้จริง) ----
   const resetByPackageFormula = () => {
-    if (!form.startDate) { alert("กรุณาเลือกวันที่เริ่มสัญญาก่อน"); return; }
+    if (!form.startDate) {
+      alert("กรุณาเลือกวันที่เริ่มสัญญาก่อน");
+      return;
+    }
     const auto = computeSchedule(form.package, form.startDate);
-    if (Object.keys(auto).length) setForm((s) => ({ ...s, ...auto }));
+    if (!Object.keys(auto).length) return;
+
+    const patch = { ...auto };
+
+    ["serviceSpray1", "serviceSpray2"].forEach((k, i) => {
+      if (i >= sprayStdUsed) patch[k] = "";
+    });
+
+    if (form.package === "bait" || form.package === "mix") {
+      ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].forEach(
+        (k, i) => {
+          if (i >= baitStdUsed) patch[k] = "";
+        }
+      );
+    } else {
+      ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].forEach(
+        (k) => (patch[k] = "")
+      );
+    }
+
+    setForm((s) => ({ ...s, ...patch }));
   };
 
   // ตรวจความถูกต้อง
   const validate = () => {
     if (!form.name.trim()) return "กรุณากรอกชื่อลูกค้า";
     if (phoneDigits(form.phone).length < 9) return "กรุณากรอกเบอร์โทรให้ถูกต้อง";
-    if (form.taxId && taxIdDigits(form.taxId).length !== 13) return "กรุณากรอกเลขประจำตัวผู้เสียภาษีให้ครบ 13 หลัก";
+    if (form.taxId && taxIdDigits(form.taxId).length !== 13)
+      return "กรุณากรอกเลขประจำตัวผู้เสียภาษีให้ครบ 13 หลัก";
     if (!form.startDate) return "กรุณาเลือกวันที่เริ่มสัญญา";
     if (!form.endDate) return "กรุณาเลือกวันสิ้นสุดสัญญา";
     return "";
@@ -350,7 +446,9 @@ export default function ContractForm() {
   }, [receiptVatEnabled, netBeforeVat, RECEIPT_VAT_RATE]);
 
   const receiptGrandTotal = useMemo(() => {
-    return Math.round(((Number(netBeforeVat || 0) + Number(receiptVatAmount || 0)) + Number.EPSILON) * 100) / 100;
+    return Math.round(
+      (Number(netBeforeVat || 0) + Number(receiptVatAmount || 0) + Number.EPSILON) * 100
+    ) / 100;
   }, [netBeforeVat, receiptVatAmount]);
 
   // ===== ใบเสร็จ (PDF) =====
@@ -408,7 +506,10 @@ export default function ContractForm() {
   // ===== สร้างสัญญา (PDF) =====
   async function handleCreateContractPDFOnly() {
     const err = validate();
-    if (err) { alert(err); return; }
+    if (err) {
+      alert(err);
+      return;
+    }
     const { data, fileName } = buildContractPdfData(form, pkgConf, baseServicePrice, addons);
     try {
       await generateContractPDF(data, { fileName });
@@ -427,6 +528,13 @@ export default function ContractForm() {
 
     const err = validate();
     if (err) return setMsg({ text: err, ok: false });
+
+    // เตรียมคีย์มาตรฐานตามจำนวนที่ใช้จริง
+    const sprayStdKeys = ["serviceSpray1", "serviceSpray2"].slice(0, sprayStdUsed);
+    const baitStdKeys = ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].slice(
+      0,
+      baitStdUsed
+    );
 
     // เขียน payload สำหรับบันทึกชีต (ไม่พึ่งชีต Contract)
     const payload = {
@@ -451,31 +559,24 @@ export default function ContractForm() {
       addonsSubtotal,
       netBeforeVat,
 
-      // เขียนคีย์ตารางบริการตรง ๆ (ให้ GAS map ไปชีต Spray/Bait/Mix ตามที่คุณทำไว้)
+      // เขียนคีย์ตารางบริการตรง ๆ (ค่าเกินจำนวนที่ใช้จริงจะถูกล้างเป็น "")
       serviceSpray1: form.serviceSpray1 || "",
       serviceSpray2: form.serviceSpray2 || "",
-      serviceBait1:  form.serviceBait1  || "",
-      serviceBait2:  form.serviceBait2  || "",
-      serviceBait3:  form.serviceBait3  || "",
-      serviceBait4:  form.serviceBait4  || "",
-      serviceBait5:  form.serviceBait5  || "",
+      serviceBait1: form.serviceBait1 || "",
+      serviceBait2: form.serviceBait2 || "",
+      serviceBait3: form.serviceBait3 || "",
+      serviceBait4: form.serviceBait4 || "",
+      serviceBait5: form.serviceBait5 || "",
 
-      // แนบ JSON รอบบริการทั้งหมด (รวม extras)
+      // แนบ JSON รอบบริการทั้งหมด (อิง "มาตรฐานที่ใช้จริง" + extras)
       serviceScheduleJson: JSON.stringify({
         startDate: form.startDate,
-        endDate:   form.endDate,
-        spray: [
-          form.serviceSpray1 || "",
-          form.serviceSpray2 || "",
-          ...sprayExtras
-        ].filter(Boolean),
-        bait: isBaitLike
-          ? [
-              form.serviceBait1 || "", form.serviceBait2 || "", form.serviceBait3 || "",
-              form.serviceBait4 || "", form.serviceBait5 || "",
-              ...baitExtras
-            ].filter(Boolean)
-          : [],
+        endDate: form.endDate,
+        spray: [...sprayStdKeys.map((k) => form[k] || ""), ...sprayExtras].filter(Boolean),
+        bait:
+          isBaitLike
+            ? [...baitStdKeys.map((k) => form[k] || ""), ...baitExtras].filter(Boolean)
+            : [],
       }),
     };
 
@@ -489,7 +590,11 @@ export default function ContractForm() {
 
       const raw = await res.text();
       let json;
-      try { json = JSON.parse(raw); } catch { json = { ok: res.ok, raw }; }
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        json = { ok: res.ok, raw };
+      }
 
       if (!res.ok || json?.ok === false) throw new Error(json?.error || "save-failed");
 
@@ -501,7 +606,8 @@ export default function ContractForm() {
       setDiscountValue("");
       setSprayExtras([]);
       setBaitExtras([]);
-
+      setSprayStdUsed(SPRAY_STD_MAX);
+      setBaitStdUsed(BAIT_STD_MAX);
     } catch (err2) {
       setMsg({ text: `บันทึกไม่สำเร็จ ${err2?.message || err2}`, ok: false });
     } finally {
@@ -596,9 +702,7 @@ export default function ContractForm() {
                   value={row.price}
                   onChange={(e) => onAddonChange(i, "price", e.target.value)}
                 />
-                <div className="addon-amount">
-                  {(row.qty * row.price).toLocaleString()}
-                </div>
+                <div className="addon-amount">{(row.qty * row.price).toLocaleString()}</div>
                 <button type="button" className="btn-outline" onClick={() => removeAddonRow(i)}>
                   ลบ
                 </button>
@@ -609,14 +713,30 @@ export default function ContractForm() {
             </button>
 
             <div className="totals">
-              <div>ยอดบริการหลัก: <b>{itemsSubtotal.toLocaleString()}</b></div>
-              <div>ส่วนลด: <b>-{discountNum.toLocaleString()}</b></div>
-              <div>ค่าบริการเพิ่มเติม (Add-on): <b>+{addonsSubtotal.toLocaleString()}</b></div>
+              <div>
+                ยอดบริการหลัก: <b>{itemsSubtotal.toLocaleString()}</b>
+              </div>
+              <div>
+                ส่วนลด: <b>-{discountNum.toLocaleString()}</b>
+              </div>
+              <div>
+                ค่าบริการเพิ่มเติม (Add-on): <b>+{addonsSubtotal.toLocaleString()}</b>
+              </div>
               <hr />
-              <div className="total-line">ราคาก่อนภาษี: <b>{(Math.round((netBeforeVat + Number.EPSILON) * 100) / 100).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b></div>
+              <div className="total-line">
+                ราคาก่อนภาษี:{" "}
+                <b>
+                  {(
+                    Math.round((netBeforeVat + Number.EPSILON) * 100) / 100
+                  ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </b>
+              </div>
 
               {/* ✅ สวิตช์ VAT สำหรับ "ใบเสร็จ" */}
-              <label className="cf__checkbox" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+              <label
+                className="cf__checkbox"
+                style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}
+              >
                 <input
                   type="checkbox"
                   checked={receiptVatEnabled}
@@ -627,12 +747,26 @@ export default function ContractForm() {
 
               {receiptVatEnabled && (
                 <div style={{ marginTop: 6 }}>
-                  <div>ภาษีมูลค่าเพิ่ม 7%: <b>{receiptVatAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b></div>
+                  <div>
+                    ภาษีมูลค่าเพิ่ม 7%:{" "}
+                    <b>
+                      {receiptVatAmount.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </b>
+                  </div>
                 </div>
               )}
 
               <div className="total-line" style={{ marginTop: 6 }}>
-                ยอดรวมสุทธิ (ใบเสร็จ): <b>{receiptGrandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b>
+                ยอดรวมสุทธิ (ใบเสร็จ):{" "}
+                <b>
+                  {receiptGrandTotal.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </b>
               </div>
             </div>
           </div>
@@ -735,29 +869,48 @@ export default function ContractForm() {
             {/* === SPRAY PANEL === */}
             {activeTab === "spray" && (
               <div className="cf-panel">
-                <h4 className="cf-group-title">รอบมาตรฐาน</h4>
-                <div className="service-grid">
-                  <div className="round">
-                    <div className="round__badge">#1</div>
-                    <label className="cf__label">Service Spray รอบที่ 1</label>
-                    <input
-                      type="date"
-                      className="cf__input"
-                      value={form.serviceSpray1 || ""}
-                      onChange={(e) => setVal("serviceSpray1", e.target.value)}
-                    />
+                <div className="cf-panel__header">
+                  <h4 className="cf-group-title">รอบมาตรฐาน</h4>
+                  <div className="cf-actions-inline">
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      disabled={sprayStdUsed === 0}
+                      onClick={() => {
+                        const keys = ["serviceSpray1", "serviceSpray2"];
+                        const hasData = keys.slice(sprayStdUsed - 1).some((k) => !!form[k]);
+                       if (hasData && !askConfirm("ลดรอบมาตรฐาน: ข้อมูลรอบท้ายจะถูกลบออกจากแบบฟอร์ม")) return;
+                        setSprayStdUsed((n) => Math.max(0, n - 1));
+                      }}
+                    >
+                      – ลด
+                    </button>
+                    <div style={{ padding: "0 8px" }}>ใช้จริง: {sprayStdUsed}/{SPRAY_STD_MAX}</div>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      disabled={sprayStdUsed === SPRAY_STD_MAX}
+                      onClick={() => setSprayStdUsed((n) => Math.min(SPRAY_STD_MAX, n + 1))}
+                    >
+                      + เพิ่ม
+                    </button>
                   </div>
+                </div>
 
-                  <div className="round">
-                    <div className="round__badge">#2</div>
-                    <label className="cf__label">Service Spray รอบที่ 2</label>
-                    <input
-                      type="date"
-                      className="cf__input"
-                      value={form.serviceSpray2 || ""}
-                      onChange={(e) => setVal("serviceSpray2", e.target.value)}
-                    />
-                  </div>
+                <div className="service-grid">
+                  {["serviceSpray1", "serviceSpray2"].slice(0, sprayStdUsed).map((key, i) => (
+                    <div className="round" key={key}>
+                      <div className="round__badge">#{i + 1}</div>
+                      <label className="cf__label">Service Spray รอบที่ {i + 1}</label>
+                      <input
+                        type="date"
+                        className="cf__input"
+                        value={form[key] || ""}
+                        onChange={(e) => setVal(key, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                  {sprayStdUsed === 0 && <div className="cf-empty">ไม่มีรอบมาตรฐาน</div>}
                 </div>
 
                 <div className="cf-panel__header">
@@ -767,13 +920,17 @@ export default function ContractForm() {
                       type="button"
                       className="btn-outline"
                       disabled={sprayExtras.length === 0}
-                      onClick={() => setSprayExtras(ex => ex.slice(0, Math.max(0, ex.length - 1)))}
-                    >– ลด</button>
+                      onClick={() => setSprayExtras((ex) => ex.slice(0, Math.max(0, ex.length - 1)))}
+                    >
+                      – ลด
+                    </button>
                     <button
                       type="button"
                       className="btn-outline"
-                      onClick={() => setSprayExtras(ex => [...ex, ""])}
-                    >+ เพิ่ม</button>
+                      onClick={() => setSprayExtras((ex) => [...ex, ""])}
+                    >
+                      + เพิ่ม
+                    </button>
                   </div>
                 </div>
 
@@ -783,15 +940,15 @@ export default function ContractForm() {
                   <div className="service-grid">
                     {sprayExtras.map((d, i) => (
                       <div className="round" key={`sprExtra-${i}`}>
-                        <div className="round__badge">#{i + 3}</div>
-                        <label className="cf__label">Spray เพิ่มเติม #{i + 3}</label>
+                        <div className="round__badge">#{i + 1 + sprayStdUsed}</div>
+                        <label className="cf__label">Spray เพิ่มเติม #{i + 1 + sprayStdUsed}</label>
                         <input
                           type="date"
                           className="cf__input"
                           value={d || ""}
                           onChange={(e) => {
                             const v = e.target.value;
-                            setSprayExtras(arr => {
+                            setSprayExtras((arr) => {
                               const next = [...arr];
                               next[i] = v;
                               return next;
@@ -808,9 +965,36 @@ export default function ContractForm() {
             {/* === BAIT PANEL === */}
             {(form.package === "bait" || form.package === "mix") && activeTab === "bait" && (
               <div className="cf-panel">
-                <h4 className="cf-group-title">รอบมาตรฐาน</h4>
+                <div className="cf-panel__header">
+                  <h4 className="cf-group-title">รอบมาตรฐาน</h4>
+                  <div className="cf-actions-inline">
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      disabled={baitStdUsed === 0}
+                      onClick={() => {
+                        const keys = ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"];
+                        const hasData = keys.slice(baitStdUsed - 1).some((k) => !!form[k]);
+                       if (hasData && !askConfirm("ลดรอบมาตรฐาน: ข้อมูลรอบท้ายจะถูกลบออกจากแบบฟอร์ม")) return;
+                        setBaitStdUsed((n) => Math.max(0, n - 1));
+                      }}
+                    >
+                      – ลด
+                    </button>
+                    <div style={{ padding: "0 8px" }}>ใช้จริง: {baitStdUsed}/{BAIT_STD_MAX}</div>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      disabled={baitStdUsed === BAIT_STD_MAX}
+                      onClick={() => setBaitStdUsed((n) => Math.min(BAIT_STD_MAX, n + 1))}
+                    >
+                      + เพิ่ม
+                    </button>
+                  </div>
+                </div>
+
                 <div className="service-grid">
-                  {BAIT_FIELDS.map(({ key, label }, idx) => (
+                  {BAIT_FIELDS.slice(0, baitStdUsed).map(({ key, label }, idx) => (
                     <div className="round" key={key}>
                       <div className="round__badge">#{idx + 1}</div>
                       <label className="cf__label">{label}</label>
@@ -822,6 +1006,7 @@ export default function ContractForm() {
                       />
                     </div>
                   ))}
+                  {baitStdUsed === 0 && <div className="cf-empty">ไม่มีรอบมาตรฐาน</div>}
                 </div>
 
                 <div className="cf-panel__header">
@@ -831,14 +1016,14 @@ export default function ContractForm() {
                       type="button"
                       className="btn-outline"
                       disabled={baitExtras.length === 0}
-                      onClick={() => setBaitExtras(ex => ex.slice(0, Math.max(0, ex.length - 1)))}
+                      onClick={() => setBaitExtras((ex) => ex.slice(0, Math.max(0, ex.length - 1)))}
                     >
                       – ลด
                     </button>
                     <button
                       type="button"
                       className="btn-outline"
-                      onClick={() => setBaitExtras(ex => [...ex, ""])}
+                      onClick={() => setBaitExtras((ex) => [...ex, ""])}
                     >
                       + เพิ่ม
                     </button>
@@ -851,15 +1036,15 @@ export default function ContractForm() {
                   <div className="service-grid">
                     {baitExtras.map((d, i) => (
                       <div className="round" key={`baitExtra-${i}`}>
-                        <div className="round__badge">#{i + 6}</div>
-                        <label className="cf__label">Bait เพิ่มเติม #{i + 6}</label>
+                        <div className="round__badge">#{i + 1 + baitStdUsed}</div>
+                        <label className="cf__label">Bait เพิ่มเติม #{i + 1 + baitStdUsed}</label>
                         <input
                           type="date"
                           className="cf__input"
                           value={d || ""}
                           onChange={(e) => {
                             const v = e.target.value;
-                            setBaitExtras(arr => {
+                            setBaitExtras((arr) => {
                               const next = [...arr];
                               next[i] = v;
                               return next;
@@ -903,17 +1088,15 @@ export default function ContractForm() {
                 setDiscountValue("");
                 setSprayExtras([]);
                 setBaitExtras([]);
+                setSprayStdUsed(SPRAY_STD_MAX);
+                setBaitStdUsed(BAIT_STD_MAX);
               }}
             >
               ล้างฟอร์ม
             </button>
           </div>
 
-          {msg.text && (
-            <p className={`cf__msg ${msg.ok ? "cf__msg--ok" : "cf__msg--err"}`}>
-              {msg.text}
-            </p>
-          )}
+          {msg.text && <p className={`cf__msg ${msg.ok ? "cf__msg--ok" : "cf__msg--err"}`}>{msg.text}</p>}
         </form>
       </div>
     </div>
