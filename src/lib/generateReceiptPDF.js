@@ -30,6 +30,16 @@ function readUnderMillion(numStr){
   return s || 'ศูนย์';
 }
 
+// แปลงวันที่เป็น dd/mm/yyyy (ค.ศ.)
+function fmtDateCE(d) {
+  const x = (d instanceof Date) ? d : parseDateSmart(d);
+  if (!x) return String(d || "");
+  const dd = String(x.getDate()).padStart(2, "0");
+  const mm = String(x.getMonth() + 1).padStart(2, "0");
+  const yyyy = x.getFullYear(); // <-- ค.ศ. ตรง ๆ
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 function readNumberThai(numStr){
   const str = String(parseInt(numStr,10)||0);
   if(str.length <= 6) return readUnderMillion(str);
@@ -47,14 +57,42 @@ function bahtText(amount){
   return bahtPart + readNumberThai(satang) + 'สตางค์';
 }
 
-/* ---------- หมายเหตุค่าเริ่มต้น (ใช้เมื่อไม่มี remarkLines/bankRemark) ---------- */
+/* ---------- หมายเหตุค่าเริ่มต้น ---------- */
 const DEFAULT_REMARK_LINES = [
   "ธนาคารกสิกรไทย เลขที่บัญชี 201-8-860778\nRemark: บจก.สยามการ์ดโซลูชั่น (ประเทศไทย) จำกัด",
 ];
 
 function ab2b64(buf){const u=new Uint8Array(buf);let s="";for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s);}
 const money = n => Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
-const fmtDate = d => { try{ const dd=d instanceof Date?d:new Date(d); return dd.toLocaleDateString("th-TH",{year:"numeric",month:"2-digit",day:"2-digit"});}catch{return String(d||"");}};
+
+// ---- smart date parser (DD/MM/YYYY, YYYY-MM-DD, timestamp, รองรับ พ.ศ.) ----
+function parseDateSmart(input) {
+  if (!input) return null;
+  if (input instanceof Date && !isNaN(input)) return input;
+  if (typeof input === 'number') return new Date(input);
+  const s = String(input).trim();
+
+  // DD/MM/YYYY
+  const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m1) {
+    const [, dd, mm, yyyy] = m1;
+    let y = parseInt(yyyy, 10);
+    if (y > 2400) y -= 543; // พ.ศ. -> ค.ศ.
+    return new Date(y, parseInt(mm, 10) - 1, parseInt(dd, 10));
+  }
+  // YYYY-MM-DD หรือ YYYY/MM/DD
+  const m2 = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (m2) {
+    const [, yyyy, mm, dd] = m2;
+    let y = parseInt(yyyy, 10);
+    if (y > 2400) y -= 543;
+    return new Date(y, parseInt(mm, 10) - 1, parseInt(dd, 10));
+  }
+  // fallback
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
 function textBlock(doc, text, x, y, maxW, lh=16) {
   const lines = doc.splitTextToSize(String(text || ""), maxW);
   lines.forEach((ln, i) => doc.text(String(ln), x, y + i * lh));
@@ -92,33 +130,53 @@ async function ensureThaiFont(doc){
  *  - filename?: string
  *  - returnType?: 'save' | 'blob' | 'bloburl' | 'arraybuffer' | 'datauristring'
  *  - autoSave?: boolean
- *  - vatEnabled?: boolean   // ✅ override ได้จาก options
- *  - vatRate?: number       // ✅ override ได้จาก options
+ *  - vatEnabled?: boolean
+ *  - vatRate?: number
+ *  - forceReceiptDate?: Date|string|number   // ✅ บังคับวันแสดงผล (วันที่/ครบกำหนดชำระ)
  */
-export default async function generateReceiptPDF(payload={}, options={}){
+export default async function generateReceiptPDF(payload = {}, options = {}) {
   const {
     companyName="Siam Guard", companyAddress="", companyPhone="", companyTaxId="", logoDataUrl,
     clientName="", clientPhone="", clientAddress="", clientTaxId="",
     receiptNo="", issueDate=new Date(),
     // วันเริ่มสัญญา (รองรับหลายคีย์)
-    contractStartDate, startDate, startYMD, service1Date,
+    contractStartDate, startDate, startYMD, service1Date, serviceStartDate,
+    contract_start_date, startContract, start_at, startedAt,
+    // เผื่อข้อมูลถูกห่ออยู่ใต้ contract
+    contract,
     items=[], discount=0,
-    vatEnabled: _vatEnabled = false,   // ✅ เปิด/ปิด VAT จาก payload
-    vatRate: _vatRate = 0,             // ✅ อัตรา VAT จาก payload
+    vatEnabled: _vatEnabled = false,
+    vatRate: _vatRate = 0,
     alreadyPaid=0,
     footerNotice="สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
-    // ใหม่: หมายเหตุ/ธนาคารแบบกำหนดเอง
-    remarkLines,       // string[] (optional)
-    bankRemark,        // string (optional)
+    remarkLines, bankRemark,
+    // ✅ ทางลัดส่งมากับ payload ก็ได้
+    forceReceiptDate,
   } = payload;
 
-  // ✅ อนุญาต override จาก options (+ fallback 7% เมื่อเปิด VAT แต่ไม่ได้ส่งอัตรามา)
+  // VAT options
   const vatEnabled = (options.vatEnabled ?? _vatEnabled) ? true : false;
   const rawRate    = Number(options.vatRate ?? _vatRate ?? 0);
   const vatRate    = vatEnabled ? (rawRate > 0 ? rawRate : 0.07) : 0;
 
-  const contractStart =
-    contractStartDate ?? startDate ?? startYMD ?? service1Date ?? issueDate;
+  // ---- เลือกวันเริ่มสัญญา (candidate หลายชื่อ) ----
+  const startSources = [
+    forceReceiptDate, options.forceReceiptDate,                    // ✅ override แรงสุด
+    contractStartDate, startDate, startYMD, service1Date, serviceStartDate,
+    contract_start_date, startContract, start_at, startedAt,
+    contract?.startDate, contract?.startYMD, contract?.contractStartDate
+  ].filter(Boolean);
+
+  let parsedStart = null;
+  for (const s of startSources) {
+    const d = parseDateSmart(s);
+    if (d) { parsedStart = d; break; }
+  }
+
+  const displayDate =
+    parsedStart
+      || (issueDate instanceof Date ? issueDate : parseDateSmart(issueDate))
+      || new Date();
 
   const doc = new jsPDF({ unit:"pt", format:"a4", compress:false });
   await ensureThaiFont(doc);
@@ -155,11 +213,11 @@ export default async function generateReceiptPDF(payload={}, options={}){
     `โทรศัพท์: ${clientPhone || "-"}`,
   ];
 
-  // ใช้ "วันที่เริ่มสัญญา" เป็นข้อมูลอ้างอิง/ครบกำหนด
+  // ใช้ "วันที่เริ่มสัญญา" (displayDate) เป็นทั้งวันที่และครบกำหนด
   const rightLines = [
     `เลขที่: ${receiptNo || "-"}`,
-    `วันที่: ${fmtDate(issueDate)}`,
-    `ครบกำหนดชำระ: ${fmtDate(contractStart)}`,
+    `วันที่: ${fmtDateCE(displayDate)}`,
+    `ครบกำหนดชำระ: ${fmtDateCE(displayDate)}`,
   ];
 
   const leftH  = pad*2 + leftLines.length*lineH + 2;
@@ -331,7 +389,7 @@ export default async function generateReceiptPDF(payload={}, options={}){
   doc.text(T(footerNotice), M, signY + FOOTER_GAP);
 
   // === โหมดส่งออก ===
-  const fname = options.filename || `Receipt-${receiptNo || fmtDate(issueDate)}.pdf`;
+  const fname = options.filename || `Receipt-${receiptNo || fmtDateCE(displayDate)}.pdf`;
   const ret = options.returnType || (options.autoSave === false ? 'blob' : 'save');
 
   switch (ret) {

@@ -525,8 +525,23 @@ export default function CheckPage() {
       const companyPhone  = process.env.REACT_APP_COMPANY_PHONE  || "02-xxx-xxxx";
       const companyTaxId  = process.env.REACT_APP_COMPANY_TAXID  || "";
 
-      const contractStartDate =
-        current.startDate || current.startYMD || current.service1Date || current.firstServiceDate || current.beginDate || null;
+      // ---- วันเริ่มสัญญา: ดึงจากหลายคีย์ แล้ว normalize เป็น dd/MM/yyyy (ค.ศ.) ----
+      const pickStartRaw =
+        firstNonEmpty(
+          current.startDate,
+          current.startYMD,
+          current.service1Date,
+          current.firstServiceDate,
+          current.beginDate
+        ) || "";
+
+      const startFromForm = (() => {
+        if (!pickStartRaw) return "";
+        // YYYY-MM-DD → dd/MM/yyyy
+        const m = String(pickStartRaw).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (m) return `${m[3]}/${m[2]}/${m[1]}`;   // 08/10/2025
+        return String(pickStartRaw).trim();        // รองรับ dd/MM/yyyy โดยตรง
+      })();
 
       const basePrice = basePriceFrom(current);
       const addOnsArr = addonsFrom(current);
@@ -554,7 +569,10 @@ export default function CheckPage() {
         clientPhone: current.phone || current.clientPhone || "-",
         clientAddress: current.address || current.clientAddress || "-",
         clientTaxId: current.taxId || current.clientTaxId || "",
-        receiptNo, issueDate: new Date(), contractStartDate,
+        receiptNo,
+        issueDate: new Date(),
+        // ส่งผ่าน payload ด้วย เผื่อ lib จะอ่านจากคีย์นี้
+        contractStartDate: startFromForm,
         items,
         discount: toNumberSafe(discountFrom(current)),
         vatEnabled: false,
@@ -563,7 +581,13 @@ export default function CheckPage() {
       };
 
       const filename = `Receipt-${receiptNo}.pdf`;
-      const blob = await generateReceiptPDF(payload, { returnType: "blob", filename });
+
+      // ✅ “คันโยก” บังคับวันใน PDF ให้เท่ากับวันเริ่มสัญญาเสมอ (dd/MM/yyyy – ค.ศ.)
+      const blob = await generateReceiptPDF(payload, {
+        returnType: "blob",
+        filename,
+        forceReceiptDate: startFromForm,   // <<<<<<<<<< สำคัญสุด
+      });
 
       // --- หลังได้ blob แล้ว ---
       const isLineUA = /Line\/|LIFF/i.test(navigator.userAgent);
@@ -574,7 +598,6 @@ export default function CheckPage() {
         pdfUrl = await uploadPdfAndGetUrl(blob, filename);
       } catch (e) {
         console.error("UPLOAD_FAILED", e);
-        // ถ้าอัปโหลดล้มเหลว และไม่ได้อยู่ใน LINE → ดาวน์โหลดจาก blob เป็นทางเลือกสุดท้าย
         if (!isLineUA) {
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
@@ -587,7 +610,6 @@ export default function CheckPage() {
         return;
       }
 
-      // พยายามแชร์เข้าแชทก่อน ถ้าอยู่ใน LINE และมี API
       let shared = false;
       try {
         const ready = await ensureLiffReady();
@@ -600,7 +622,6 @@ export default function CheckPage() {
         console.warn("shareTargetPicker failed:", err);
       }
 
-      // ถ้าแชร์ไม่ได้แต่เปิดใน LINE → เปิดลิงก์ภายนอก
       if (!shared && (isLineUA || (hasLiff() && window.liff.isInClient()))) {
         try {
           await ensureLiffReady();
@@ -608,10 +629,9 @@ export default function CheckPage() {
         } catch {
           window.location.href = pdfUrl;
         }
-        return; // อย่าตกลงไปดาวน์โหลด blob
+        return;
       }
 
-      // กรณีนอก LINE → ดาวน์โหลดไฟล์จาก blob ตามเดิม
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = filename;

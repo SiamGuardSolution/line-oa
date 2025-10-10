@@ -69,6 +69,24 @@ const emptyForm = {
 };
 
 // ===== helpers =====
+
+// YYYY-MM-DD → dd/MM/yyyy (ค.ศ.) | ถ้าเป็น dd/MM/yyyy อยู่แล้วและเป็น พ.ศ. (>2400) จะลด 543 ให้เป็น ค.ศ.
+function toCE_ddmmyyyy(raw) {
+  if (!raw) return "";
+  const s = String(raw).trim();
+  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymd) return `${ymd[3]}/${ymd[2]}/${ymd[1]}`;
+  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmy) {
+    let y = parseInt(dmy[3], 10);
+    if (y > 2400) y -= 543; // พ.ศ. -> ค.ศ.
+    const dd = String(dmy[1]).padStart(2, "0");
+    const mm = String(dmy[2]).padStart(2, "0");
+    return `${dd}/${mm}/${y}`;
+  }
+  return s;
+}
+
 const pad2 = (n) => String(n).padStart(2, "0");
 const toISO = (d) => {
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
@@ -453,6 +471,9 @@ export default function ContractForm() {
 
   // ===== ใบเสร็จ (PDF) =====
   async function handleCreateReceiptPDF() {
+    // แปลง startDate จาก input (YYYY-MM-DD) → dd/MM/yyyy (ค.ศ.)
+    const startForPdf = toCE_ddmmyyyy(form.startDate);
+
     const pdfItems = [
       { description: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`, qty: 1, unitPrice: baseServicePrice },
       ...addons
@@ -482,9 +503,9 @@ export default function ContractForm() {
       termDays: 0,
 
       items: pdfItems,
-      discount: Number(discountNum || 0),
+      discount: Number((discountValue === "" ? 0 : discountValue) || 0),
 
-      vatEnabled: receiptVatEnabled,
+      vatEnabled: !!receiptVatEnabled,
       vatRate: receiptVatEnabled ? 0.07 : 0,
 
       alreadyPaid: 0,
@@ -493,10 +514,20 @@ export default function ContractForm() {
       bankRemark: COMPANY.bank
         ? `ธนาคาร${COMPANY.bank.name} ${COMPANY.bank.account}\n${COMPANY.bank.accountName}`
         : "",
+
+      // ✅ ส่งวันเริ่มสัญญาเข้า payload ด้วย
+      contractStartDate: startForPdf,
     };
 
+    const filename = `Receipt-${payload.receiptNo}.pdf`;
+
     try {
-      await generateReceiptPDF(payload);
+      // ✅ “คันโยก” บังคับวันใน PDF ให้ตรงวันเริ่มสัญญา (ค.ศ. dd/MM/yyyy)
+      await generateReceiptPDF(payload, {
+        filename,
+        returnType: "save",          // หรือ "blob" ถ้าจะอัปโหลดต่อ
+        forceReceiptDate: startForPdf,
+      });
     } catch (e) {
       console.error(e);
       alert("สร้างใบเสร็จไม่สำเร็จ: " + (e?.message || e));
