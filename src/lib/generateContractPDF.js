@@ -16,6 +16,16 @@ const pkgPrice = (k) => {
   return Number(v ?? 0);
 };
 
+// แปลงวันที่ -> เดือน/ปี (ปฏิทินไทย) เช่น "10/2568"
+const fmtThaiMonthYear = (d) => {
+  try {
+    if (!d) return "";
+    const dd = d instanceof Date ? d : new Date(d);
+    return dd.toLocaleDateString("th-TH", { year: "numeric", month: "2-digit" });
+  } catch { return ""; }
+};
+
+// ใช้แสดงวันที่จุดอื่นที่ยังต้องเป็นวัน/เดือน/ปี แบบไทย
 const fmtThaiDate = (d) => {
   try {
     if (!d) return "";
@@ -24,13 +34,14 @@ const fmtThaiDate = (d) => {
   } catch { return String(d || ""); }
 };
 
+// เพิ่มเดือนโดยรักษาวันสิ้นเดือน
 const addMonths = (date, months) => {
   if (!date) return null;
   const d = date instanceof Date ? new Date(date) : new Date(date);
   if (isNaN(d)) return null;
   const day = d.getDate();
   d.setMonth(d.getMonth() + months);
-  if (d.getDate() < day) d.setDate(0); // รักษาวันสิ้นเดือน
+  if (d.getDate() < day) d.setDate(0);
   return d;
 };
 
@@ -57,23 +68,20 @@ const TXT = (doc, text, x, y, opts) => {
 
 // เดา pkgKey จากข้อมูลสัญญา ถ้าไม่มีคีย์มา
 const derivePkgKey = (service = {}, rawAll = {}) => {
-  // 1) ใช้คีย์โดยตรงถ้ามี
   const direct = (service.pkgKey || rawAll.pkg || rawAll.package || "").toString().toLowerCase();
   if (["spray", "bait", "mix"].includes(direct)) return direct;
 
-  // 2) เดาจากข้อความ
   const raw = `${service.packageName || ""}|${service.type || ""}|${rawAll.serviceType || ""}`.toLowerCase();
   if (/mix|ผสม|combo/.test(raw)) return "mix";
   if (/bait|เหยื่อ/.test(raw))  return "bait";
   if (/spray|ฉีดพ่น/.test(raw)) return "spray";
 
-  // 3) เดาจากราคา (เผื่อระบบเก่า)
   const p = Number(service.basePrice || 0) || Number((rawAll.priceText || "").replace(/[^\d.]/g, "")) || 0;
   if (p === pkgPrice("mix"))   return "mix";
   if (p === pkgPrice("bait"))  return "bait";
   if (p === pkgPrice("spray")) return "spray";
 
-  return "mix"; // ค่าเริ่มต้นถือเป็นแพ็กเกจผสม (เพื่อแสดงทั้ง 2 ตาราง)
+  return "mix";
 };
 
 /* ---------- spacing presets ---------- */
@@ -125,7 +133,7 @@ async function ensureThaiFont(doc){
  *     intervalMonthsSpray?, intervalDaysBait?,
  *     topTitle?, bottomTitle?
  *   },
- *   schedule: [ { round, dueDate?, date?, visitDate?, visit?, note? }, ... ],
+ *   schedule: [ { dueDate?, date?, visitDate?, visit?, note? }, ... ],
  *   terms: [ "..." ],
  *   logoDataUrl?
  * }
@@ -146,6 +154,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   } = data;
 
   const fileName = opts.fileName || `Contract_${contractNumber || Date.now()}.pdf`;
+  const contractDateToShow = startDate ?? contractDate ?? new Date();
 
   // ===== ผูกกับ config กลาง =====
   const pkgKey     = derivePkgKey(service, data);
@@ -185,7 +194,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   ];
   const rightLines = [
     `เลขที่สัญญา: ${contractNumber || "-"}`,
-    `วันที่ทำสัญญา: ${fmtThaiDate(contractDate)}`,
+    `วันที่ทำสัญญา: ${fmtThaiDate(contractDateToShow)}`,
     `วันสิ้นสุดสัญญา: ${fmtThaiDate(endDate)}`,
   ];
   const leftH = pad * 2 + leftLines.length * lineH + 2;
@@ -240,8 +249,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const MAX_BOTTOM = 5;
 
   const mapItem = (it) => ({
-    due:   fmtThaiDate(it?.dueDate ?? it?.due ?? it?.date),
-    visit: fmtThaiDate(it?.visitDate ?? it?.visit ?? ""),
+    mmYY: fmtThaiMonthYear(it?.dueDate ?? it?.due ?? it?.visitDate ?? it?.visit ?? it?.date),
     note:  it?.note ?? "",
   });
 
@@ -262,21 +270,18 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     combined.slice(MAX_TOP, MAX_TOP + MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
   }
 
-  // เติมออโต้ให้ครบจำนวนแถวตามโหมด
+  // เติมออโต้ให้ครบจำนวนแถวตามโหมด (สร้างเดือน/ปีจาก startDate + ช่วงห่าง)
   const intMonthsSpray = Number(service.intervalMonthsSpray ?? service.intervalMonths ?? 4);
-  const intDaysBait    = Number(service.intervalDaysBait    ?? 20); // ✅ Bait = 20 วัน
+  const intDaysBait    = Number(service.intervalDaysBait    ?? 20);
 
-  // เติม Spray
   for (let i = schedTop.length; i < MAX_TOP; i++) {
     const d = startDate ? addMonths(startDate, intMonthsSpray * (i + 1)) : null;
-    schedTop.push({ due: fmtThaiDate(d), visit: "", note: "" });
+    schedTop.push({ mmYY: fmtThaiMonthYear(d), note: "" });
   }
-
-  // เติม Bait (เฉพาะแพ็กเกจที่ต้องมี Bait)
   if (showBothTables) {
     for (let i = schedBottom.length; i < MAX_BOTTOM; i++) {
       const d = startDate ? addDays(startDate, intDaysBait * (i + 1)) : null;
-      schedBottom.push({ due: fmtThaiDate(d), visit: "", note: "" });
+      schedBottom.push({ mmYY: fmtThaiMonthYear(d), note: "" });
     }
   }
 
@@ -284,10 +289,10 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const topTitle    = service.topTitle    ?? "ตารางบริการฉีดพ่น (Spray)";
   const bottomTitle = service.bottomTitle ?? "ตารางบริการวางเหยื่อ (Bait)";
 
+  // ✅ เพิ่มคอลัมน์ "เดือน/ปี" (แทนวันที่แบบเต็ม)
   const headCols = [
     "ครั้งที่",
-    "วันครบกำหนด",
-    "วันที่นัดเข้าบริการ",
+    "เดือน/ปี",
     "ลงชื่อเข้าบริการ",
     "ลงชื่อผู้รับบริการ",
     "หมายเหตุ",
@@ -306,8 +311,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     head: [headCols],
     body: schedTop.map((row, i) => ([
       String(i + 1),
-      row.due || "",
-      row.visit || "",
+      row.mmYY || "",
       "",
       "",
       row.note || "",
@@ -317,12 +321,11 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     theme: "grid",
     margin: { left: M, right: M },
     columnStyles: {
-      0: { cellWidth: 32,  halign: "center" },
-      1: { cellWidth: 90,  halign: "center" },
-      2: { cellWidth: 110, halign: "center" },
-      3: { cellWidth: 80 },
-      4: { cellWidth: 80 },
-      5: { cellWidth: "auto" },
+      0: { cellWidth: 40,  halign: "center" }, // ครั้งที่
+      1: { cellWidth: 80,  halign: "center" }, // เดือน/ปี
+      2: { cellWidth: 120 },                   // ลงชื่อเข้าบริการ
+      3: { cellWidth: 120 },                   // ลงชื่อผู้รับบริการ
+      4: { cellWidth: "auto" },                // หมายเหตุ
     },
   });
   y = (doc.lastAutoTable?.finalY || y) + TABLE_GAP;
@@ -338,8 +341,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       head: [headCols],
       body: schedBottom.map((row, i) => ([
         String(i + 1),
-        row.due || "",
-        row.visit || "",
+        row.mmYY || "",
         "",
         "",
         row.note || "",
@@ -349,12 +351,11 @@ export default async function generateContractPDF(data = {}, opts = {}) {
       theme: "grid",
       margin: { left: M, right: M },
       columnStyles: {
-        0: { cellWidth: 32,  halign: "center" },
-        1: { cellWidth: 90,  halign: "center" },
-        2: { cellWidth: 110, halign: "center" },
-        3: { cellWidth: 80 },
-        4: { cellWidth: 80 },
-        5: { cellWidth: "auto" },
+        0: { cellWidth: 40,  halign: "center" }, // ครั้งที่
+        1: { cellWidth: 80,  halign: "center" }, // เดือน/ปี
+        2: { cellWidth: 120 },                   // ลงชื่อเข้าบริการ
+        3: { cellWidth: 120 },                   // ลงชื่อผู้รับบริการ
+        4: { cellWidth: "auto" },                // หมายเหตุ
       },
     });
     y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
