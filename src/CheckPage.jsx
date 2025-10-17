@@ -301,7 +301,6 @@ const NotesFlex = ({ payUrl, adminUrl, showAdmin }) => (
               : null)}
             </li>
             <li>บัตรเครดิต รองรับการผ่อนชำระ 0% 6 เดือน <span className="muted">(service charge 3%)</span></li>
-            <li>เครดิตจากบริษัท สามารถใช้บริการก่อนและชำระภายหลัง <span className="muted">(ไม่มีค่าธรรมเนียม)</span></li>
           </ol>
         </div>
       </li>
