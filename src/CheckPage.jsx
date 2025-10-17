@@ -220,7 +220,7 @@ const netTotalFrom = (c) => {
   return Math.max(0, Math.round(basePriceFrom(c) - discountFrom(c) + addonsSubtotalFrom(c)));
 };
 
-const SHOW_PAY_LINK = true;
+const SHOW_PAY_LINK = false;
 
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
 const formatThaiPhone = (digits) => {
