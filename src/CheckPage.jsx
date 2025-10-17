@@ -8,15 +8,16 @@ const HOST = window.location.hostname;
 const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
 const API_BASES = (HOST === "localhost" || HOST === "127.0.0.1") ? ["", PROXY] : [PROXY];
 
-// สำหรับสร้างลิงก์ภายนอก (จ่ายเงิน ฯลฯ)
-const APP_BASE_URL =
-  (HOST === "localhost" || HOST === "127.0.0.1")
-  ? "http://localhost:3000"
-  : (process.env.REACT_APP_PROD_URL || "https://contract.siamguards.com");
-
 // localStorage: เบอร์ล่าสุด + auto-run
 const LS_LAST_PHONE_KEY = "sg_lastPhone";
 const AUTORUN_LAST = true;
+
+// ลิงก์ชำระเงินแบบ fix ต่อแพ็กเกจ
+const PAY_LINK_3993 = process.env.REACT_APP_PAY_LINK_3993 || "https://pay.beamcheckout.com/siamguard/74p9WPUCmO";
+const PAY_LINK_5500 = process.env.REACT_APP_PAY_LINK_5500 || "https://pay.beamcheckout.com/siamguard/oBND7tFiJN";
+const PAY_LINK_8500 = process.env.REACT_APP_PAY_LINK_8500 || "https://pay.beamcheckout.com/siamguard/NgGR8y4meS";
+// ลิงก์ติดต่อแอดมินไลน์
+const LINE_ADMIN_URL = process.env.REACT_APP_LINE_ADMIN_URL || "https://lin.ee/7K4hHjf";
 
 /* ---------------------- LIFF helpers (บนสุดของไฟล์ นอกคอมโพเนนต์) ---------------------- */
 const LIFF_ID = process.env.REACT_APP_LIFF_ID || ""; // ตั้งค่าใน .env (REACT_APP_LIFF_ID)
@@ -205,6 +206,7 @@ const addonsFrom = (c) => {
   } catch { return []; }
 };
 
+
 const addonsSubtotalFrom = (c) => {
   const direct = firstNonEmpty(c?.addonsSubtotal, c?.['ค่าบริการเพิ่มเติม']);
   const n = toNumberSafe(direct);
@@ -213,6 +215,14 @@ const addonsSubtotalFrom = (c) => {
   return arr.reduce((s, a) => s + toNumberSafe(a.qty) * toNumberSafe(a.price), 0);
 };
 
+function selectFixedPayLinkByBasePrice(basePrice) {
+  const n = Math.round(toNumberSafe(basePrice));
+  if (n === 3993) return PAY_LINK_3993;
+  if (n === 5500) return PAY_LINK_5500;
+  if (n === 8500) return PAY_LINK_8500;
+  return ""; // ไม่พบแพ็กเกจที่แมตช์
+}
+
 const netTotalFrom = (c) => {
   const direct = firstNonEmpty(c?.netTotal, c?.['ราคาสุทธิ'], c?.netBeforeVat);
   const n = toNumberSafe(direct);
@@ -220,7 +230,7 @@ const netTotalFrom = (c) => {
   return Math.max(0, Math.round(basePriceFrom(c) - discountFrom(c) + addonsSubtotalFrom(c)));
 };
 
-const SHOW_PAY_LINK = false;
+const SHOW_PAY_LINK = true;
 
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
 const formatThaiPhone = (digits) => {
@@ -269,7 +279,7 @@ function readScheduleJsonArrays(c) {
 }
 
 /* ---------------------- COMPONENTS ---------------------- */
-const NotesFlex = ({ payUrl }) => (
+const NotesFlex = ({ payUrl, adminUrl, showAdmin }) => (
   <section className="notes-flex" aria-label="หมายเหตุการให้บริการ">
     <header className="notes-flex__header">หมายเหตุ</header>
     <ol className="notes-flex__list">
@@ -284,7 +294,11 @@ const NotesFlex = ({ payUrl }) => (
           <ol className="notes-flex__sublist">
             <li className="notes-row">
               <span>เงินสด/โอน ณ วันที่ให้บริการ</span>
-              {payUrl && <a href={payUrl} target="_blank" rel="noopener noreferrer" className="link-pay">ไปหน้าชำระเงิน</a>}
+              {payUrl
+                ? <a href={payUrl} target="_blank" rel="noopener noreferrer" className="link-pay">ไปหน้าชำระเงิน</a>
+                : (showAdmin && adminUrl
+                  ? <a href={adminUrl} target="_blank" rel="noopener noreferrer" className="link-admin">ติดต่อแอดมิน</a>
+              : null)}
             </li>
             <li>บัตรเครดิต รองรับการผ่อนชำระ 0% 6 เดือน <span className="muted">(service charge 3%)</span></li>
             <li>เครดิตจากบริษัท สามารถใช้บริการก่อนและชำระภายหลัง <span className="muted">(ไม่มีค่าธรรมเนียม)</span></li>
@@ -488,21 +502,12 @@ export default function CheckPage() {
     return end < mid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
   }, [contract]);
 
-  const contractRef = useMemo(() => {
-    if (!contract) return "";
-    const ref = firstNonEmpty(
-      contract.number, contract.contractNumber, contract.ref,
-      contract.quotationNumber, contract.invoiceNumber,
-      contract.contract_no, contract.id, contract._id, contract.contractId
-    );
-    if (ref) return String(ref);
-    const alt = [normalizePhone(contract.phone), contract.startDate].filter(Boolean).join("-");
-    return alt || "";
-  }, [contract]);
-
   // ====== ค่าใช้จ่าย (ก่อน/หลัง VAT) ======
   const discount = useMemo(() => discountFrom(contract), [contract]);
   const addonsSubtotal = useMemo(() => addonsSubtotalFrom(contract), [contract]);
+  const hasAdjustments = useMemo(() => {
+    return toNumberSafe(discount) > 0 || toNumberSafe(addonsSubtotal) > 0;
+  }, [discount, addonsSubtotal]);
   const addonsArr = useMemo(() => addonsFrom(contract), [contract]);
 
   const subTotal = useMemo(() => netTotalFrom(contract), [contract]);
@@ -510,11 +515,13 @@ export default function CheckPage() {
 
   // ลิงก์จ่ายเงิน → ใช้ยอดสุทธิหลัง VAT
   const payUrl = useMemo(() => {
-    if (!contractRef) return "";
-    const q = new URLSearchParams({ ref: contractRef });
-    if (grandTotal > 0) q.set("amt", grandTotal.toFixed(2));
-    return `${APP_BASE_URL}/pay?${q.toString()}`;
-  }, [contractRef, grandTotal]);
+    // ถ้ามีส่วนลด/ค่าบริการเพิ่มเติม → ไม่แสดงลิงก์ชำระ (จะโชว์ "ติดต่อแอดมิน" แทน)
+    if (hasAdjustments) return "";
+    // เลือกจากราคา base (ก่อนหักส่วนลด/บวกเพิ่ม)
+    const base = basePriceFrom(contract);
+    const fixed = selectFixedPayLinkByBasePrice(base);
+    return fixed || "";
+  }, [contract, hasAdjustments]);
 
   async function handleDownloadReceipt(current) {
     if (!current) return;
@@ -705,7 +712,11 @@ export default function CheckPage() {
                 <div className="field span2"><label>ที่อยู่</label><div className="value">{contract.address}</div></div>
               )}
 
-              <NotesFlex payUrl={SHOW_PAY_LINK ? payUrl : ""} />
+              <NotesFlex
+                payUrl={SHOW_PAY_LINK ? payUrl : ""}
+                adminUrl={LINE_ADMIN_URL}
+                showAdmin={hasAdjustments}
+              />
             </div>
           </section>
 
