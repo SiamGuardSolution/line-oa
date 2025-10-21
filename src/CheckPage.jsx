@@ -4,6 +4,7 @@ import generateReceiptPDF from "./lib/generateReceiptPDF";
 import * as PKG from "./config/packages";
 
 /* ---------------------- CONFIG ---------------------- */
+const FORCE_ADMIN_MODE = true;
 const HOST = window.location.hostname;
 const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
 const API_BASES = (HOST === "localhost" || HOST === "127.0.0.1") ? ["", PROXY] : [PROXY];
@@ -514,6 +515,7 @@ export default function CheckPage() {
 
   // ลิงก์จ่ายเงิน → ใช้ยอดสุทธิหลัง VAT
   const payUrl = useMemo(() => {
+    if (FORCE_ADMIN_MODE) return "";  // ปิดลิงก์จ่ายเงินทั้งหมด
     // ถ้ามีส่วนลด/ค่าบริการเพิ่มเติม → ไม่แสดงลิงก์ชำระ (จะโชว์ "ติดต่อแอดมิน" แทน)
     if (hasAdjustments) return "";
     // เลือกจากราคา base (ก่อนหักส่วนลด/บวกเพิ่ม)
@@ -712,9 +714,9 @@ export default function CheckPage() {
               )}
 
               <NotesFlex
-                payUrl={SHOW_PAY_LINK ? payUrl : ""}
+                payUrl={""}
                 adminUrl={LINE_ADMIN_URL}
-                showAdmin={hasAdjustments}
+                showAdmin={true}
               />
             </div>
           </section>
