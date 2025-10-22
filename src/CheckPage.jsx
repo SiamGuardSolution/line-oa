@@ -128,7 +128,7 @@ const toNumberSafe = (v) => {
 
 const firstNonEmpty = (...vals) => vals.find(v => v !== undefined && v !== null && String(v).trim() !== "");
 
-const normKey = (s) => String(s || '').toLowerCase().replace(/\u00a0/g, ' ').replace(/\s+/g, '').replace(/[/|_.\-()]/g, '');
+const normKey = (s) => String(s || '').toLowerCase().replace(/\u00a0/g, ' ').replace(/\s+/g, '').replace(/[/|_.()]/g, '');
 
 const pickByAliasesDeep = (obj, aliases) => {
   if (!obj || typeof obj !== 'object') return undefined;
@@ -231,8 +231,6 @@ const netTotalFrom = (c) => {
   return Math.max(0, Math.round(basePriceFrom(c) - discountFrom(c) + addonsSubtotalFrom(c)));
 };
 
-const SHOW_PAY_LINK = true;
-
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
 const formatThaiPhone = (digits) => {
   if (!digits) return "";
@@ -278,6 +276,32 @@ function readScheduleJsonArrays(c) {
     return { spray: [], bait: [] };
   }
 }
+
+// ----- Month–Year (Thai, พ.ศ.) -----
+const parseDate = (v) => {
+  if (!v) return null;
+  const s = String(v).trim();
+  // พยายาม parse รูปแบบที่ใช้บ่อย
+  let d = new Date(s);
+  if (isNaN(d)) {
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/); // YYYY-MM-DD
+    if (m) d = new Date(+m[1], +m[2]-1, +m[3]);
+    else {
+      m = s.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/); // DD/MM/YYYY
+      if (m) d = new Date(+m[3], +m[2]-1, +m[1]);
+    }
+  }
+  return isNaN(d) ? null : d;
+};
+
+const fmtMonthYearTH = (v, { short=false } = {}) => {
+  const d = parseDate(v);
+  if (!d) return "";
+  return d.toLocaleDateString('th-TH', {
+    month: short ? 'short' : 'long',
+    year: 'numeric'
+  });
+};
 
 /* ---------------------- COMPONENTS ---------------------- */
 const NotesFlex = ({ payUrl, adminUrl, showAdmin }) => (
@@ -706,17 +730,25 @@ export default function CheckPage() {
               <div className="field stack"><label>เบอร์โทร</label><div className="value">{formatThaiPhone(normalizePhone(contract.phone))}</div></div>
               <div className="field"><label>แพ็กเกจ</label><div className="value">{labelFromContract(contract)}</div></div>
               <div className="field"><label>ประเภทบริการ</label><div className="value">{contract.serviceType || "กำจัดปลวก"}</div></div>
-              <div className="field stack"><label>วันที่เริ่ม</label><div className="value">{contract.startDate || "-"}</div></div>
-              <div className="field"><label>สิ้นสุดสัญญา</label><div className="value">{contract.endDate || (contract.startDate ? addMonths(contract.startDate, 12) : "-")}</div></div>
-
+              <div className="field stack">
+                <label>วันที่เริ่ม</label>
+                <div className="value">{fmtMonthYearTH(contract.startDate) || "-"}</div>
+              </div>
+              <div className="field">
+                <label>สิ้นสุดสัญญา</label>
+                <div className="value">
+                  {fmtMonthYearTH(contract.endDate || (contract.startDate ? addMonths(contract.startDate, 12) : "")) || "-"}
+                </div>
+              </div>
+              
               {contract.address && (
                 <div className="field span2"><label>ที่อยู่</label><div className="value">{contract.address}</div></div>
               )}
 
               <NotesFlex
-                payUrl={""}
+                payUrl={payUrl}
                 adminUrl={LINE_ADMIN_URL}
-                showAdmin={true}
+                showAdmin={!payUrl}
               />
             </div>
           </section>
@@ -802,7 +834,7 @@ export default function CheckPage() {
                       <div className={`dot ${item.kind}`} />
                       <div className="meta">
                         <div className="label">{item.label}</div>
-                        <div className="date">{item.date || "-"}</div>
+                        <div className="date">{fmtMonthYearTH(item.date, { short:true }) || "-"}</div>
                       </div>
                     </li>
                   ))}
