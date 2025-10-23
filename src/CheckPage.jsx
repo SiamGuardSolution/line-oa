@@ -287,7 +287,7 @@ const parseDate = (v) => {
     let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/); // YYYY-MM-DD
     if (m) d = new Date(+m[1], +m[2]-1, +m[3]);
     else {
-      m = s.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/); // DD/MM/YYYY
+      m = s.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/); // DD/MM/YYYY
       if (m) d = new Date(+m[3], +m[2]-1, +m[1]);
     }
   }
@@ -302,6 +302,53 @@ const fmtMonthYearTH = (v, { short=false } = {}) => {
     year: 'numeric'
   });
 };
+
+// แปลงค่าทุกแบบให้เป็น Date
+function toDateFlexible(v) {
+  if (!v && v !== 0) return null;
+  if (v instanceof Date && !isNaN(v)) return v;
+
+  // Excel serial number (เช่นจาก Google Sheets)
+  if (typeof v === 'number') {
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+    return isNaN(d) ? null : d;
+  }
+
+  const s = String(v).trim();
+  if (!s) return null;
+
+  // YYYY-MM-DD
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const [, Y, M, D] = m;
+    const d = new Date(Number(Y), Number(M) - 1, Number(D));
+    return isNaN(d) ? null : d;
+  }
+
+  // DD/MM/YYYY หรือ DD-MM-YYYY (พ.ศ./ค.ศ.)
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (m) {
+    let [, d, mo, y] = m;
+    let Y = parseInt(y, 10);
+    if (Y > 2400) Y -= 543; // เผื่อกรอกเป็น พ.ศ.
+    const dt = new Date(Y, parseInt(mo, 10) - 1, parseInt(d, 10));
+    return isNaN(dt) ? null : dt;
+  }
+
+  // fallback ให้ Date parse เอง
+  const dt = new Date(s);
+  return isNaN(dt) ? null : dt;
+}
+
+// format dd/MM/yyyy (พ.ศ.)
+function fmtThaiDMY(v, useBuddhist = true) {
+  const d = toDateFlexible(v);
+  if (!d) return '-';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear() + (useBuddhist ? 543 : 0);
+  return `${dd}/${mm}/${yyyy}`;
+}
 
 /* ---------------------- COMPONENTS ---------------------- */
 const NotesFlex = ({ payUrl, adminUrl, showAdmin }) => (
@@ -732,12 +779,12 @@ export default function CheckPage() {
               <div className="field"><label>ประเภทบริการ</label><div className="value">{contract.serviceType || "กำจัดปลวก"}</div></div>
               <div className="field stack">
                 <label>วันที่เริ่ม</label>
-                <div className="value">{fmtMonthYearTH(contract.startDate) || "-"}</div>
+                <div className="value">{fmtThaiDMY(contract.startDate) || "-"}</div>
               </div>
               <div className="field">
                 <label>สิ้นสุดสัญญา</label>
                 <div className="value">
-                  {fmtMonthYearTH(contract.endDate || (contract.startDate ? addMonths(contract.startDate, 12) : "")) || "-"}
+                  {fmtThaiDMY(contract.endDate || (contract.startDate ? addMonths(contract.startDate, 12) : "")) || "-"}
                 </div>
               </div>
               
