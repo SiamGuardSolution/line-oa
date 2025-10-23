@@ -881,7 +881,12 @@ export default function CheckPage() {
                       <div className={`dot ${item.kind}`} />
                       <div className="meta">
                         <div className="label">{item.label}</div>
-                        <div className="date">{fmtMonthYearTH(item.date, { short:true }) || "-"}</div>
+                        <div className="date">
+                          {item.isEnd
+                            ? (fmtThaiDMY(item.date) || "-")
+                            : (fmtMonthYearTH(item.date, { short: true }) || "-")
+                          }
+                        </div>
                       </div>
                     </li>
                   ))}
