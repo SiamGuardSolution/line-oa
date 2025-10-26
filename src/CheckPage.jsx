@@ -4,7 +4,7 @@ import generateReceiptPDF from "./lib/generateReceiptPDF";
 import * as PKG from "./config/packages";
 
 /* ---------------------- CONFIG ---------------------- */
-const FORCE_ADMIN_MODE = true;
+const FORCE_ADMIN_MODE = false;
 const HOST = window.location.hostname;
 const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
 const API_BASES = (HOST === "localhost" || HOST === "127.0.0.1") ? ["", PROXY] : [PROXY];
@@ -14,9 +14,9 @@ const LS_LAST_PHONE_KEY = "sg_lastPhone";
 const AUTORUN_LAST = true;
 
 // ลิงก์ชำระเงินแบบ fix ต่อแพ็กเกจ
-const PAY_LINK_3993 = process.env.REACT_APP_PAY_LINK_3993 || "https://pay.beamcheckout.com/siamguard/74p9WPUCmO";
-const PAY_LINK_5500 = process.env.REACT_APP_PAY_LINK_5500 || "https://pay.beamcheckout.com/siamguard/oBND7tFiJN";
-const PAY_LINK_8500 = process.env.REACT_APP_PAY_LINK_8500 || "https://pay.beamcheckout.com/siamguard/NgGR8y4meS";
+const PAY_LINK_3993 = process.env.REACT_APP_PAY_LINK_3993 || "https://pay.beamcheckout.com/siamguard/QYFaVFqWtw";
+const PAY_LINK_5500 = process.env.REACT_APP_PAY_LINK_5500 || "https://pay.beamcheckout.com/siamguard/EOAzZib8ez";
+const PAY_LINK_8500 = process.env.REACT_APP_PAY_LINK_8500 || "https://pay.beamcheckout.com/siamguard/urToXdw4TF";
 // ลิงก์ติดต่อแอดมินไลน์
 const LINE_ADMIN_URL = process.env.REACT_APP_LINE_ADMIN_URL || "https://lin.ee/7K4hHjf";
 
@@ -218,10 +218,14 @@ const addonsSubtotalFrom = (c) => {
 
 function selectFixedPayLinkByBasePrice(basePrice) {
   const n = Math.round(toNumberSafe(basePrice));
-  if (n === 3993) return PAY_LINK_3993;
-  if (n === 5500) return PAY_LINK_5500;
-  if (n === 8500) return PAY_LINK_8500;
-  return ""; // ไม่พบแพ็กเกจที่แมตช์
+  const CAND = [
+    { p: 3993, url: PAY_LINK_3993 },
+    { p: 5500, url: PAY_LINK_5500 },
+    { p: 8500, url: PAY_LINK_8500 },
+  ];
+  // ยอมคลาดเคลื่อน ±1 เผื่อข้อมูลมีจุดทศนิยมหรือฟอร์แมตแปลกๆ
+  const hit = CAND.find(c => Math.abs(n - c.p) <= 1);
+  return hit ? hit.url : "";
 }
 
 const netTotalFrom = (c) => {
@@ -576,24 +580,24 @@ export default function CheckPage() {
   // ====== ค่าใช้จ่าย (ก่อน/หลัง VAT) ======
   const discount = useMemo(() => discountFrom(contract), [contract]);
   const addonsSubtotal = useMemo(() => addonsSubtotalFrom(contract), [contract]);
-  const hasAdjustments = useMemo(() => {
-    return toNumberSafe(discount) > 0 || toNumberSafe(addonsSubtotal) > 0;
-  }, [discount, addonsSubtotal]);
   const addonsArr = useMemo(() => addonsFrom(contract), [contract]);
 
   const subTotal = useMemo(() => netTotalFrom(contract), [contract]);
   const grandTotal = subTotal;
 
-  // ลิงก์จ่ายเงิน → ใช้ยอดสุทธิหลัง VAT
+  // ลิงก์จ่ายเงิน:
+  // - ปิดทั้งหมดถ้า FORCE_ADMIN_MODE
+  // - ปิดถ้ามีส่วนลดหรือค่าบริการเพิ่มเติม
+  // - มิฉะนั้น map จาก "ราคาแพ็กเกจฐาน" → 3993/5500/8500
   const payUrl = useMemo(() => {
-    if (FORCE_ADMIN_MODE) return "";  // ปิดลิงก์จ่ายเงินทั้งหมด
-    // ถ้ามีส่วนลด/ค่าบริการเพิ่มเติม → ไม่แสดงลิงก์ชำระ (จะโชว์ "ติดต่อแอดมิน" แทน)
-    if (hasAdjustments) return "";
-    // เลือกจากราคา base (ก่อนหักส่วนลด/บวกเพิ่ม)
+    if (!contract) return "";
+    if (FORCE_ADMIN_MODE) return "";
+    if (toNumberSafe(discount) > 0 || toNumberSafe(addonsSubtotal) > 0) return "";
+
     const base = basePriceFrom(contract);
     const fixed = selectFixedPayLinkByBasePrice(base);
     return fixed || "";
-  }, [contract, hasAdjustments]);
+  }, [contract, discount, addonsSubtotal]);
 
   async function handleDownloadReceipt(current) {
     if (!current) return;
