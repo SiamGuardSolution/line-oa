@@ -886,7 +886,7 @@ export default function CheckPage() {
                             ? (fmtThaiDMY(item.date) || "-")
                             : (fmtMonthYearTH(item.date, { short: true }) || "-")
                           }
-                        </div>
+                        </div> 
                       </div>
                     </li>
                   ))}
