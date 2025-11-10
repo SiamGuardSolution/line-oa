@@ -276,6 +276,8 @@ const addMonths = (dateStr, n) => {
 };
 
 // ==== อ่านข้อมูลรอบบริการจาก JSON ใหม่ (ถ้ามี) ====
+// รองรับโครงสร้างใหม่จาก ContractForm: { spray:[], baitIn:[], baitOut:[], startDate, endDate }
+// และยังอ่านแบบเก่าที่มีแค่ bait[] ได้
 function readScheduleJsonArrays(c) {
   try {
     const raw =
@@ -283,13 +285,22 @@ function readScheduleJsonArrays(c) {
       c?.service_schedule_json ||
       c?.serviceSchedule ||
       "";
-    if (!raw) return { spray: [], bait: [] };
+    if (!raw) return { spray: [], baitIn: [], baitOut: [] };
+
     const obj = typeof raw === "string" ? JSON.parse(raw) : raw;
-    const spray = Array.isArray(obj?.spray) ? obj.spray.filter(Boolean) : [];
-    const bait  = Array.isArray(obj?.bait)  ? obj.bait.filter(Boolean)  : [];
-    return { spray, bait };
+
+    const spray   = Array.isArray(obj?.spray)   ? obj.spray.filter(Boolean)   : [];
+    const baitIn  = Array.isArray(obj?.baitIn)  ? obj.baitIn.filter(Boolean)  : [];
+    const baitOut = Array.isArray(obj?.baitOut) ? obj.baitOut.filter(Boolean) : [];
+
+    // backward compat: ถ้ามี bait (รวม) แต่ไม่มี in/out ให้โยนไปไว้ baitIn
+    const oldBait = Array.isArray(obj?.bait) ? obj.bait.filter(Boolean) : [];
+    if (!baitIn.length && !baitOut.length && oldBait.length) {
+      return { spray, baitIn: oldBait, baitOut: [] };
+    }
+    return { spray, baitIn, baitOut };
   } catch {
-    return { spray: [], bait: [] };
+    return { spray: [], baitIn: [], baitOut: [] };
   }
 }
 
@@ -511,13 +522,12 @@ export default function CheckPage() {
     await searchByDigits(digits);
   };
   
-  // Spray แบบไดนามิก: ใช้ JSON ใหม่ก่อน → legacy → สูตร (start+4m,+8m)
+  // Spray: JSON ใหม่ → legacy → สูตร fallback (+4m, +8m)
   const readSprayDates = (c, start) => {
-    // 1) JSON ใหม่
-    const json = readScheduleJsonArrays(c).spray;
-    if (json.length) return json;
+    const { spray } = readScheduleJsonArrays(c);
+    if (spray.length) return spray;
 
-    // 2) legacy keys/services[]
+    // legacy keys/services[]
     const out = [];
     if (c?.serviceSpray1) out.push(c.serviceSpray1);
     if (c?.serviceSpray2) out.push(c.serviceSpray2);
@@ -530,20 +540,19 @@ export default function CheckPage() {
     }
     if (out.length) return out;
 
-    // 3) สูตร fallback
+    // fallback
     if (!start) return [];
     const s1 = addMonths(start, 4);
     const s2 = addMonths(s1, 4);
     return [s1, s2];
   };
 
-  // Bait แบบไดนามิก: ใช้ JSON ใหม่ก่อน → legacy → สูตร 20 วัน * 5
-  const readBaitDates = (c, start) => {
-    // 1) JSON ใหม่
-    const json = readScheduleJsonArrays(c).bait;
-    if (json.length) return json;
+  // Bait ภายใน: JSON ใหม่ (baitIn) → legacy (serviceBait1..5 ตีความเป็นภายในก่อน) → สูตร 20/40/60/80/100 วัน
+  const readBaitInDates = (c, start) => {
+    const { baitIn } = readScheduleJsonArrays(c);
+    if (baitIn.length) return baitIn;
 
-    // 2) legacy keys/services[]
+    // legacy: เอา serviceBait1..5 มาเป็น "ภายใน" ก่อน (ถ้ามี services[] แยกไม่ออก ให้ถือเป็นภายใน)
     const out = [];
     for (let i=1;i<=5;i++) {
       const k = `serviceBait${i}`;
@@ -558,9 +567,16 @@ export default function CheckPage() {
     }
     if (out.length) return out;
 
-    // 3) สูตร fallback
     if (!start) return [];
     return [20,40,60,80,100].map(d => addDays(start, d));
+  };
+
+  // Bait ภายนอก: JSON ใหม่ (baitOut) → ถ้าไม่มี ให้เป็น []
+  const readBaitOutDates = (c, start) => {
+    const { baitOut } = readScheduleJsonArrays(c);
+    if (baitOut.length) return baitOut;
+    // legacy แยกไม่ออกว่าใน/นอก ⇒ ปล่อยว่าง
+    return [];
   };
 
   /** ===== กำหนดการ ===== */
@@ -570,18 +586,24 @@ export default function CheckPage() {
     const start  = contract.startDate || "";
     const end    = contract.endDate || (start ? addMonths(start, 12) : "");
 
-    const sprayDates = readSprayDates(contract, start);
-    const baitDates  = readBaitDates(contract, start);
-    
+    const sprayDates  = readSprayDates(contract, start);
+    const baitInDates = readBaitInDates(contract, start);
+    const baitOutDates= readBaitOutDates(contract, start);
+
     const sprayGroup = {
       title: `ฉีดพ่น (${sprayDates.length} ครั้ง)`,
       kind: "spray",
       items: sprayDates.map((d, i) => ({ kind: "spray", label: `ครั้งที่ ${i+1}`, date: d }))
     };
-    const baitGroup = {
-      title: `วางเหยื่อ (${baitDates.length} ครั้ง)`,
-      kind: "bait",
-      items: baitDates.map((d, i) => ({ kind: "bait", label: `ครั้งที่ ${i+1}`, date: d }))
+    const baitInGroup = {
+      title: `เหยื่อ (ภายใน) (${baitInDates.length} ครั้ง)`,
+      kind: "bait-in",
+      items: baitInDates.map((d, i) => ({ kind: "bait-in", label: `ครั้งที่ ${i+1}`, date: d }))
+    };
+    const baitOutGroup = {
+      title: `เหยื่อ (ภายนอก) (${baitOutDates.length} ครั้ง)`,
+      kind: "bait-out",
+      items: baitOutDates.map((d, i) => ({ kind: "bait-out", label: `ครั้งที่ ${i+1}`, date: d }))
     };
     const endGroup = {
       title: "สิ้นสุดสัญญา",
@@ -589,9 +611,10 @@ export default function CheckPage() {
       items: [{ kind: "end", label: "สิ้นสุดสัญญา", date: end, isEnd: true }]
     };
 
+    // เรียงกลุ่มตามประเภทแพ็กเกจ
     if (pkgKey === "spray") return [sprayGroup, endGroup];
-    if (pkgKey === "bait")  return [baitGroup, sprayGroup, endGroup];
-    return [baitGroup, sprayGroup, endGroup]; // mix
+    if (pkgKey === "bait")  return [baitInGroup, baitOutGroup, sprayGroup, endGroup];
+    return [baitInGroup, baitOutGroup, sprayGroup, endGroup]; // mix
   }, [contract]);
 
   const contractStatus = useMemo(() => {
@@ -897,11 +920,13 @@ export default function CheckPage() {
                   {(() => {
                     const k = derivePkgKey(contract);
                     const sg = scheduleGroups;
-                    const spray = sg.find(g => g.kind === "spray")?.items?.length || 0;
-                    const bait  = sg.find(g => g.kind === "bait")?.items?.length  || 0;
+                    const spray   = sg.find(g => g.kind === "spray")?.items?.length    ?? 0;
+                    const baitIn  = sg.find(g => g.kind === "bait-in")?.items?.length  ?? 0;
+                    const baitOut = sg.find(g => g.kind === "bait-out")?.items?.length ?? 0;
+
                     if (k === "spray") return `ฉีดพ่น: ${spray} ครั้ง`;
-                    if (k === "bait")  return `วางเหยื่อ: ${bait} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
-                    return `ผสมผสาน · เหยื่อ: ${bait} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
+                    if (k === "bait")  return `เหยื่อใน: ${baitIn} ครั้ง · เหยื่อนอก: ${baitOut} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
+                    return `ผสมผสาน · เหยื่อใน: ${baitIn} ครั้ง · เหยื่อนอก: ${baitOut} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
                   })()}
                 </span>
 
