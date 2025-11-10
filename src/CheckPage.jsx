@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from "react-router-dom";
 import "./CheckPage.css";
 import generateReceiptPDF from "./lib/generateReceiptPDF";
 import * as PKG from "./config/packages";
@@ -20,8 +19,6 @@ const PAY_LINK_5500 = process.env.REACT_APP_PAY_LINK_5500 || "https://pay.beamch
 const PAY_LINK_8500 = process.env.REACT_APP_PAY_LINK_8500 || "https://pay.beamcheckout.com/siamguard/urToXdw4TF";
 // ลิงก์ติดต่อแอดมินไลน์
 const LINE_ADMIN_URL = process.env.REACT_APP_LINE_ADMIN_URL || "https://lin.ee/7K4hHjf";
-
-const SHOW_REPORTS_BUTTON = false;
 
 /* ---------------------- LIFF helpers (บนสุดของไฟล์ นอกคอมโพเนนต์) ---------------------- */
 const LIFF_ID = process.env.REACT_APP_LIFF_ID || ""; // ตั้งค่าใน .env (REACT_APP_LIFF_ID)
@@ -401,7 +398,6 @@ const NotesFlex = ({ payUrl, adminUrl, showAdmin }) => (
 
 /* ---------------------- MAIN ---------------------- */
 export default function CheckPage() {
-  const navigate = useNavigate();
   const [phoneInput, setPhoneInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -439,7 +435,7 @@ export default function CheckPage() {
       alert("กรุณาตรวจสอบเบอร์โทร (อย่างน้อย 9 หลัก)");
       return;
     }
-  }, [navigate, phoneDigits]);
+  }, [phoneDigits]);
 
   // โหลดเบอร์ล่าสุด
   useEffect(() => {
