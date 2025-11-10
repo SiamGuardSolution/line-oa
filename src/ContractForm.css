@@ -1,9 +1,9 @@
-/* ContractForm.css — mobile-first, Siam Guard style */
+/* ContractForm.css — mobile-first, Siam Guard style (clean, deduped) */
 :root{
   --sg-bg: #f4f9ff;          /* ฟ้าอ่อนพื้นหลัง */
   --sg-card: #ffffff;
-  --sg-text: #1f2937;        /* เทาเข้มอ่านง่าย */
-  --sg-muted: #6b7280;       /* เทากลาง */
+  --sg-text: #0f172a;        /* เข้มอ่านง่าย */
+  --sg-muted: #64748b;       /* เทากลาง */
   --sg-primary: #2a7de1;     /* น้ำเงินปุ่ม */
   --sg-primary-press: #256ac1;
   --sg-accent: #22c55e;      /* เขียว (accent) */
@@ -17,6 +17,7 @@
 * { box-sizing: border-box; }
 html, body { background: var(--sg-bg); color: var(--sg-text); }
 
+/* ───────── Layout & Card ───────── */
 .cf{ max-width: 760px; margin: 16px auto; padding: 16px; }
 .cf__card{
   background: var(--sg-card);
@@ -26,9 +27,11 @@ html, body { background: var(--sg-bg); color: var(--sg-text); }
   padding: 16px;
 }
 
+/* Titles */
 .cf__title{ font-size: 1.25rem; font-weight: 700; margin: 0 0 8px; }
 .cf__subtitle{ margin: 0 0 16px; color: var(--sg-muted); font-size: .95rem; }
 
+/* ───────── Form Grid ───────── */
 .cf__grid{
   display: grid;
   grid-template-columns: 1fr;
@@ -41,8 +44,9 @@ html, body { background: var(--sg-bg); color: var(--sg-text); }
   .cf__grid--triple{ grid-template-columns: repeat(3, 1fr); }
 }
 
+/* Field */
 .cf__field{ display: flex; flex-direction: column; gap: 6px; }
-.cf__label{ font-size: .9rem; color: var(--sg-muted); }
+.cf__label{ font-size: .9rem; color: var(--sg-muted); font-weight: 600; }
 .cf__input, .cf__select, .cf__textarea{
   width: 100%;
   padding: 12px 14px;
@@ -53,115 +57,111 @@ html, body { background: var(--sg-bg); color: var(--sg-text); }
   line-height: 1.2;
   transition: border-color .15s, box-shadow .15s;
 }
-.cf__textarea{ resize: vertical; min-height: 88px; }
+.cf__textarea{ resize: vertical; min-height: 100px; }
 .cf__input:focus, .cf__select:focus, .cf__textarea:focus{
   border-color: var(--sg-primary);
   outline: none;
   box-shadow: 0 0 0 4px var(--sg-ring);
 }
 
-/* กลุ่ม “กำหนดการบริการ” */
-.cf__fieldset{
-  border: 1px solid var(--sg-border);
-  border-radius: var(--radius);
-  padding: 12px;
-  margin-top: 12px;
-  background: #fff;
+/* ───────── Buttons (global) ───────── */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:10px 14px; border-radius:10px; border:1px solid transparent;
+  font-weight:600; cursor:pointer; transition:.2s ease;
+  background:#fff; color:#1f2937; border-color:var(--sg-border);
 }
-.cf__legend{
-  font-weight: 700;
-  padding: 0 6px;
-  color: var(--sg-text);
-}
-.cf__services{
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--gap);
-}
-@media (min-width: 520px){
-  .cf__services{ grid-template-columns: 1fr 1fr; }
-}
-@media (min-width: 820px){
-  .cf__services{ grid-template-columns: repeat(3, 1fr); }
-}
+.btn:hover{ background:#f7faff; }
+.btn:active{ transform: translateY(1px); }
 
-/* ปุ่ม */
+.btn.btn-secondary{
+  background:#fff; border-color:#22a06b; color:#22a06b;
+}
+.btn.btn-secondary:hover{ background:#22a06b; color:#fff; }
+
+.btn-outline{
+  background:#fff; border:1px solid #dbe4f0; border-radius:10px; padding:8px 10px; cursor:pointer;
+}
+.btn-outline:hover{ border-color:#c9d6ea; background:#f7faff; }
+
+/* วางปุ่ม quick actions บนหัวฟอร์ม */
+.cf .btn { margin: 8px 0 14px; }
+
+/* ───────── Actions (bottom) ───────── */
 .cf__actions{
-  margin-top: 16px; display: grid; gap: 10px; grid-template-columns: 1fr;
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px;
 }
-@media (min-width: 520px){
-  .cf__actions{ grid-template-columns: 1fr auto; }
-}
-
 .cf__btn{
-  border: 0; border-radius: 12px; padding: 12px 16px;
-  font-weight: 700; cursor: pointer;
+  padding:10px 14px; border-radius:10px; border:1px solid transparent; cursor:pointer; font-weight:600;
 }
-.cf__btn--primary{
-  background: var(--sg-primary); color: #fff;
-}
-.cf__btn--primary:active{ background: var(--sg-primary-press); }
-.cf__btn--ghost{
-  background: #fff; color: var(--sg-text); border: 1px solid var(--sg-border);
-}
-.cf__msg{ margin-top: 10px; font-size: .95rem; }
-.cf__msg--ok{ color: var(--sg-accent); }
-.cf__msg--err{ color: var(--sg-danger); }
+.cf__btn--primary{ background:var(--sg-primary); color:#fff; }
+.cf__btn--primary:active{ background:var(--sg-primary-press); }
+.cf__btn--primary:disabled{ opacity:.7; cursor:not-allowed; }
+.cf__btn--ghost{ background:#fff; border-color:var(--sg-border); }
+.cf__btn--ghost:hover{ background:#f7f7f7; }
 
-/* ชิพเล็กๆ ไว้โชว์แพ็กเกจ */
+/* Messages */
+.cf__msg{ margin-top:10px; font-weight:600; }
+.cf__msg--ok{ color:#11895a; }
+.cf__msg--err{ color:#d11f3a; }
+
+/* ───────── Chips ───────── */
 .cf__chip{
   display: inline-flex; align-items: center; gap: 6px;
   background: #ecf5ff; color: var(--sg-primary); border-radius: 999px;
   padding: 6px 10px; font-weight: 700; font-size: .85rem;
 }
 
-/* --- Price & Discount Section --- */
+/* Generic chip group (in toolbar) */
+.cf-chip{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:4px 10px; border-radius:999px; background:#fff; border:1px solid #e6ecf5; color:#334155; font-size:.85rem; font-weight:600;
+}
+.cf-chip--muted{ color:#6b7280; }
+.cf-chip--spray{ background:#eef7ff; border-color:#d7e9ff; color:#1e40af; }
+.cf-chip--bait { background:#f3fff1; border-color:#dcfce7; color:#166534; }
+
+/* ───────── Price / Discount / Controls Section ───────── */
 .cf-section {
+  margin: 12px 0 2px;
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--sg-border);
   border-radius: 14px;
   padding: 16px;
 }
-
 .cf-section__title{
   font-weight: 700;
   font-size: 1rem;
   margin-bottom: 10px;
-  color: #0f172a; /* เข้มอ่านง่าย */
+  color: var(--sg-text);
 }
+.cf-subtitle{ margin: 6px 0 10px; font-weight:700; color: var(--sg-text); }
 
-.cf-grid-2{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+.cf-grid-2,
+.cf-grid-3,
+.cf-grid-4{
+  display:grid; gap:12px;
+}
+.cf-grid-2{ grid-template-columns: 1fr 1fr; }
+.cf-grid-3{ grid-template-columns: repeat(3, 1fr); }
+.cf-grid-4{ grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 900px){
+  .cf-grid-4{ grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 640px){
-  .cf-grid-2{ grid-template-columns: 1fr; }
+  .cf-grid-2, .cf-grid-3, .cf-grid-4{ grid-template-columns: 1fr; }
 }
 
 .cf-field label{
-  display: block;
-  font-size: .95rem;
-  font-weight: 600;
-  color: #0f172a;
-  margin-bottom: 6px;
+  display:block; font-size:.95rem; font-weight:600; color: var(--sg-text); margin-bottom: 6px;
 }
-
 .cf-input, .cf-select{
-  width: 100%;
-  height: 40px;
-  padding: 8px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #fff;
-  color: #0f172a;
+  width:100%; height:40px; padding:8px 12px;
+  border:1px solid var(--sg-border); border-radius:10px; background:#fff; color:var(--sg-text);
 }
 .cf-input:focus, .cf-select:focus{
-  outline: none;
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+  outline:none; border-color:#60a5fa; box-shadow:0 0 0 3px rgba(59,130,246,.15);
 }
-
 .cf-input-inline{ position: relative; }
 .cf-input-inline .cf-input{ padding-right: 56px; }
 .cf-unit{
@@ -173,139 +173,36 @@ html, body { background: var(--sg-bg); color: var(--sg-text); }
   color: #64748b;
   font-size: .9rem;
 }
+.cf-hint{ margin-top:6px; font-size:.85rem; color:#64748b; }
 
-.cf-hint{
-  margin-top: 6px;
-  font-size: .85rem;
-  color: #64748b;
-}
-
-.net-box{
-  margin-top: 10px;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-weight: 700;
-}
-.net-box .amount{ font-size: 1.05rem; }
-
+/* ───────── Add-on List & Totals ───────── */
 .section { margin-top: 18px; }
-.addon-row {
-  display: grid;
-  grid-template-columns: 2fr 0.7fr 1fr 1fr auto;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.addon-row input { padding: 8px 10px; }
-.addon-amount { text-align: right; font-weight: 600; }
-.btn-add { margin-top: 8px; }
-.totals { margin-top: 12px; }
-.total-line { font-size: 1.05rem; }
 
-/* ===== ปุ่มทั่วไป (ใช้กับปุ่ม "สร้างใบเสร็จ (PDF)") ===== */
-.btn {
-  display:inline-flex; align-items:center; justify-content:center;
-  padding:10px 14px; border-radius:10px; border:1px solid transparent;
-  font-weight:600; cursor:pointer; transition:.2s ease;
-}
-.btn.btn-secondary{
-  background:#fff; border-color:#22a06b; color:#22a06b;
-}
-.btn.btn-secondary:hover{ background:#22a06b; color:#fff; }
-
-/* วางปุ่มให้อยู่เหนือฟอร์มเล็กน้อย */
-.cf .btn { margin: 8px 0 14px; }
-
-/* ===== กล่องรวมยอด / ข้อความ ===== */
-.totals{
-  margin-top:14px; background:#fafafa; border:1px solid #eee; border-radius:12px;
-  padding:12px 14px; font-size:14px; color:#222;
-}
-.total-line{ font-size:18px; font-weight:700; }
-
-/* ===== บรรทัด Add-on ===== */
 .addon-row{
   display:grid; gap:10px; align-items:center; margin-bottom:10px;
   grid-template-columns: 1fr 100px 140px 120px 80px; /* ชื่อ | qty | ราคา/หน่วย | จำนวนเงิน | ลบ */
 }
 .addon-row input{ width:100%; padding:10px 12px; border:1px solid #e6e6e6; border-radius:10px; }
 .addon-amount{ text-align:right; font-weight:600; }
-.btn-outline{
-  background:#fff; border:1px solid #ddd; border-radius:10px; padding:8px 10px; cursor:pointer;
-}
-.btn-outline:hover{ border-color:#c9c9c9; background:#f7f7f7; }
-
-/* ปุ่มเพิ่ม Add-on */
 .btn-add{
   display:inline-flex; align-items:center; gap:6px; margin:10px 0 6px;
   padding:8px 12px; background:#f3fbf7; color:#1a7f57; border:1px solid #bfe9d3; border-radius:10px;
 }
 .btn-add:hover{ background:#e8f7ef; }
 
-/* ===== ส่วนลด (อินพุต + หน่วย) ===== */
-.cf-section{ margin: 12px 0 2px; }
-.cf-field{ display:flex; flex-direction:column; gap:6px; }
-.cf-input-inline{ display:flex; align-items:center; gap:8px; }
-.cf-input{
-  width:100%; padding:10px 12px; border:1px solid #e6e6e6; border-radius:10px;
+.totals{
+  margin-top:14px; background:#fafafa; border:1px solid #eee; border-radius:12px;
+  padding:12px 14px; font-size:14px; color:#222;
 }
-.cf-unit{ font-size:14px; color:#555; }
-.cf-hint{ font-size:12px; color:#777; }
+.total-line{ font-size:18px; font-weight:700; }
 
-/* ===== ตารางบริการ / ฟิลด์เซ็ต ===== */
+/* ───────── Fieldset: Service Schedule ───────── */
 .cf__fieldset{
-  margin-top:12px; border:1px solid #eee; border-radius:12px; padding:12px;
+  margin-top:12px; border:1px solid var(--sg-border); border-radius:12px; padding:12px; background:#fff;
 }
-.cf__legend{ padding:0 6px; font-weight:700; color:#111; }
-.cf__services{
-  display:grid; gap:12px; grid-template-columns: repeat(3, minmax(180px,1fr));
-}
+.cf__legend{ padding:0 6px; font-weight:700; color:var(--sg-text); }
 
-/* ===== Layout ฟอร์มหลัก ===== */
-.cf__grid{
-  display:grid; gap:12px; grid-template-columns: repeat(2, minmax(220px,1fr));
-}
-.cf__field{ display:flex; flex-direction:column; gap:6px; }
-.cf__label{ font-weight:600; color:#111; }
-.cf__input, .cf__select, .cf__textarea{
-  padding:10px 12px; border:1px solid #e6e6e6; border-radius:10px; width:100%;
-}
-.cf__textarea{ min-height:110px; resize:vertical; }
-
-/* ปุ่ม action ด้านล่างฟอร์ม */
-.cf__actions{
-  display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px;
-}
-.cf__btn{
-  padding:10px 14px; border-radius:10px; border:1px solid transparent; cursor:pointer; font-weight:600;
-}
-.cf__btn--primary{ background:#1677ff; color:#fff; }
-.cf__btn--primary:disabled{ opacity:.7; cursor:not-allowed; }
-.cf__btn--ghost{ background:#fff; border-color:#ddd; }
-.cf__btn--ghost:hover{ background:#f7f7f7; }
-
-/* ข้อความแจ้งผล */
-.cf__msg{ margin-top:10px; font-weight:600; }
-.cf__msg--ok{ color:#11895a; }
-.cf__msg--err{ color:#d11f3a; }
-
-/* ===== Responsive ===== */
-@media (max-width: 860px){
-  .cf__grid{ grid-template-columns: 1fr; }
-  .cf__services{ grid-template-columns: repeat(2, minmax(140px,1fr)); }
-  .addon-row{ grid-template-columns: 1fr 80px 120px 1fr 70px; }
-}
-@media (max-width: 560px){
-  .cf__services{ grid-template-columns: 1fr; }
-  .addon-row{
-    grid-template-columns: 1fr;
-  }
-  .addon-amount{ text-align:left; }
-}
-
-/* ───────── Toolbar ───────── */
+/* Toolbar */
 .cf-toolbar{
   display:flex; align-items:center; justify-content:space-between;
   gap:12px; padding:10px; border:1px solid #eef2f7; border-radius:12px; background:#f9fbff; margin-bottom:12px;
@@ -313,28 +210,19 @@ html, body { background: var(--sg-bg); color: var(--sg-text); }
 .cf-toolbar__left{ display:flex; gap:8px; flex-wrap:wrap; }
 .cf-toolbar__right{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
 
-/* Chips */
-.cf-chip{
-  display:inline-flex; align-items:center; gap:6px;
-  padding:4px 10px; border-radius:999px; background:#fff; border:1px solid #e6ecf5; color:#334155; font-size:.85rem; font-weight:600;
-}
-.cf-chip--muted{ color:#6b7280; }
-.cf-chip--spray{ background:#eef7ff; border-color:#d7e9ff; color:#1e40af; }
-.cf-chip--bait { background:#f3fff1; border-color:#dcfce7; color:#166534; }
-
-/* ───────── Tabs ───────── */
+/* Tabs */
 .cf-tabs{ display:flex; gap:6px; margin:8px 0 12px; }
 .cf-tab{
   padding:8px 12px; border:1px solid #e6ecf5; background:#fff; border-radius:10px; font-weight:600; color:#334155;
 }
 .cf-tab--active{ background:#eef7ff; border-color:#cfe4ff; color:#0f3a8d; }
 
-/* ───────── Panel & Groups ───────── */
+/* Panels */
 .cf-panel{ display:block; }
 .cf-panel__header{ display:flex; align-items:center; justify-content:space-between; margin-top:12px; }
-.cf-group-title{ margin:6px 0 8px; font-size:1rem; color:#0f172a; }
+.cf-group-title{ margin:6px 0 8px; font-size:1rem; color:var(--sg-text); }
 
-/* ───────── Grid of rounds ───────── */
+/* Service rounds grid */
 .service-grid{
   display:grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
@@ -354,11 +242,21 @@ html, body { background: var(--sg-bg); color: var(--sg-text); }
   background:#eaf3ff; color:#0f3a8d; font-weight:800; margin-bottom:6px; font-size:.9rem;
 }
 
-/* inline actions */
+/* Inline actions inside panel headers */
 .cf-actions-inline{ display:flex; gap:6px; }
 
-/* empty state */
+/* Empty state */
 .cf-empty{
   border:1px dashed #dbe4f0; background:#f8fbff; color:#64748b;
   padding:10px 12px; border-radius:10px; font-size:.9rem;
+}
+
+/* ───────── Responsive tweaks ───────── */
+@media (max-width: 860px){
+  .cf__grid{ grid-template-columns: 1fr; }
+  .addon-row{ grid-template-columns: 1fr 80px 120px 1fr 70px; }
+}
+@media (max-width: 560px){
+  .addon-row{ grid-template-columns: 1fr; }
+  .addon-amount{ text-align:left; }
 }

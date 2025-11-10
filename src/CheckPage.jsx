@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useNavigate } from "react-router-dom";
 import "./CheckPage.css";
 import generateReceiptPDF from "./lib/generateReceiptPDF";
 import * as PKG from "./config/packages";
@@ -19,6 +20,8 @@ const PAY_LINK_5500 = process.env.REACT_APP_PAY_LINK_5500 || "https://pay.beamch
 const PAY_LINK_8500 = process.env.REACT_APP_PAY_LINK_8500 || "https://pay.beamcheckout.com/siamguard/urToXdw4TF";
 // ลิงก์ติดต่อแอดมินไลน์
 const LINE_ADMIN_URL = process.env.REACT_APP_LINE_ADMIN_URL || "https://lin.ee/7K4hHjf";
+
+const SHOW_REPORTS_BUTTON = false;
 
 /* ---------------------- LIFF helpers (บนสุดของไฟล์ นอกคอมโพเนนต์) ---------------------- */
 const LIFF_ID = process.env.REACT_APP_LIFF_ID || ""; // ตั้งค่าใน .env (REACT_APP_LIFF_ID)
@@ -84,18 +87,30 @@ function buildCheckUrls(digits) {
   return API_BASES.map(base => `${base}/api/check-contract?phone=${encodeURIComponent(digits)}&v=${v}`);
 }
 
-/** Package helpers (key/label/price) */
-// → คืนคีย์แพ็กเกจ "spray" | "bait" | "mix"
 function derivePkgKey(c) {
   if (!c) return "spray";
-  if (c.pkg && ["spray","bait","mix"].includes(String(c.pkg).toLowerCase())) {
-    return String(c.pkg).toLowerCase();
-  }
-  const raw = `${c?.package || ""}|${c?.packageLabel || ""}|${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`
-    .toLowerCase();
-  if (/\bmix|ผสม|combo/.test(raw)) return "mix";
-  if (/\bbait|เหยื่อ/.test(raw)) return "bait";
-  if (/\bspray|ฉีด/.test(raw)) return "spray";
+
+  // 1) ตีความจากฟิลด์ pkg โดยตรงก่อน
+  const rawPkg = String(c.pkg || "").toLowerCase();
+  if (["spray","bait","mix"].includes(rawPkg)) return rawPkg;
+
+  // 2) รองรับคีย์แพ็กเกจใหม่ของระบบ (pipe3993, bait5500_in/out/both, combo8500)
+  const directKey =
+    String(c.package || c.servicePackage || c.packageLabel || c.servicePackageLabel || "")
+      .toLowerCase();
+  if (/^pipe3993\b/.test(directKey)) return "spray";
+  if (/^bait5500(?:_|-)?in\b/.test(directKey)) return "bait";
+  if (/^bait5500(?:_|-)?out\b/.test(directKey)) return "bait";
+  if (/^bait5500(?:_|-)?both\b/.test(directKey)) return "bait";
+  if (/^combo8500\b/.test(directKey)) return "mix";
+
+  // 3) เดาจากคำในฉลากรวม
+  const blob = `${c?.package || ""}|${c?.packageLabel || ""}|${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`.toLowerCase();
+  if (/\bmix|ผสม|combo/.test(blob)) return "mix";
+  if (/\bbait|เหยื่อ/.test(blob)) return "bait";
+  if (/\bspray|ฉีด/.test(blob)) return "spray";
+
+  // 4) เดาจากราคา (สุดท้าย)
   const text = `${c?.priceText || ""}`.toLowerCase();
   if (/8500/.test(text)) return "mix";
   if (/5500/.test(text)) return "bait";
@@ -386,6 +401,7 @@ const NotesFlex = ({ payUrl, adminUrl, showAdmin }) => (
 
 /* ---------------------- MAIN ---------------------- */
 export default function CheckPage() {
+  const navigate = useNavigate();
   const [phoneInput, setPhoneInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -409,6 +425,21 @@ export default function CheckPage() {
     () => (contracts && contracts.length ? (contracts[activeIdx] || null) : null),
     [contracts, activeIdx]
   );
+
+  // เบอร์ที่จะใช้เปิดหน้า ServiceReportPage.jsx (เอาเบอร์ในสัญญาถ้าเจอ ไม่งั้นใช้ช่องค้นหา)
+  const phoneDigits = useMemo(
+    () => normalizePhone(contract?.phone || phoneInput),
+    [contract, phoneInput]
+  );
+
+  // ไปหน้ารายงานของเบอร์นี้
+  const goToReports = useCallback(() => {
+    const d = phoneDigits;
+    if (!d || d.length < 9) {
+      alert("กรุณาตรวจสอบเบอร์โทร (อย่างน้อย 9 หลัก)");
+      return;
+    }
+  }, [navigate, phoneDigits]);
 
   // โหลดเบอร์ล่าสุด
   useEffect(() => {
@@ -863,22 +894,46 @@ export default function CheckPage() {
           <section className="card">
             <div className="row between">
               <h3 className="title">กำหนดการ</h3>
-              <span className="pill">
-                {(() => {
-                  const k = derivePkgKey(contract);
-                  const sg = scheduleGroups;
-                  const spray = sg.find(g => g.kind === "spray")?.items?.length || 0;
-                  const bait  = sg.find(g => g.kind === "bait")?.items?.length  || 0;
-                  if (k === "spray") return `ฉีดพ่น: ${spray} ครั้ง`;
-                  if (k === "bait")  return `วางเหยื่อ: ${bait} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
-                  return `ผสมผสาน · เหยื่อ: ${bait} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
-                })()}
-              </span>
+
+              {/* กล่องทางขวา: pill + ปุ่มดูประวัติ */}
+              <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                <span className="pill">
+                  {(() => {
+                    const k = derivePkgKey(contract);
+                    const sg = scheduleGroups;
+                    const spray = sg.find(g => g.kind === "spray")?.items?.length || 0;
+                    const bait  = sg.find(g => g.kind === "bait")?.items?.length  || 0;
+                    if (k === "spray") return `ฉีดพ่น: ${spray} ครั้ง`;
+                    if (k === "bait")  return `วางเหยื่อ: ${bait} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
+                    return `ผสมผสาน · เหยื่อ: ${bait} ครั้ง · ฉีดพ่น: ${spray} ครั้ง`;
+                  })()}
+                </span>
+
+                <button
+                  onClick={goToReports}
+                  disabled={!phoneDigits || phoneDigits.length < 9}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #2a7de1",
+                    background: "#fff",
+                    color: "#2a7de1",
+                    fontWeight: 700,
+                    cursor: (!phoneDigits || phoneDigits.length < 9) ? "not-allowed" : "pointer",
+                    whiteSpace: "nowrap"
+                  }}
+                  title="เปิดดูประวัติการรับบริการของเบอร์นี้"
+                >
+                  ดูประวัติการรับบริการ
+                </button>
+              </div>
             </div>
 
             {scheduleGroups.map((group, gi) => (
               <div className="timeline-group" key={gi}>
-                <div className="group-title"><span className={`chip ${group.kind}`}>{group.title}</span></div>
+                <div className="group-title">
+                  <span className={`chip ${group.kind}`}>{group.title}</span>
+                </div>
                 <ol className="timeline">
                   {group.items.map((item, idx) => (
                     <li key={idx} className={item.isEnd ? "end" : ""}>
@@ -888,9 +943,8 @@ export default function CheckPage() {
                         <div className="date">
                           {item.isEnd
                             ? (fmtThaiDMY(item.date) || "-")
-                            : (fmtMonthYearTH(item.date, { short: true }) || "-")
-                          }
-                        </div> 
+                            : (fmtMonthYearTH(item.date, { short: true }) || "-")}
+                        </div>
                       </div>
                     </li>
                   ))}

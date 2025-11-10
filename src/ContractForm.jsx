@@ -22,40 +22,42 @@ const COMPANY = {
   // bank: { name: "", account: "", accountName: "" },
 };
 
-// ---------- โครง groups ----------
-const SPRAY_FIELDS = [
-  { key: "serviceSpray1", label: "Service Spray รอบที่ 1" },
-  { key: "serviceSpray2", label: "Service Spray รอบที่ 2" },
-];
+/* -----------------------------------------
+ * โครง field แบบ Dynamic + เพดานสูงสุด
+ * ----------------------------------------- */
+const makeFields = (prefix, n, labelPrefix) =>
+  Array.from({ length: n }, (_, i) => ({
+    key: `${prefix}${i + 1}`,
+    label: `${labelPrefix} รอบที่ ${i + 1}`,
+  }));
 
-const BAIT_FIELDS = [
-  { key: "serviceBait1", label: "Service Bait รอบที่ 1" },
-  { key: "serviceBait2", label: "Service Bait รอบที่ 2" },
-  { key: "serviceBait3", label: "Service Bait รอบที่ 3" },
-  { key: "serviceBait4", label: "Service Bait รอบที่ 4" },
-  { key: "serviceBait5", label: "Service Bait รอบที่ 5" },
-];
+// เพดานสูงสุดเพื่อรองรับรอบเพิ่มเติมตามเงื่อนไขใหม่
+const SPRAY_STD_MAX = 6;  // รองรับมากสุด 6 ครั้ง/ปี
+const BAIT_STD_MAX  = 12; // รองรับมากสุด 12 ครั้ง/ปี
 
+const SPRAY_FIELDS = makeFields("serviceSpray", SPRAY_STD_MAX, "Service Spray");
+const BAIT_FIELDS  = makeFields("serviceBait",  BAIT_STD_MAX,  "Service Bait");
+
+/* -----------------------------------------
+ * นิยามแพ็กเกจใหม่ตามโจทย์
+ * - 3,993 : Spray 3 ครั้ง/ปี ห่าง 3 เดือน (ปรับได้)
+ * - 5,500 : ย่อยเป็น bait ภายใน / ภายนอก / ทั้งสองแบบ
+ * - 8,500 : รวม 3,993 + 5,500 (both)
+ * ----------------------------------------- */
 const PACKAGES = {
-  spray: {
-    groups: [{ type: "spray", title: "Service Spray", fields: SPRAY_FIELDS }],
-  },
-  bait: {
-    groups: [
-      { type: "spray", title: "Service Spray", fields: SPRAY_FIELDS },
-      { type: "bait", title: "Service Bait", fields: BAIT_FIELDS },
-    ],
-  },
-  mix: {
-    groups: [
-      { type: "spray", title: "Service Spray", fields: SPRAY_FIELDS },
-      { type: "bait", title: "Service Bait", fields: BAIT_FIELDS },
-    ],
-  },
+  pipe3993:      { groups: [{ type: "spray", title: "Service Spray", fields: SPRAY_FIELDS }] },
+  bait5500_in:   { groups: [{ type: "bait",  title: "Service Bait",  fields: BAIT_FIELDS  }] },
+  bait5500_out:  { groups: [{ type: "bait",  title: "Service Bait",  fields: BAIT_FIELDS  }] },
+  bait5500_both: { groups: [{ type: "bait",  title: "Service Bait",  fields: BAIT_FIELDS  }] },
+  combo8500:     { groups: [
+    { type: "spray", title: "Service Spray", fields: SPRAY_FIELDS },
+    { type: "bait",  title: "Service Bait",  fields: BAIT_FIELDS  },
+  ]},
 };
 
+// ค่าเริ่มต้นของฟอร์ม
 const emptyForm = {
-  package: "spray",
+  package: "pipe3993",
   name: "",
   address: "",
   facebook: "",
@@ -66,6 +68,9 @@ const emptyForm = {
   tech: "",
   note: "",
   status: "ใช้งานอยู่",
+
+  // ใช้คำนวณ Spray ย้อนหลัง (สำหรับแพ็กเกจ 5,500 / 8,500)
+  sprayStartOverride: "",
 };
 
 // ===== helpers =====
@@ -110,10 +115,9 @@ const addYears = (d, n) => addMonths(d, n * 12);
 const askConfirm = (msg) =>
   (typeof window !== "undefined" && typeof window.confirm === "function")
     ? window.confirm(msg)
-    : true; // เผื่อรันใน env ที่ไม่มี window
+    : true;
 
-
-/* ===== Even Spacing ===== */
+/* ===== Even Spacing (สำหรับปุ่มกระจายสเปรย์เท่าๆ กัน) ===== */
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function toDateOnly(d) {
@@ -128,7 +132,7 @@ function iso(d) {
   return `${z.getFullYear()}-${mm}-${dd}`;
 }
 
-/** กระจาย N จุดโดยเว้นช่วงเท่ากันแบบรวม "วันเริ่ม" และ "วันสิ้นสุด" */
+/** กระจาย N จุด โดยรวม "วันเริ่ม" และ "วันสิ้นสุด" ด้วย */
 function evenSpacedDatesInclusive(start, end, n) {
   const s = toDateOnly(start);
   const e = toDateOnly(end);
@@ -146,39 +150,63 @@ function evenSpacedDatesInclusive(start, end, n) {
 const digitsOnly = (s) => String(s || "").replace(/\D/g, "");
 const taxIdDigits = (s) => digitsOnly(s).slice(0, 13);
 
-// คำนวณตารางบริการตามแพ็กเกจ (เต็มจำนวนสูงสุด)
-function computeSchedule(pkg, startStr) {
+/* -----------------------------------------
+ * คำนวณตารางบริการตาม “แพ็กเกจ + ตัวปรับ”
+ * controls = {
+ *   sprayCount, sprayGapMonths, sprayStartOverride,
+ *   baitInCount, baitInGapDays,
+ *   baitOutCount, baitOutGapMonths
+ * }
+ * ----------------------------------------- */
+function computeSchedule(pkg, startStr, controls = {}) {
   if (!startStr) return {};
   const start = new Date(startStr);
   if (isNaN(start)) return {};
 
+  const {
+    sprayCount = 0,
+    sprayGapMonths = 3,
+    sprayStartOverride = "",
+
+    baitInCount = 0,
+    baitInGapDays = 15,
+
+    baitOutCount = 0,
+    baitOutGapMonths = 2,
+  } = controls;
+
   const out = {};
-  out.endDate = toISO(addYears(start, 1)); // +1 ปี
+  out.endDate = toISO(addYears(start, 1)); // +1 ปีอัตโนมัติ
 
-  const s1 = addMonths(start, 4);
-  const s2 = addMonths(s1, 4);
-
-  if (pkg === "spray") {
-    out.serviceSpray1 = toISO(s1);
-    out.serviceSpray2 = toISO(s2);
-    return out;
+  // ===== Spray schedule =====
+  const sprayBase = sprayStartOverride ? new Date(sprayStartOverride) : start;
+  if (!isNaN(sprayBase) && sprayCount > 0) {
+    for (let i = 0; i < Math.min(sprayCount, SPRAY_STD_MAX); i++) {
+      const d = addMonths(sprayBase, i * sprayGapMonths);
+      out[`serviceSpray${i + 1}`] = toISO(d);
+    }
   }
 
-  // bait & mix มีทั้ง Spray + Bait
-  out.serviceSpray1 = toISO(s1);
-  out.serviceSpray2 = toISO(s2);
+  // ===== Bait schedule (ภายใน: วัน) =====
+  let baitIndex = 1;
+  if (baitInCount > 0) {
+    for (let i = 0; i < Math.min(baitInCount, BAIT_STD_MAX); i++) {
+      const d = addDays(start, i * baitInGapDays);
+      out[`serviceBait${baitIndex}`] = toISO(d);
+      baitIndex++;
+      if (baitIndex > BAIT_STD_MAX) break;
+    }
+  }
 
-  const b1 = addDays(start, 20);
-  const b2 = addDays(b1, 20);
-  const b3 = addDays(b2, 20);
-  const b4 = addDays(b3, 20);
-  const b5 = addDays(b4, 20);
-
-  out.serviceBait1 = toISO(b1);
-  out.serviceBait2 = toISO(b2);
-  out.serviceBait3 = toISO(b3);
-  out.serviceBait4 = toISO(b4);
-  out.serviceBait5 = toISO(b5);
+  // ===== Bait schedule (ภายนอก: เดือน) =====
+  if (baitOutCount > 0) {
+    for (let i = 0; i < Math.min(baitOutCount, BAIT_STD_MAX - (baitIndex - 1)); i++) {
+      const d = addMonths(start, i * baitOutGapMonths);
+      out[`serviceBait${baitIndex}`] = toISO(d);
+      baitIndex++;
+      if (baitIndex > BAIT_STD_MAX) break;
+    }
+  }
 
   return out;
 }
@@ -288,98 +316,172 @@ export default function ContractForm() {
     });
   };
 
-  const pkgConf = PACKAGES[form.package] || PACKAGES["spray"];
+  const pkgConf = PACKAGES[form.package] || PACKAGES["pipe3993"];
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
   const phoneDigits = (s) => digitsOnly(s);
 
   const [discountValue, setDiscountValue] = useState("");
 
-  // แท็บสำหรับสลับมุมมอง Service
-  const [activeTab, setActiveTab] = useState(form.package === "bait" ? "bait" : "spray");
+  // ===== แท็บมุมมอง Service =====
+  const hasSpray = form.package === "pipe3993" || form.package === "combo8500";
+  const hasBait  = form.package.startsWith("bait5500") || form.package === "combo8500";
+  const [activeTab, setActiveTab] = useState(hasSpray ? "spray" : "bait");
+
+  useEffect(() => {
+    setActiveTab(hasSpray ? "spray" : "bait");
+  }, [form.package]); // eslint-disable-line
 
   // === ใบเสร็จ (Receipt) VAT ===
   const [receiptVatEnabled, setReceiptVatEnabled] = useState(false);
   const RECEIPT_VAT_RATE = 0.07;
 
-  // ===== รอบบริการแบบยืดหยุ่น =====
+  /* -----------------------------------------
+   * ตัวปรับแพ็กเกจ (แก้ได้จาก UI)
+   * ----------------------------------------- */
+  // Spray
+  const [sprayStdUsed, setSprayStdUsed] = useState(3);     // 3,993 และ 8,500 เริ่ม 3 รอบ/ปี
+  const [sprayGapMonths, setSprayGapMonths] = useState(3); // ห่าง 3 เดือน
+  const [sprayStartOverride, setSprayStartOverride] = useState("");
+
+  // Bait (ภายใน)
+  const [baitInUsed, setBaitInUsed] = useState(0);
+  const [baitInGapDays, setBaitInGapDays] = useState(15);
+
+  // Bait (ภายนอก)
+  const [baitOutUsed, setBaitOutUsed] = useState(0);
+  const [baitOutGapMonths, setBaitOutGapMonths] = useState(2);
+
+  // ค่าเริ่มต้นของตัวปรับเมื่อสลับแพ็กเกจ
+  useEffect(() => {
+    switch (form.package) {
+      case "pipe3993": // 3,993
+        setSprayStdUsed(3);
+        setSprayGapMonths(3);
+        setBaitInUsed(0);
+        setBaitOutUsed(0);
+        setSprayStartOverride("");
+        break;
+
+      case "bait5500_in": // 5,500 - ภายใน
+        setSprayStdUsed(0);          // ไม่บังคับสเปรย์ แต่สามารถเปิดใช้ภายหลังได้
+        setSprayGapMonths(3);
+        setBaitInUsed(5);            // เริ่มต้น 5 รอบ (แก้ได้)
+        setBaitInGapDays(15);
+        setBaitOutUsed(0);
+        setBaitOutGapMonths(2);
+        setSprayStartOverride("");   // ช่องแก้วันเริ่ม Spray ย้อนหลัง
+        break;
+
+      case "bait5500_out": // 5,500 - ภายนอก
+        setSprayStdUsed(0);
+        setSprayGapMonths(3);
+        setBaitInUsed(0);
+        setBaitOutUsed(6);           // ทุก 2 เดือน ครบปี ~6 รอบ (แก้ได้)
+        setBaitOutGapMonths(2);
+        setSprayStartOverride("");
+        break;
+
+      case "bait5500_both": // 5,500 - ทั้งสองแบบ
+        setSprayStdUsed(0);
+        setSprayGapMonths(3);
+        setBaitInUsed(4);            // ภายใน 15 วัน/ครั้ง
+        setBaitInGapDays(15);
+        setBaitOutUsed(4);           // ภายนอก 2 เดือน/ครั้ง
+        setBaitOutGapMonths(2);
+        setSprayStartOverride("");
+        break;
+
+      case "combo8500": // 8,500 รวม
+        setSprayStdUsed(3);          // ตาม 3,993
+        setSprayGapMonths(3);
+        setBaitInUsed(4);            // ตาม 5,500 (both) เวอร์ชันแก้ไข
+        setBaitInGapDays(15);
+        setBaitOutUsed(4);
+        setBaitOutGapMonths(2);
+        setSprayStartOverride("");
+        break;
+
+      default:
+        break;
+    }
+  }, [form.package]);
+
+  // ===== รอบบริการแบบยืดหยุ่น (รายการเติมมือ) =====
   const [sprayExtras, setSprayExtras] = useState([]); // ['YYYY-MM-DD', ...]
   const [baitExtras, setBaitExtras] = useState([]);   // ['YYYY-MM-DD', ...]
 
-  // --- จำนวนรอบมาตรฐานที่ "ใช้จริง" (ลด/เพิ่มได้) ---
-  const SPRAY_STD_MAX = 2;
-  const BAIT_STD_MAX = 5;
+  // นับจำนวนครั้งจริง (มาตรฐานที่ใช้จริง + extras)
+  const sprayCount = sprayStdUsed + sprayExtras.length;
+  const baitCount  = (baitInUsed + baitOutUsed) + baitExtras.length;
 
-  const [sprayStdUsed, setSprayStdUsed] = useState(SPRAY_STD_MAX);
-  const [baitStdUsed, setBaitStdUsed] = useState(BAIT_STD_MAX);
-
-  // ปรับ activeTab + reset จำนวนรอบมาตรฐาน เมื่อเปลี่ยนแพ็กเกจ
+  // เคลียร์คีย์ที่เกินจำนวนที่ใช้จริงเมื่อผู้ใช้ "ลดรอบ"
   useEffect(() => {
-    setActiveTab(form.package === "bait" ? "bait" : "spray");
-    setSprayStdUsed(SPRAY_STD_MAX);
-    setBaitStdUsed(BAIT_STD_MAX);
-  }, [form.package]);
-
-  // เมื่อ "ลด" รอบมาตรฐาน ให้ล้างค่ารอบท้ายทิ้ง (Spray)
-  useEffect(() => {
-    const keys = ["serviceSpray1", "serviceSpray2"];
+    // Spray
     setForm((s) => {
       const n = { ...s };
-      keys.forEach((k, i) => {
-        if (i >= sprayStdUsed) n[k] = "";
-      });
+      for (let i = sprayStdUsed; i < SPRAY_STD_MAX; i++) {
+        n[`serviceSpray${i + 1}`] = "";
+      }
       return n;
     });
   }, [sprayStdUsed]);
 
-  // เมื่อ "ลด" รอบมาตรฐาน ให้ล้างค่ารอบท้ายทิ้ง (Bait)
   useEffect(() => {
-    const keys = ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"];
+    // Bait
     setForm((s) => {
       const n = { ...s };
-      keys.forEach((k, i) => {
-        if (i >= baitStdUsed) n[k] = "";
-      });
+      const limit = Math.min(BAIT_STD_MAX, baitInUsed + baitOutUsed);
+      for (let i = limit; i < BAIT_STD_MAX; i++) {
+        n[`serviceBait${i + 1}`] = "";
+      }
       return n;
     });
-  }, [baitStdUsed]);
+  }, [baitInUsed, baitOutUsed]);
 
-  // นับจำนวนครั้งจริง (มาตรฐานที่ใช้จริง + extras)
-  const sprayCount = sprayStdUsed + sprayExtras.length;
-  const baitCount =
-    form.package === "bait" || form.package === "mix" ? baitStdUsed + baitExtras.length : 0;
-
-  // Auto-generate ตารางบริการ / endDate แล้วตัดตามจำนวนที่ใช้จริง
+  // Auto-generate ตารางบริการ / endDate (ตามตัวปรับ)
   useEffect(() => {
     if (!form.startDate) return;
-    const auto = computeSchedule(form.package, form.startDate);
+
+    const auto = computeSchedule(
+      form.package,
+      form.startDate,
+      {
+        sprayCount: Math.min(sprayStdUsed, SPRAY_STD_MAX),
+        sprayGapMonths,
+        sprayStartOverride,
+
+        baitInCount:  Math.min(baitInUsed,  BAIT_STD_MAX),
+        baitInGapDays,
+
+        baitOutCount: Math.min(baitOutUsed, BAIT_STD_MAX),
+        baitOutGapMonths,
+      }
+    );
     if (!Object.keys(auto).length) return;
 
-    const trimmed = { ...auto };
+    // เคารพจำนวนที่ใช้จริง + เคลียร์คีย์เกิน
+    const patch = { ...auto };
 
-    ["serviceSpray1", "serviceSpray2"].forEach((k, i) => {
-      if (i >= sprayStdUsed) trimmed[k] = "";
-    });
-
-    if (form.package === "bait" || form.package === "mix") {
-      ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].forEach(
-        (k, i) => {
-          if (i >= baitStdUsed) trimmed[k] = "";
-        }
-      );
-    } else {
-      ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].forEach(
-        (k) => (trimmed[k] = "")
-      );
+    for (let i = Math.min(sprayStdUsed, SPRAY_STD_MAX); i < SPRAY_STD_MAX; i++) {
+      patch[`serviceSpray${i + 1}`] = "";
+    }
+    for (let i = Math.min(baitInUsed + baitOutUsed, BAIT_STD_MAX); i < BAIT_STD_MAX; i++) {
+      patch[`serviceBait${i + 1}`] = "";
     }
 
-    setForm((s) => ({ ...s, ...trimmed }));
-  }, [form.package, form.startDate, sprayStdUsed, baitStdUsed]);
+    setForm((s) => ({ ...s, ...patch }));
+  }, [
+    form.package,
+    form.startDate,
+    sprayStdUsed, sprayGapMonths, sprayStartOverride,
+    baitInUsed, baitInGapDays,
+    baitOutUsed, baitOutGapMonths
+  ]);
 
-  // ---- ปุ่ม: กระจาย (เฉพาะสเปรย์) ----
+  // ---- ปุ่ม: กระจาย (เฉพาะสเปรย์) เท่าๆ กัน รวมวันเริ่ม/สิ้นสุด ----
   const distributeSprayEqualFromStartEnd = () => {
     const start = form.startDate;
-    const end =
-      form.endDate || (form.startDate ? toISO(addYears(new Date(form.startDate), 1)) : "");
+    const end = form.endDate || (form.startDate ? toISO(addYears(new Date(form.startDate), 1)) : "");
     if (!start || !end) {
       alert("กรุณากำหนดวันเริ่ม/สิ้นสุดสัญญาให้ครบก่อน");
       return;
@@ -396,9 +498,9 @@ export default function ContractForm() {
     const midDates = dates.slice(1, dates.length - 1);
 
     const patch = {};
-    const stdKeys = ["serviceSpray1", "serviceSpray2"].slice(0, sprayStdUsed);
-    stdKeys.forEach((k, i) => {
-      patch[k] = midDates[i] || "";
+    // เติมลงคีย์มาตรฐานตามจำนวนที่ใช้จริง
+    SPRAY_FIELDS.slice(0, Math.min(sprayStdUsed, SPRAY_STD_MAX)).forEach((f, i) => {
+      patch[f.key] = midDates[i] || "";
     });
 
     const extra = midDates.slice(sprayStdUsed);
@@ -413,25 +515,30 @@ export default function ContractForm() {
       alert("กรุณาเลือกวันที่เริ่มสัญญาก่อน");
       return;
     }
-    const auto = computeSchedule(form.package, form.startDate);
+    const auto = computeSchedule(
+      form.package,
+      form.startDate,
+      {
+        sprayCount: Math.min(sprayStdUsed, SPRAY_STD_MAX),
+        sprayGapMonths,
+        sprayStartOverride,
+
+        baitInCount:  Math.min(baitInUsed,  BAIT_STD_MAX),
+        baitInGapDays,
+
+        baitOutCount: Math.min(baitOutUsed, BAIT_STD_MAX),
+        baitOutGapMonths,
+      }
+    );
     if (!Object.keys(auto).length) return;
 
     const patch = { ...auto };
 
-    ["serviceSpray1", "serviceSpray2"].forEach((k, i) => {
-      if (i >= sprayStdUsed) patch[k] = "";
-    });
-
-    if (form.package === "bait" || form.package === "mix") {
-      ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].forEach(
-        (k, i) => {
-          if (i >= baitStdUsed) patch[k] = "";
-        }
-      );
-    } else {
-      ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].forEach(
-        (k) => (patch[k] = "")
-      );
+    for (let i = Math.min(sprayStdUsed, SPRAY_STD_MAX); i < SPRAY_STD_MAX; i++) {
+      patch[`serviceSpray${i + 1}`] = "";
+    }
+    for (let i = Math.min(baitInUsed + baitOutUsed, BAIT_STD_MAX); i < BAIT_STD_MAX; i++) {
+      patch[`serviceBait${i + 1}`] = "";
     }
 
     setForm((s) => ({ ...s, ...patch }));
@@ -515,17 +622,16 @@ export default function ContractForm() {
         ? `ธนาคาร${COMPANY.bank.name} ${COMPANY.bank.account}\n${COMPANY.bank.accountName}`
         : "",
 
-      // ✅ ส่งวันเริ่มสัญญาเข้า payload ด้วย
+      // ส่งวันเริ่มสัญญาเข้า payload ด้วย
       contractStartDate: startForPdf,
     };
 
     const filename = `Receipt-${payload.receiptNo}.pdf`;
 
     try {
-      // ✅ “คันโยก” บังคับวันใน PDF ให้ตรงวันเริ่มสัญญา (ค.ศ. dd/MM/yyyy)
       await generateReceiptPDF(payload, {
         filename,
-        returnType: "save",          // หรือ "blob" ถ้าจะอัปโหลดต่อ
+        returnType: "save",
         forceReceiptDate: startForPdf,
       });
     } catch (e) {
@@ -551,7 +657,7 @@ export default function ContractForm() {
   }
 
   // ===== บันทึกลง GAS ผ่าน /api/submit-contract =====
-  const isBaitLike = form.package === "bait" || form.package === "mix";
+  const isBaitLike = form.package.startsWith("bait") || form.package === "combo8500";
 
   const handleSubmitAndSave = async (e) => {
     e.preventDefault();
@@ -560,14 +666,24 @@ export default function ContractForm() {
     const err = validate();
     if (err) return setMsg({ text: err, ok: false });
 
-    // เตรียมคีย์มาตรฐานตามจำนวนที่ใช้จริง
-    const sprayStdKeys = ["serviceSpray1", "serviceSpray2"].slice(0, sprayStdUsed);
-    const baitStdKeys = ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"].slice(
-      0,
-      baitStdUsed
-    );
+    // เตรียมคีย์มาตรฐานตามจำนวนที่ใช้จริง (Dynamic)
+    const sprayStdKeys = SPRAY_FIELDS.slice(0, Math.min(sprayStdUsed, SPRAY_STD_MAX)).map(f => f.key);
+    const baitStdKeys  = BAIT_FIELDS.slice(0,
+      Math.min(baitInUsed + baitOutUsed, BAIT_STD_MAX)
+    ).map(f => f.key);
 
-    // เขียน payload สำหรับบันทึกชีต (ไม่พึ่งชีต Contract)
+    // สร้างอ็อบเจ็กต์คีย์ตารางบริการแบบขยาย (serviceSpray1..6, serviceBait1..12)
+    const serviceKeysExpanded = {};
+    for (let i = 0; i < SPRAY_STD_MAX; i++) {
+      const k = `serviceSpray${i + 1}`;
+      serviceKeysExpanded[k] = form[k] || "";
+    }
+    for (let i = 0; i < BAIT_STD_MAX; i++) {
+      const k = `serviceBait${i + 1}`;
+      serviceKeysExpanded[k] = form[k] || "";
+    }
+
+    // เขียน payload สำหรับบันทึกชีต
     const payload = {
       servicePackage: form.package,
       package: form.package,
@@ -590,24 +706,17 @@ export default function ContractForm() {
       addonsSubtotal,
       netBeforeVat,
 
-      // เขียนคีย์ตารางบริการตรง ๆ (ค่าเกินจำนวนที่ใช้จริงจะถูกล้างเป็น "")
-      serviceSpray1: form.serviceSpray1 || "",
-      serviceSpray2: form.serviceSpray2 || "",
-      serviceBait1: form.serviceBait1 || "",
-      serviceBait2: form.serviceBait2 || "",
-      serviceBait3: form.serviceBait3 || "",
-      serviceBait4: form.serviceBait4 || "",
-      serviceBait5: form.serviceBait5 || "",
+      // แนบคีย์ตารางบริการแบบขยาย
+      ...serviceKeysExpanded,
 
       // แนบ JSON รอบบริการทั้งหมด (อิง "มาตรฐานที่ใช้จริง" + extras)
       serviceScheduleJson: JSON.stringify({
         startDate: form.startDate,
         endDate: form.endDate,
         spray: [...sprayStdKeys.map((k) => form[k] || ""), ...sprayExtras].filter(Boolean),
-        bait:
-          isBaitLike
-            ? [...baitStdKeys.map((k) => form[k] || ""), ...baitExtras].filter(Boolean)
-            : [],
+        bait: isBaitLike
+          ? [...baitStdKeys.map((k) => form[k] || ""), ...baitExtras].filter(Boolean)
+          : [],
       }),
     };
 
@@ -631,14 +740,13 @@ export default function ContractForm() {
 
       setMsg({ text: "บันทึกสำเร็จ", ok: true });
 
-      // reset ฟอร์มหลังบันทึก
+      // reset ฟอร์มหลังบันทึก (คง package เดิมไว้)
       setForm({ ...emptyForm, package: form.package });
       setAddons([{ name: "", qty: 1, price: 0 }]);
       setDiscountValue("");
       setSprayExtras([]);
       setBaitExtras([]);
-      setSprayStdUsed(SPRAY_STD_MAX);
-      setBaitStdUsed(BAIT_STD_MAX);
+      // รีเซ็ตตัวปรับตามแพ็กเกจผ่าน useEffect ของ package อยู่แล้ว
     } catch (err2) {
       setMsg({ text: `บันทึกไม่สำเร็จ ${err2?.message || err2}`, ok: false });
     } finally {
@@ -646,7 +754,8 @@ export default function ContractForm() {
     }
   };
 
-  const pkgOptions = Object.keys(PACKAGES);
+  // รายการตัวเลือกแพ็กเกจ (ใหม่)
+  const pkgOptions = ["pipe3993", "bait5500_in", "bait5500_out", "bait5500_both", "combo8500"];
 
   return (
     <div className="cf">
@@ -681,6 +790,116 @@ export default function ContractForm() {
             </select>
           </div>
 
+          {/* ===== ตัวปรับแพ็กเกจ ===== */}
+          <section className="cf-section" style={{ marginTop: 12 }}>
+            <h3 style={{ marginBottom: 8 }}>ตัวปรับแพ็กเกจ</h3>
+
+            {/* --- Spray controls --- */}
+            {(hasSpray || form.package.startsWith("bait5500")) && (
+              <div className="cf-grid-3">
+                <div className="cf-field">
+                  <label>จำนวนรอบ Spray/ปี</label>
+                  <input
+                    type="number"
+                    className="cf-input"
+                    min={0}
+                    max={SPRAY_STD_MAX}
+                    value={sprayStdUsed}
+                    onChange={e => setSprayStdUsed(Math.max(0, Math.min(SPRAY_STD_MAX, Number(e.target.value || 0))))}
+                    onWheel={e => e.currentTarget.blur()}
+                  />
+                  <div className="cf-hint">แพ็ก 3,993 และ 8,500 เริ่ม 3 รอบ/ปี — ปรับได้</div>
+                </div>
+
+                <div className="cf-field">
+                  <label>ช่วงห่าง Spray (เดือน)</label>
+                  <input
+                    type="number"
+                    className="cf-input"
+                    min={1}
+                    max={12}
+                    value={sprayGapMonths}
+                    onChange={e => setSprayGapMonths(Math.max(1, Math.min(12, Number(e.target.value || 0))))}
+                    onWheel={e => e.currentTarget.blur()}
+                  />
+                </div>
+
+                {(form.package.startsWith("bait5500") || form.package === "combo8500") && (
+                  <div className="cf-field">
+                    <label>เริ่มนับรอบ Spray (จริง) – ย้อนหลังได้</label>
+                    <input
+                      type="date"
+                      className="cf-input"
+                      value={sprayStartOverride}
+                      onChange={e => setSprayStartOverride(e.target.value)}
+                    />
+                    <div className="cf-hint">สำหรับโปรฯ 5,500 และ 8,500 ที่วันเริ่ม Spray ไม่แน่นอน</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* --- Bait controls --- */}
+            {hasBait && (
+              <>
+                <div className="cf-subtitle" style={{ marginTop: 12 }}>เหยื่อ (Bait)</div>
+                <div className="cf-grid-4">
+                  <div className="cf-field">
+                    <label>เหยื่อ “ภายใน” — จำนวนรอบ</label>
+                    <input
+                      type="number"
+                      className="cf-input"
+                      min={0}
+                      max={BAIT_STD_MAX}
+                      value={baitInUsed}
+                      onChange={e => setBaitInUsed(Math.max(0, Math.min(BAIT_STD_MAX, Number(e.target.value || 0))))}
+                      onWheel={e => e.currentTarget.blur()}
+                    />
+                    <div className="cf-hint">ค่าตั้งต้น 15 วัน/ครั้ง</div>
+                  </div>
+                  <div className="cf-field">
+                    <label>เหยื่อ “ภายใน” — ช่วงห่าง (วัน)</label>
+                    <input
+                      type="number"
+                      className="cf-input"
+                      min={1}
+                      max={90}
+                      value={baitInGapDays}
+                      onChange={e => setBaitInGapDays(Math.max(1, Math.min(90, Number(e.target.value || 0))))}
+                      onWheel={e => e.currentTarget.blur()}
+                    />
+                  </div>
+                  <div className="cf-field">
+                    <label>เหยื่อ “ภายนอก” — จำนวนรอบ</label>
+                    <input
+                      type="number"
+                      className="cf-input"
+                      min={0}
+                      max={BAIT_STD_MAX}
+                      value={baitOutUsed}
+                      onChange={e => setBaitOutUsed(Math.max(0, Math.min(BAIT_STD_MAX, Number(e.target.value || 0))))}
+                      onWheel={e => e.currentTarget.blur()}
+                    />
+                    <div className="cf-hint">ค่าตั้งต้น 2 เดือน/ครั้ง</div>
+                  </div>
+                  <div className="cf-field">
+                    <label>เหยื่อ “ภายนอก” — ช่วงห่าง (เดือน)</label>
+                    <input
+                      type="number"
+                      className="cf-input"
+                      min={1}
+                      max={12}
+                      value={baitOutGapMonths}
+                      onChange={e => setBaitOutGapMonths(Math.max(1, Math.min(12, Number(e.target.value || 0))))}
+                      onWheel={e => e.currentTarget.blur()}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* ส่วนลด */}
           <section className="cf-section">
             <div className="cf-field" style={{ maxWidth: 360 }}>
               <label>ส่วนลด</label>
@@ -707,6 +926,7 @@ export default function ContractForm() {
             </div>
           </section>
 
+          {/* Add-ons */}
           <div className="section">
             <h3>ค่าบริการเพิ่มเติม (Add-on)</h3>
             {addons.map((row, i) => (
@@ -763,7 +983,7 @@ export default function ContractForm() {
                 </b>
               </div>
 
-              {/* ✅ สวิตช์ VAT สำหรับ "ใบเสร็จ" */}
+              {/* VAT toggle */}
               <label
                 className="cf__checkbox"
                 style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}
@@ -870,23 +1090,23 @@ export default function ContractForm() {
               <div className="cf-toolbar__right">
                 <span className="cf-chip">เริ่ม {form.startDate || "-"}</span>
                 <span className="cf-chip cf-chip--muted">สิ้นสุด {form.endDate || "-"}</span>
-                <span className="cf-chip cf-chip--spray">Spray {sprayCount} ครั้ง</span>
-                {(form.package === "bait" || form.package === "mix") && (
-                  <span className="cf-chip cf-chip--bait">Bait {baitCount} ครั้ง</span>
-                )}
+                {hasSpray && <span className="cf-chip cf-chip--spray">Spray {sprayCount} ครั้ง</span>}
+                {hasBait  && <span className="cf-chip cf-chip--bait">Bait {baitCount} ครั้ง</span>}
               </div>
             </div>
 
             {/* Tabs */}
             <div className="cf-tabs">
-              <button
-                type="button"
-                className={`cf-tab ${activeTab === "spray" ? "cf-tab--active" : ""}`}
-                onClick={() => setActiveTab("spray")}
-              >
-                Spray ({sprayCount})
-              </button>
-              {(form.package === "bait" || form.package === "mix") && (
+              {hasSpray && (
+                <button
+                  type="button"
+                  className={`cf-tab ${activeTab === "spray" ? "cf-tab--active" : ""}`}
+                  onClick={() => setActiveTab("spray")}
+                >
+                  Spray ({sprayCount})
+                </button>
+              )}
+              {hasBait && (
                 <button
                   type="button"
                   className={`cf-tab ${activeTab === "bait" ? "cf-tab--active" : ""}`}
@@ -898,7 +1118,7 @@ export default function ContractForm() {
             </div>
 
             {/* === SPRAY PANEL === */}
-            {activeTab === "spray" && (
+            {hasSpray && activeTab === "spray" && (
               <div className="cf-panel">
                 <div className="cf-panel__header">
                   <h4 className="cf-group-title">รอบมาตรฐาน</h4>
@@ -908,9 +1128,10 @@ export default function ContractForm() {
                       className="btn-outline"
                       disabled={sprayStdUsed === 0}
                       onClick={() => {
-                        const keys = ["serviceSpray1", "serviceSpray2"];
-                        const hasData = keys.slice(sprayStdUsed - 1).some((k) => !!form[k]);
-                       if (hasData && !askConfirm("ลดรอบมาตรฐาน: ข้อมูลรอบท้ายจะถูกลบออกจากแบบฟอร์ม")) return;
+                        const hasData = SPRAY_FIELDS
+                          .slice(sprayStdUsed - 1, sprayStdUsed)
+                          .some(f => !!form[f.key]);
+                        if (hasData && !askConfirm("ลดรอบมาตรฐาน: ข้อมูลรอบท้ายจะถูกลบออกจากแบบฟอร์ม")) return;
                         setSprayStdUsed((n) => Math.max(0, n - 1));
                       }}
                     >
@@ -929,7 +1150,7 @@ export default function ContractForm() {
                 </div>
 
                 <div className="service-grid">
-                  {["serviceSpray1", "serviceSpray2"].slice(0, sprayStdUsed).map((key, i) => (
+                  {SPRAY_FIELDS.slice(0, sprayStdUsed).map(({ key }, i) => (
                     <div className="round" key={key}>
                       <div className="round__badge">#{i + 1}</div>
                       <label className="cf__label">Service Spray รอบที่ {i + 1}</label>
@@ -994,7 +1215,7 @@ export default function ContractForm() {
             )}
 
             {/* === BAIT PANEL === */}
-            {(form.package === "bait" || form.package === "mix") && activeTab === "bait" && (
+            {hasBait && activeTab === "bait" && (
               <div className="cf-panel">
                 <div className="cf-panel__header">
                   <h4 className="cf-group-title">รอบมาตรฐาน</h4>
@@ -1002,22 +1223,31 @@ export default function ContractForm() {
                     <button
                       type="button"
                       className="btn-outline"
-                      disabled={baitStdUsed === 0}
+                      disabled={baitInUsed + baitOutUsed === 0}
                       onClick={() => {
-                        const keys = ["serviceBait1", "serviceBait2", "serviceBait3", "serviceBait4", "serviceBait5"];
-                        const hasData = keys.slice(baitStdUsed - 1).some((k) => !!form[k]);
-                       if (hasData && !askConfirm("ลดรอบมาตรฐาน: ข้อมูลรอบท้ายจะถูกลบออกจากแบบฟอร์ม")) return;
-                        setBaitStdUsed((n) => Math.max(0, n - 1));
+                        const currentCount = baitInUsed + baitOutUsed;
+                        const lastKey = `serviceBait${currentCount}`;
+                        const hasData = !!form[lastKey];
+                        if (hasData && !askConfirm("ลดรอบมาตรฐาน: ข้อมูลรอบท้ายจะถูกลบออกจากแบบฟอร์ม")) return;
+
+                        // ลดจากฝั่งภายนอกก่อน ถ้ายังเหลือค่อยลดฝั่งภายใน
+                        if (baitOutUsed > 0) setBaitOutUsed((n) => Math.max(0, n - 1));
+                        else if (baitInUsed > 0) setBaitInUsed((n) => Math.max(0, n - 1));
                       }}
                     >
                       – ลด
                     </button>
-                    <div style={{ padding: "0 8px" }}>ใช้จริง: {baitStdUsed}/{BAIT_STD_MAX}</div>
+                    <div style={{ padding: "0 8px" }}>
+                      ใช้จริง: {baitInUsed + baitOutUsed}/{BAIT_STD_MAX}
+                    </div>
                     <button
                       type="button"
                       className="btn-outline"
-                      disabled={baitStdUsed === BAIT_STD_MAX}
-                      onClick={() => setBaitStdUsed((n) => Math.min(BAIT_STD_MAX, n + 1))}
+                      disabled={baitInUsed + baitOutUsed === BAIT_STD_MAX}
+                      onClick={() => {
+                        // เพิ่มฝั่งภายนอกก่อน เพื่อกระจายปีละ ~2 เดือน/ครั้ง
+                        if (baitOutUsed < BAIT_STD_MAX) setBaitOutUsed((n) => Math.min(BAIT_STD_MAX, n + 1));
+                      }}
                     >
                       + เพิ่ม
                     </button>
@@ -1025,7 +1255,7 @@ export default function ContractForm() {
                 </div>
 
                 <div className="service-grid">
-                  {BAIT_FIELDS.slice(0, baitStdUsed).map(({ key, label }, idx) => (
+                  {BAIT_FIELDS.slice(0, Math.min(BAIT_STD_MAX, baitInUsed + baitOutUsed)).map(({ key, label }, idx) => (
                     <div className="round" key={key}>
                       <div className="round__badge">#{idx + 1}</div>
                       <label className="cf__label">{label}</label>
@@ -1037,7 +1267,7 @@ export default function ContractForm() {
                       />
                     </div>
                   ))}
-                  {baitStdUsed === 0 && <div className="cf-empty">ไม่มีรอบมาตรฐาน</div>}
+                  {(baitInUsed + baitOutUsed) === 0 && <div className="cf-empty">ไม่มีรอบมาตรฐาน</div>}
                 </div>
 
                 <div className="cf-panel__header">
@@ -1067,8 +1297,8 @@ export default function ContractForm() {
                   <div className="service-grid">
                     {baitExtras.map((d, i) => (
                       <div className="round" key={`baitExtra-${i}`}>
-                        <div className="round__badge">#{i + 1 + baitStdUsed}</div>
-                        <label className="cf__label">Bait เพิ่มเติม #{i + 1 + baitStdUsed}</label>
+                        <div className="round__badge">#{i + 1 + baitInUsed + baitOutUsed}</div>
+                        <label className="cf__label">Bait เพิ่มเติม #{i + 1 + baitInUsed + baitOutUsed}</label>
                         <input
                           type="date"
                           className="cf__input"
@@ -1119,8 +1349,6 @@ export default function ContractForm() {
                 setDiscountValue("");
                 setSprayExtras([]);
                 setBaitExtras([]);
-                setSprayStdUsed(SPRAY_STD_MAX);
-                setBaitStdUsed(BAIT_STD_MAX);
               }}
             >
               ล้างฟอร์ม
