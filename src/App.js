@@ -7,7 +7,6 @@ import "./App.css";
 import ContractForm from "./ContractForm";
 import CheckPage from "./CheckPage";
 import PayPage from "./PayPage";
-import ServiceReportPage from "./ServiceReportPage";
 
 /** ---------- DEV BYPASS (เปิดโหมด mock ด้วย ?mock=1 หรือ .env: REACT_APP_BYPASS_LINE=1) ---------- */
 function computeDevBypass() {
@@ -116,12 +115,14 @@ export default function App() {
 
       <Router>
         <Routes>
-          {/* หน้า public (ไม่ต้องล็อกอิน) */}
+          {/* public */}
           <Route path="/check" element={<CheckPage />} />
           <Route path="/pay" element={<PayPage />} />
-          <Route path="/reports" element={<ServiceReportPage />} />
+          {/* <Route path="/reports" element={<ServiceReportPage />} /> */}
+          <Route path="/reports/:serviceId" element={<ServiceReportPage />} /> {/* ใหม่ */}
+          <Route path="/report-view/:serviceId" element={<ServiceReportPage />} /> {/* เดิม */}
 
-          {/* หน้าอื่นต้องล็อกอินผ่าน LINE */}
+          {/* require LINE login */}
           <Route
             path="/"
             element={
