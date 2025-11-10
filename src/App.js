@@ -7,6 +7,8 @@ import "./App.css";
 import ContractForm from "./ContractForm";
 import CheckPage from "./CheckPage";
 import PayPage from "./PayPage";
+import ServiceReportPage from "./ServiceReportPage.jsx";
+
 
 /** ---------- DEV BYPASS (เปิดโหมด mock ด้วย ?mock=1 หรือ .env: REACT_APP_BYPASS_LINE=1) ---------- */
 function computeDevBypass() {
@@ -118,7 +120,7 @@ export default function App() {
           {/* public */}
           <Route path="/check" element={<CheckPage />} />
           <Route path="/pay" element={<PayPage />} />
-          {/* <Route path="/reports" element={<ServiceReportPage />} /> */}
+          <Route path="/reports" element={<ServiceReportPage />} />            {/* รายการรวม (ถ้ามี) */}
           <Route path="/reports/:serviceId" element={<ServiceReportPage />} /> {/* ใหม่ */}
           <Route path="/report-view/:serviceId" element={<ServiceReportPage />} /> {/* เดิม */}
 
