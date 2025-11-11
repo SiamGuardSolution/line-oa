@@ -13,6 +13,27 @@ const pkgLabel = (k) =>
     ? PKG.getPackageLabel(k)
     : (PKG.PACKAGE_LABEL?.[k] ?? String(k));
 
+// ==== ใช้เฉพาะ export ที่มีจริงจาก ./config/packages ====
+const pkgPrice = (k) => {
+  // 1) ฟังก์ชัน (ถ้ามี)
+  if (typeof PKG.getPackagePrice === "function") {
+    const v = Number(PKG.getPackagePrice(k));
+    if (Number.isFinite(v) && v >= 0) return v;
+  }
+  // 2) แม็ปคงที่
+  const v2 = Number(PKG?.PACKAGE_PRICE?.[k]);
+  if (Number.isFinite(v2) && v2 >= 0) return v2;
+
+  // 3) ไม่เจอ → 0 และเตือนตอน dev
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.warn("[ContractForm] price not found for package:", k);
+  }
+  return 0;
+};
+const priceText = (n) =>
+  Number(n || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 const pad2 = (n) => String(n).padStart(2, "0");
 const toISO = (d) => {
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
@@ -73,41 +94,11 @@ const BAIT_MAX = 12;
 
 /* -------------------- สูตรแพ็กเกจแบบง่าย -------------------- */
 const PKG_FORMULA = {
-  // พ่น 3 รอบ ห่างกัน 3 เดือน ไม่มีเหยื่อ
-  pipe3993: {
-    sprayCount: 4,    // 3 ครั้ง
-    sprayGapM: 3,     // ทุก 3 เดือน
-    baitIn: 0, baitInGapD: 15, // ไม่ใช้ก็ใส่ 0
-    baitOut: 0, baitOutGapM: 2
-  },
-
-  // เหยื่อ “ภายใน” 5 ครั้ง ห่างกัน 15 วัน (ไม่มีพ่น/ภายนอก)
-  bait5500_in: {
-    sprayCount: 0, sprayGapM: 3,
-    baitIn: 5,     baitInGapD: 15,
-    baitOut: 0,    baitOutGapM: 2
-  },
-
-  // เหยื่อ “ภายนอก” 6 ครั้ง ทุก 2 เดือน (ไม่มีพ่น/ภายใน)
-  bait5500_out: {
-    sprayCount: 4, sprayGapM: 3,
-    baitIn: 0,     baitInGapD: 15,
-    baitOut: 6,    baitOutGapM: 2
-  },
-
-  // เหยื่อทั้งสองแบบ: ภายใน 4 ครั้งห่าง 15 วัน + ภายนอก 4 ครั้งห่าง 2 เดือน
-  bait5500_both: {
-    sprayCount: 4, sprayGapM: 3,
-    baitIn: 4,     baitInGapD: 15,
-    baitOut: 4,    baitOutGapM: 2
-  },
-
-  // คอมโบ: พ่น 3 รอบ + เหยื่อใน 4 (15 วัน) + เหยื่อนอก 4 (2 เดือน)
-  combo8500: {
-    sprayCount: 4,    sprayGapM: 3,
-    baitIn: 4,        baitInGapD: 15,
-    baitOut: 4,       baitOutGapM: 2
-  }
+  pipe3993:         { sprayCount: 4, sprayGapM: 3, baitIn: 0, baitInGapD: 15, baitOut: 0, baitOutGapM: 2 },
+  bait5500_in:      { sprayCount: 4, sprayGapM: 3, baitIn: 5, baitInGapD: 15, baitOut: 0, baitOutGapM: 2 },
+  bait5500_out:     { sprayCount: 4, sprayGapM: 3, baitIn: 0, baitInGapD: 15, baitOut: 6, baitOutGapM: 2 },
+  bait5500_both:    { sprayCount: 4, sprayGapM: 3, baitIn: 4, baitInGapD: 15, baitOut: 4, baitOutGapM: 2 },
+  combo8500:        { sprayCount: 4, sprayGapM: 3, baitIn: 4, baitInGapD: 15, baitOut: 4, baitOutGapM: 2 },
 };
 
 /* -------------------- ฟอร์มเริ่มต้น -------------------- */
@@ -121,7 +112,7 @@ export default function ContractForm() {
   const [form, setForm] = useState({ ...emptyForm });
 
   // ตารางบริการ (ไดนามิก)
-  const [sprayDates, setSprayDates] = useState(["", "", ""]); // ค่าเริ่มต้น 3 รอบเสมอ
+  const [sprayDates, setSprayDates] = useState(["", "", ""]); // ค่าเริ่มต้น 3 รอบ
   const [baitInDates, setBaitInDates] = useState([]);         // ภายใน
   const [baitOutDates, setBaitOutDates] = useState([]);       // ภายนอก
 
@@ -129,7 +120,7 @@ export default function ContractForm() {
   const [discountValue, setDiscountValue] = useState("");
   const [addons, setAddons] = useState([{ name: "", qty: 1, price: 0 }]);
 
-  // VAT (เฉพาะใบเสร็จ)
+  // VAT (ใบเสร็จ)
   const [receiptVatEnabled, setReceiptVatEnabled] = useState(false);
   const RECEIPT_VAT_RATE = 0.07;
 
@@ -137,24 +128,20 @@ export default function ContractForm() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", ok: false });
 
-  // ราคาแพ็กเกจ
-  const baseServicePrice = useMemo(() => {
-    const fn = PKG.getPackagePrice;
-    const map = PKG.PACKAGE_PRICE;
-    const val = typeof fn === "function" ? fn(form.package) : map?.[form.package];
-    return Number(val ?? 0);
-  }, [form.package]);
+  // ====== ฐานราคาจากแพ็กเกจ (ล็อกเป็น “ราคาพื้นฐาน” เสมอ) ======
+  const baseServicePrice = useMemo(() => pkgPrice(form.package), [form.package]);
+  const packageLabel = useMemo(() => pkgLabel(form.package), [form.package]);
 
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
 
-  // ยอดเงิน
+  // ====== ยอดเงิน (คงสูตร: ฐานราคา + Add-on − ส่วนลด) ======
   const itemsSubtotal = baseServicePrice;
   const addonsSubtotal = useMemo(
     () => (addons || []).reduce((sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0), 0),
     [addons]
   );
   const discountNum = discountValue === "" ? 0 : Number(discountValue);
-  const netBeforeVat = Math.max(0, itemsSubtotal - discountNum + addonsSubtotal);
+  const netBeforeVat = Math.max(0, itemsSubtotal + addonsSubtotal - discountNum);
 
   const receiptVatAmount = receiptVatEnabled
     ? Math.round((netBeforeVat * RECEIPT_VAT_RATE + Number.EPSILON) * 100) / 100
@@ -173,21 +160,21 @@ export default function ContractForm() {
 
   function resetBaitByPackage(pkg) {
     if (pkg === "bait5500_both" || pkg === "combo8500") {
-      setBaitInDates(Array(3).fill(""));   // 3 ภายใน
-      setBaitOutDates(Array(3).fill(""));  // 3 ภายนอก  => รวม 6
+      setBaitInDates(Array(3).fill(""));
+      setBaitOutDates(Array(3).fill(""));  // รวม 6
     } else if (pkg === "bait5500_in") {
-      setBaitInDates(Array(6).fill(""));   // 6 ภายใน
+      setBaitInDates(Array(6).fill(""));
       setBaitOutDates([]);
     } else if (pkg === "bait5500_out") {
       setBaitInDates([]);
-      setBaitOutDates(Array(6).fill(""));  // 6 ภายนอก
+      setBaitOutDates(Array(6).fill(""));
     } else {
       setBaitInDates([]);
       setBaitOutDates([]);
     }
   }
 
-  // เปลี่ยนแพ็กเกจ → เซ็ตค่าตั้งต้น: Spray = 3 รอบเสมอ, Bait = 6 รอบตามกติกา
+  // เปลี่ยนแพ็กเกจ → เซ็ตค่าตั้งต้นสปรินต์ตาราง
   useEffect(() => {
     setSprayDates(["", "", ""]);
     resetBaitByPackage(form.package);
@@ -214,7 +201,7 @@ export default function ContractForm() {
     for (let i = 0; i < Math.min(f.sprayCount, SPRAY_MAX); i++) {
       sDates.push(toISO(addMonths(start, i * f.sprayGapM)));
     }
-    setSprayDates(sDates.length ? sDates : ["", "", ""]); // ถ้าแพ็กฯ ไม่บังคับ ให้ยังคง 3 ช่องว่าง
+    setSprayDates(sDates.length ? sDates : ["", "", ""]);
 
     // Bait: แยกภายใน/ภายนอก
     const inArr = [];
@@ -240,7 +227,7 @@ export default function ContractForm() {
   async function handleCreateReceiptPDF() {
     const startForPdf = toCE_ddmmyyyy(form.startDate);
     const pdfItems = [
-      { description: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`, qty: 1, unitPrice: baseServicePrice },
+      { description: `ค่าบริการแพ็กเกจ ${packageLabel}`, qty: 1, unitPrice: baseServicePrice },
       ...(addons || [])
         .filter((r) => r && (r.name || r.qty || r.price))
         .map((r) => ({
@@ -277,7 +264,7 @@ export default function ContractForm() {
       await generateReceiptPDF(payload, {
         filename: `Receipt-${payload.receiptNo}.pdf`,
         returnType: "save",
-        forceReceiptDate: startForPdf,
+        forceReceiptDate: startForPdf, // ให้วันในหัวใบเสร็จเท่ากับวันเริ่มสัญญา
       });
     } catch (e) {
       console.error(e);
@@ -287,8 +274,6 @@ export default function ContractForm() {
 
   /* -------------------- PDF: สัญญา -------------------- */
   function buildContractPdfData() {
-    const pkgName = pkgLabel(form.package);
-
     const spraySchedule = sprayDates
       .map((d, i) => (d ? { round: i + 1, date: d, note: "Service Spray" } : null))
       .filter(Boolean);
@@ -315,8 +300,8 @@ export default function ContractForm() {
         taxId: taxIdDigits(form.taxId) || "",
       },
       service: {
-        type: pkgName,
-        packageName: pkgName,
+        type: packageLabel,
+        packageName: packageLabel,
         basePrice: baseServicePrice,
         addons: (addons || [])
           .filter((a) => a && (a.name || a.qty || a.price))
@@ -363,7 +348,7 @@ export default function ContractForm() {
       sprayMap[`serviceSpray${i + 1}`] = sprayDates[i] || "";
     }
 
-    // รวม bait ภายใน+ภายนอก → serviceBait1..12
+    // รวม bait ภายใน+ภายนอก → serviceBait1..12 (legacy compat)
     const mergedBait = [...baitInDates, ...baitOutDates].slice(0, BAIT_MAX);
     const baitMap = {};
     for (let i = 0; i < BAIT_MAX; i++) {
@@ -371,8 +356,14 @@ export default function ContractForm() {
     }
 
     const payload = {
-      servicePackage: form.package,
+      // ===== meta/แพ็กเกจ & ราคา (สำคัญต่อการคำนวณฝั่งอ่าน) =====
+      pkg: form.package,                           // คีย์แพ็กเกจสั้น
       package: form.package,
+      packageLabel,
+      price: baseServicePrice,                     // ฐานราคาคงที่จากแพ็กเกจ
+      priceText: `${priceText(baseServicePrice)} บาท`,
+
+      // ===== ลูกค้า & สัญญา =====
       name: form.name,
       address: form.address,
       facebook: form.facebook,
@@ -384,27 +375,26 @@ export default function ContractForm() {
       note: form.note,
       status: form.status || "ใช้งานอยู่",
 
-      // ยอด
-      items: [{ name: `ค่าบริการแพ็กเกจ ${pkgLabel(form.package)}`, quantity: 1, price: baseServicePrice }],
+      // ===== ยอดเงิน (คงสูตร: ฐานราคา + Add-on − ส่วนลด) =====
+      items: [{ name: `ค่าบริการแพ็กเกจ ${packageLabel}`, quantity: 1, price: baseServicePrice }],
       discount: discountValue === "" ? "" : Number(discountValue),
-      addons,
-      itemsSubtotal,
+      addons,                                      // เก็บรายการเต็ม
+      itemsSubtotal,                               // ฐานราคา
       addonsSubtotal,
       netBeforeVat,
 
-      // แนบคีย์ตาราง (เต็มเพดาน)
+      // ===== แนบคีย์ตาราง (legacy fields) =====
       ...sprayMap,
       ...baitMap,
 
-      // JSON กำหนดการแบบแยก in/out + คงค่ารอบ legacy ไว้ด้วย
+      // ===== JSON กำหนดการแบบแยก in/out (ตัวจริงที่ระบบอ่าน) =====
       serviceScheduleJson: JSON.stringify({
         startDate: form.startDate,
         endDate: form.endDate,
         spray: sprayDates.filter(Boolean),
         baitIn: baitInDates.filter(Boolean),
         baitOut: baitOutDates.filter(Boolean),
-        // เพื่อความเข้ากันได้ย้อนหลัง: เก็บ bait (รวม) ไว้ด้วย แต่ฝั่ง GAS จะอ่าน baitIn/baitOut เป็นหลัก
-        bait: [...baitInDates, ...baitOutDates].filter(Boolean)
+        bait: [...baitInDates, ...baitOutDates].filter(Boolean), // backward compat
       }),
     };
 
@@ -460,7 +450,7 @@ export default function ContractForm() {
       <div className="cf__card">
         <div className="cf__chip">ฟอร์มสัญญา (Lite)</div>
         <h2 className="cf__title">บันทึกสัญญาลูกค้า + สร้าง PDF</h2>
-        <p className="cf__subtitle">เพิ่ม/ลดรอบบริการได้ตามต้องการ หรือกด “เติมตารางอัตโนมัติจากแพ็กเกจ” แล้วแก้วันได้ทันที</p>
+        <p className="cf__subtitle">ตั้งฐานราคาจากแพ็กเกจ → เพิ่ม/ลดรอบบริการ → ใส่ส่วนลด/แอดออนได้ทันที</p>
 
         {/* ปุ่ม PDF ด้านบน */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -480,6 +470,7 @@ export default function ContractForm() {
               <select className="cf__select" value={form.package} onChange={(e) => setVal("package", e.target.value)}>
                 {pkgOptions.map((k) => <option key={k} value={k}>{pkgLabel(k)}</option>)}
               </select>
+              <div className="cf-hint">ราคาพื้นฐาน: <b>{priceText(baseServicePrice)}</b> บาท</div>
             </div>
 
             <div className="cf__field">

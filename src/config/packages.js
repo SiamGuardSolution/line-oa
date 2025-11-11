@@ -7,9 +7,11 @@ export const PACKAGE_LABEL = {
 };
 
 export const PACKAGE_PRICE = {
-  spray: 3993,
-  bait:  5500,
-  mix:   8500,
+  pipe3993: 3993,
+  bait5500_in: 5500,
+  bait5500_out: 5500,
+  bait5500_both: 5500,
+  combo8500: 8500,
 };
 
 // helpers
