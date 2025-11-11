@@ -393,3 +393,9 @@ body{ background:var(--bg); }
 .addons-table { display:grid; gap:6px; margin-top:8px; }
 .addons-row { display:grid; grid-template-columns:2fr .7fr 1fr 1fr; gap:8px; }
 .addons-row--head { font-weight:600; opacity:.85; }
+
+
+.chip.bait-in, .dot.bait-in   { background: #4caf50; }   /* เขียว */
+.chip.bait-out, .dot.bait-out { background: #ff9800; }   /* ส้ม */
+
+.dot { width: 10px; height: 10px; border-radius: 50%; }

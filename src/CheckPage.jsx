@@ -276,8 +276,7 @@ const addMonths = (dateStr, n) => {
 };
 
 // ==== อ่านข้อมูลรอบบริการจาก JSON ใหม่ (ถ้ามี) ====
-// รองรับโครงสร้างใหม่จาก ContractForm: { spray:[], baitIn:[], baitOut:[], startDate, endDate }
-// และยังอ่านแบบเก่าที่มีแค่ bait[] ได้
+// (แทนที่ฟังก์ชัน readScheduleJsonArrays เดิม)
 function readScheduleJsonArrays(c) {
   try {
     const raw =
@@ -288,15 +287,16 @@ function readScheduleJsonArrays(c) {
     if (!raw) return { spray: [], baitIn: [], baitOut: [] };
 
     const obj = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const spray  = Array.isArray(obj?.spray)  ? obj.spray.filter(Boolean)  : [];
+    const baitIn = Array.isArray(obj?.baitIn) ? obj.baitIn.filter(Boolean) : [];
+    const baitOut= Array.isArray(obj?.baitOut)? obj.baitOut.filter(Boolean): [];
 
-    const spray   = Array.isArray(obj?.spray)   ? obj.spray.filter(Boolean)   : [];
-    const baitIn  = Array.isArray(obj?.baitIn)  ? obj.baitIn.filter(Boolean)  : [];
-    const baitOut = Array.isArray(obj?.baitOut) ? obj.baitOut.filter(Boolean) : [];
-
-    // backward compat: ถ้ามี bait (รวม) แต่ไม่มี in/out ให้โยนไปไว้ baitIn
-    const oldBait = Array.isArray(obj?.bait) ? obj.bait.filter(Boolean) : [];
-    if (!baitIn.length && !baitOut.length && oldBait.length) {
-      return { spray, baitIn: oldBait, baitOut: [] };
+    // backward compat: ถ้าเก่ามีแค่ bait รวม ๆ
+    let bait = Array.isArray(obj?.bait) ? obj.bait.filter(Boolean) : [];
+    if (bait.length && (!baitIn.length && !baitOut.length)) {
+      // ถ้าไม่มี in/out แยก: ให้ถือว่าเป็น "ภายใน"
+      baitIn.push(...bait);
+      bait = [];
     }
     return { spray, baitIn, baitOut };
   } catch {
