@@ -396,12 +396,15 @@ export default function ContractForm() {
       ...sprayMap,
       ...baitMap,
 
-      // JSON กำหนดการแบบง่าย
+      // JSON กำหนดการแบบแยก in/out + คงค่ารอบ legacy ไว้ด้วย
       serviceScheduleJson: JSON.stringify({
         startDate: form.startDate,
         endDate: form.endDate,
         spray: sprayDates.filter(Boolean),
-        bait: mergedBait.filter(Boolean),
+        baitIn: baitInDates.filter(Boolean),
+        baitOut: baitOutDates.filter(Boolean),
+        // เพื่อความเข้ากันได้ย้อนหลัง: เก็บ bait (รวม) ไว้ด้วย แต่ฝั่ง GAS จะอ่าน baitIn/baitOut เป็นหลัก
+        bait: [...baitInDates, ...baitOutDates].filter(Boolean)
       }),
     };
 
