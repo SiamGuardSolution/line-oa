@@ -36,7 +36,7 @@ function fmtDateCE(d) {
   if (!x) return String(d || "");
   const dd = String(x.getDate()).padStart(2, "0");
   const mm = String(x.getMonth() + 1).padStart(2, "0");
-  const yyyy = x.getFullYear(); // <-- ค.ศ. ตรง ๆ
+  const yyyy = x.getFullYear(); // ค.ศ.
   return `${dd}/${mm}/${yyyy}`;
 }
 
@@ -132,7 +132,7 @@ async function ensureThaiFont(doc){
  *  - autoSave?: boolean
  *  - vatEnabled?: boolean
  *  - vatRate?: number
- *  - forceReceiptDate?: Date|string|number   // ✅ บังคับวันแสดงผล (วันที่/ครบกำหนดชำระ)
+ *  - forceReceiptDate?: Date|string|number   // บังคับวันแสดงผล (วันที่/ครบกำหนดชำระ)
  */
 export default async function generateReceiptPDF(payload = {}, options = {}) {
   const {
@@ -150,7 +150,7 @@ export default async function generateReceiptPDF(payload = {}, options = {}) {
     alreadyPaid=0,
     footerNotice="สินค้าตามใบสั่งซื้อนี้เมื่อลูกค้าได้รับมอบและตรวจสอบแล้วถือว่าเป็นทรัพย์สินของผู้ว่าจ้างและจะไม่รับคืนเงิน/คืนสินค้า",
     remarkLines, bankRemark,
-    // ✅ ทางลัดส่งมากับ payload ก็ได้
+    // ส่งมากับ payload ก็ได้
     forceReceiptDate,
   } = payload;
 
@@ -159,9 +159,9 @@ export default async function generateReceiptPDF(payload = {}, options = {}) {
   const rawRate    = Number(options.vatRate ?? _vatRate ?? 0);
   const vatRate    = vatEnabled ? (rawRate > 0 ? rawRate : 0.07) : 0;
 
-  // ---- เลือกวันเริ่มสัญญา (candidate หลายชื่อ) ----
+  // เลือกวันเริ่มสัญญา (candidate หลายชื่อ)
   const startSources = [
-    forceReceiptDate, options.forceReceiptDate,                    // ✅ override แรงสุด
+    forceReceiptDate, options.forceReceiptDate,
     contractStartDate, startDate, startYMD, service1Date, serviceStartDate,
     contract_start_date, startContract, start_at, startedAt,
     contract?.startDate, contract?.startYMD, contract?.contractStartDate
@@ -269,62 +269,14 @@ export default async function generateReceiptPDF(payload = {}, options = {}) {
   });
   const tableEndY = doc.lastAutoTable?.finalY || y;
 
-  /* ===== หมายเหตุ (ซ้าย) + กล่องสรุป (ขวา) ===== */
+  /* ====== กล่องสรุปด้านขวา (วาดก่อน) + จับพิกัดแถว "ราคาสุทธิ" ====== */
   const totalsW = 240;
   const totalsX = W - M - totalsW;
   const rowH   = 24;
+  const totalsStartY = tableEndY + 6;
 
-  let noteY = tableEndY + 12;
-  const remarkW = totalsX - M - 12;
-
-  doc.setFont(FAMILY, "normal"); doc.setFontSize(12);
-  doc.text(T("หมายเหตุ:"), M, noteY);
-  noteY += 16;
-
-  const remarkBlockLines = Array.isArray(remarkLines) && remarkLines.length > 0
-    ? remarkLines
-    : (bankRemark ? [bankRemark] : DEFAULT_REMARK_LINES);
-
-  remarkBlockLines.forEach(line => {
-    noteY = textBlock(doc, line, M, noteY, remarkW);
-    noteY += 2;
-  });
-
-  // จำนวนเงิน (ตัวอักษร)
-  const amountInWords = bahtText(netTotal);
-  const textLabel = `${amountInWords}`;
-
-  const padX = 6, padY = 6;
-  const lineHeight = 16;
-  const boxWidth  = remarkW + padX * 2;
-  const boxHeight = lineHeight + padY * 2;
-  const boxLeft   = M - padX;
-  const boxTop    = noteY - (lineHeight - 12) - padY;
-
-  doc.setFillColor(142, 169, 219);
-  doc.roundedRect(boxLeft, boxTop, boxWidth, boxHeight, 4, 4, "F");
-
-  const centerX = boxLeft + boxWidth / 2;
-  const centerY = boxTop  + boxHeight / 2;
-  const lines   = doc.splitTextToSize(T(textLabel), remarkW);
-  const totalH  = lines.length * lineHeight;
-
-  doc.setFont(FAMILY, "bold");
-  lines.forEach((ln, i) => {
-    const yLine = centerY - totalH / 2 + (i + 0.5) * lineHeight;
-    try {
-      doc.text(T(ln), centerX, yLine, { align: "center", baseline: "middle" });
-    } catch {
-      const fs = doc.getFontSize();
-      doc.text(T(ln), centerX, yLine + fs * 0.35, { align: "center" });
-    }
-  });
-  doc.setFont(FAMILY, "normal");
-  noteY = boxTop + boxHeight + 3;
-  const noteEndY = noteY + 12;
-
-  // กล่องสรุปด้านขวา
-  let ty = tableEndY + 6;
+  let ty = totalsStartY;
+  let netRowTop = null; // << Y แถวราคาสุทธิ
   const rows = [
     ["รวม", money(subTotal), "normal"],
     ...(Number(discount) > 0 ? [["ส่วนลด", `-${money(discount)}`, "normal"]] : []),
@@ -339,20 +291,80 @@ export default async function generateReceiptPDF(payload = {}, options = {}) {
 
     const mid = totalsX + totalsW - 110;
 
-    if (style === "note") {
-      doc.setFont(FAMILY, "normal");
-      doc.text(T(label), totalsX + 10, ty + 16);
-    } else {
-      doc.setFont(FAMILY, style === "bold" ? "bold" : "normal");
-      doc.text(T(label), totalsX + 10, ty + 16);
-      doc.text(T(val),   totalsX + totalsW - 10, ty + 16, { align: "right" });
-      doc.setDrawColor(235); doc.line(mid, ty, mid, ty + rowH);
-    }
+    doc.setFont(FAMILY, style === "bold" ? "bold" : "normal");
+    doc.text(T(label), totalsX + 10, ty + 16);
+    doc.text(T(val),   totalsX + totalsW - 10, ty + 16, { align: "right" });
+    doc.setDrawColor(235); doc.line(mid, ty, mid, ty + rowH);
+
+    // เก็บ Y ของแถวราคาสุทธิ
+    if (/ราคาสุทธิ/i.test(label)) netRowTop = ty;
+
     ty += rowH;
   });
   const totalsEndY = ty;
 
-  // ดันบล็อกท้ายลงล่าง
+  /* ====== กรอบ “ราคาตัวอักษร” (ซ้าย) — จัดแนวกับแถวราคาสุทธิ ====== */
+  const gap = 12;
+  const wordsBoxX = M;
+  const wordsBoxW = (W - M*2) - (totalsW + gap);
+  const wordsBoxY = (netRowTop ?? (totalsEndY - rowH));
+  const wordsBoxH = rowH;
+
+  const amountInWords = bahtText(netTotal);
+  const wordsPad = 6;
+
+  doc.setDrawColor(179,191,208);
+  doc.setFillColor(232,241,255);
+  doc.roundedRect(wordsBoxX, wordsBoxY, wordsBoxW, wordsBoxH, 4, 4, "FD");
+
+  // ---- จัดข้อความกึ่งกลางในกล่อง ----
+  doc.setFont(FAMILY, "bold"); 
+  doc.setFontSize(12);
+
+  const centerX = wordsBoxX + wordsBoxW / 2;          // กึ่งกลางแนวนอน
+  const centerY = wordsBoxY + wordsBoxH / 2;          // กึ่งกลางแนวตั้ง
+  const lineHeight = 16;
+
+  // ตัดบรรทัดตามความกว้างของกล่อง (เผื่อข้อความยาว)
+  const lines = doc.splitTextToSize(T(amountInWords), wordsBoxW - wordsPad*2);
+  const totalH = lines.length * lineHeight;
+
+  // วาดแต่ละบรรทัดแบบกึ่งกลางทั้งแนวนอน/แนวตั้ง
+  lines.forEach((ln, i) => {
+    const yLine = centerY - totalH/2 + (i + 0.5) * lineHeight;
+    try {
+      doc.text(T(ln), centerX, yLine, { align: "center", baseline: "middle" });
+    } catch {
+      // เผื่อบางบราวเซอร์ baseline ไม่รองรับ ให้ชดเชยเล็กน้อย
+      const fs = doc.getFontSize();
+      doc.text(T(ln), centerX, yLine + fs * 0.35, { align: "center" });
+    }
+  });
+
+  doc.setFont(FAMILY, "normal");
+
+  /* ====== หมายเหตุ (ซ้าย) — จำกัดให้จบก่อนถึงกรอบตัวอักษร ====== */
+  const remarkStartY = tableEndY + 12;
+  const remarkMaxY   = wordsBoxY - 8; // เว้นช่องเล็กน้อย
+  const remarkAreaW  = wordsBoxW;     // ให้กว้างเท่ากรอบตัวอักษร
+
+  let noteY = remarkStartY;
+  doc.text(T("หมายเหตุ:"), M, noteY);
+  noteY += 16;
+
+  const remarkBlockLines = Array.isArray(remarkLines) && remarkLines.length > 0
+    ? remarkLines
+    : (bankRemark ? [bankRemark] : DEFAULT_REMARK_LINES);
+
+  for (const line of remarkBlockLines) {
+    const nextY = textBlock(doc, line, M, noteY, remarkAreaW);
+    // ถ้าจะเกินพื้นที่ ให้หยุด (กันชนกับกรอบตัวอักษร)
+    if (nextY + 2 > remarkMaxY) { noteY = remarkMaxY; break; }
+    noteY = nextY + 2;
+  }
+  const noteEndY = Math.max(noteY, remarkStartY + 2);
+
+  /* ===== บล็อกท้าย (รับเงิน/เซ็นชื่อ) ===== */
   let y2 = Math.max(noteEndY, totalsEndY) + 16;
   const bottomMargin = M;
   const PAY_H = 88;
@@ -360,7 +372,6 @@ export default async function generateReceiptPDF(payload = {}, options = {}) {
   const BLOCK_H = 12 + PAY_H + 16 + FOOTER_GAP;
   y2 = Math.max(y2, H - bottomMargin - BLOCK_H);
 
-  // ข้อความรับเงิน + วิธีชำระ + เซ็นชื่อ
   doc.setFont(FAMILY,"normal");
   doc.text(T("ได้รับเงินดังรายการข้างต้นในใบเสร็จฯเรียบร้อย"), M, y2);
 
