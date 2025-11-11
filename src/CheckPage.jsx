@@ -240,13 +240,6 @@ function selectFixedPayLinkByBasePrice(basePrice) {
   return hit ? hit.url : "";
 }
 
-const netTotalFrom = (c) => {
-  const direct = firstNonEmpty(c?.netTotal, c?.['ราคาสุทธิ'], c?.netBeforeVat);
-  const n = toNumberSafe(direct);
-  if (n || direct === 0) return n;
-  return Math.max(0, Math.round(basePriceFrom(c) - discountFrom(c) + addonsSubtotalFrom(c)));
-};
-
 const normalizePhone = (val) => (val || "").replace(/\D/g, "").slice(0, 10);
 const formatThaiPhone = (digits) => {
   if (!digits) return "";
@@ -522,8 +515,7 @@ export default function CheckPage() {
     await searchByDigits(digits);
   };
   
-  // Spray: JSON ใหม่ → legacy → สูตร fallback (+4m, +8m)
-  const readSprayDates = (c, start) => {
+  const readSprayDates = (c, start, { suppressFallback = false } = {}) => {
     const { spray } = readScheduleJsonArrays(c);
     if (spray.length) return spray;
 
@@ -533,18 +525,20 @@ export default function CheckPage() {
     if (c?.serviceSpray2) out.push(c.serviceSpray2);
     if (Array.isArray(c?.services)) {
       const arr = c.services
-        .filter(s => /(spray|ฉีดพ่น)/i.test(String(s?.label||"")) && s?.date)
-        .sort((a,b)=>String(a.label).localeCompare(String(b.label)))
+        .filter(s => /(spray|ฉีดพ่น)/i.test(String(s?.label || "")) && s?.date)
+        .sort((a, b) => String(a.label).localeCompare(String(b.label)))
         .map(s => s.date);
       arr.forEach(d => { if (!out.includes(d)) out.push(d); });
     }
     if (out.length) return out;
 
-    // fallback
-    if (!start) return [];
-    const s1 = addMonths(start, 4);
-    const s2 = addMonths(s1, 4);
-    return [s1, s2];
+    // fallback 4 รอบ เว้นแต่ถูกสั่งให้ปิด หรือไม่มีวันเริ่ม
+    if (!start || suppressFallback) return [];
+    const s0 = addMonths(start, 0);
+    const s1 = addMonths(start, 3);
+    const s2 = addMonths(start, 6);
+    const s3 = addMonths(start, 9);
+    return [s0, s1, s2, s3];
   };
 
   // Bait ภายใน: JSON ใหม่ (baitIn) → legacy (serviceBait1..5 ตีความเป็นภายในก่อน) → สูตร 20/40/60/80/100 วัน
@@ -579,16 +573,15 @@ export default function CheckPage() {
     return [];
   };
 
-  /** ===== กำหนดการ ===== */
   const scheduleGroups = useMemo(() => {
     if (!contract) return [];
     const pkgKey = derivePkgKey(contract);
     const start  = contract.startDate || "";
     const end    = contract.endDate || (start ? addMonths(start, 12) : "");
 
-    const sprayDates  = readSprayDates(contract, start);
-    const baitInDates = readBaitInDates(contract, start);
-    const baitOutDates= readBaitOutDates(contract, start);
+    const baitInDates  = readBaitInDates(contract, start);
+    const sprayDates   = readSprayDates(contract, start, { hasBaitIn: baitInDates.length > 0 });
+    const baitOutDates = readBaitOutDates(contract, start);
 
     const sprayGroup = {
       title: `ฉีดพ่น (${sprayDates.length} ครั้ง)`,
@@ -611,7 +604,6 @@ export default function CheckPage() {
       items: [{ kind: "end", label: "สิ้นสุดสัญญา", date: end, isEnd: true }]
     };
 
-    // เรียงกลุ่มตามประเภทแพ็กเกจ
     if (pkgKey === "spray") return [sprayGroup, endGroup];
     if (pkgKey === "bait")  return [baitInGroup, baitOutGroup, sprayGroup, endGroup];
     return [baitInGroup, baitOutGroup, sprayGroup, endGroup]; // mix
@@ -631,8 +623,14 @@ export default function CheckPage() {
   const discount = useMemo(() => discountFrom(contract), [contract]);
   const addonsSubtotal = useMemo(() => addonsSubtotalFrom(contract), [contract]);
   const addonsArr = useMemo(() => addonsFrom(contract), [contract]);
-
-  const subTotal = useMemo(() => netTotalFrom(contract), [contract]);
+  const basePrice = useMemo(() => basePriceFrom(contract), [contract]);
+  
+  const subTotal = useMemo(() => {
+    const b = toNumberSafe(basePrice);
+    const d = toNumberSafe(discount);
+    const a = toNumberSafe(addonsSubtotal);
+    return Math.max(0, b - d + a);
+  }, [basePrice, discount, addonsSubtotal]);
   const grandTotal = subTotal;
 
   // ลิงก์จ่ายเงิน:
@@ -868,6 +866,12 @@ export default function CheckPage() {
               </button>
             </div>
             <div className="bill">
+              <div className="bill__row">
+                <div>ยอดบริการหลัก</div>
+                <div className="bill__val">
+                  {Number(basePrice || 0).toLocaleString('th-TH')}
+                </div>
+              </div>
               <div className="bill__row">
                 <div>ส่วนลด</div>
                 <div className="bill__val">-{Number(discount || 0).toLocaleString('th-TH')}</div>
