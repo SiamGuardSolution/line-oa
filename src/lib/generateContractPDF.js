@@ -45,14 +45,6 @@ const addMonths = (date, months) => {
   return d;
 };
 
-const addDays = (date, days) => {
-  if (!date) return null;
-  const d = date instanceof Date ? new Date(date) : new Date(date);
-  if (isNaN(d)) return null;
-  d.setDate(d.getDate() + Number(days || 0));
-  return d;
-};
-
 // พิมพ์ข้อความแบบปลอดภัย
 const TXT = (doc, text, x, y, opts) => {
   const S = v => (v == null ? "" : String(v));
@@ -129,9 +121,9 @@ async function ensureThaiFont(doc){
  *   client:  { name, phone, address, facebook },
  *   service: {
  *     pkgKey?, type, packageName, basePrice, addons:[{name, price}],
- *     spraySchedule?: Array, baitSchedule?: Array,
+ *     spraySchedule?: Array,
  *     intervalMonthsSpray?, intervalDaysBait?,
- *     topTitle?, bottomTitle?
+ *     topTitle?
  *   },
  *   schedule: [ { dueDate?, date?, visitDate?, visit?, note? }, ... ],
  *   terms: [ "..." ],
@@ -160,9 +152,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   const pkgKey     = derivePkgKey(service, data);
   const pkgName    = service.packageName || pkgLabel(pkgKey);
   const basePrice  = (service.basePrice ?? null) !== null ? service.basePrice : pkgPrice(pkgKey);
-
-  // โหมดแสดงตาราง
-  const showBothTables = (pkgKey === "bait" || pkgKey === "mix"); // bait/mix = แสดง 2 ตาราง
 
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: false });
   await ensureThaiFont(doc);
@@ -244,11 +233,9 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
   }
 
-  /* ===== ตารางรอบบริการ (Top = Spray , Bottom = Bait) ===== */
+  /* ===== ตารางรอบบริการ (เฉพาะ Spray เท่านั้น) ===== */
 
-  // 👉 จำนวนแถวเริ่มต้นของตารางฉีดพ่น (ใช้เมื่อไม่มีข้อมูลอื่นให้เดา)
   const DEFAULT_SPRAY_ROWS = 2;
-  const MAX_BOTTOM = 5;
 
   const mapItem = (it) => ({
     mmYY: fmtThaiMonthYear(it?.dueDate ?? it?.due ?? it?.visitDate ?? it?.visit ?? it?.date),
@@ -256,53 +243,30 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   });
 
   const spraySrc = Array.isArray(service.spraySchedule) ? service.spraySchedule : null;
-  const baitSrc  = Array.isArray(service.baitSchedule)  ? service.baitSchedule  : null;
 
-  // ✅ คำนวณจำนวนแถวของตาราง Spray จาก "จำนวนรอบบริการจริง"
-  // ถ้ามี spraySchedule → ใช้ length
-  // ถ้าไม่มี → ใช้จำนวน row ของ schedule (พร้อมลิมิต 12)
+  // ใช้ spraySchedule ก่อน ถ้าไม่มีให้ใช้ schedule ทั้งหมดเป็นรอบฉีดพ่น
+  const baseSprayList = spraySrc || (Array.isArray(schedule) ? schedule : []);
+
   let maxTop = DEFAULT_SPRAY_ROWS;
-  if (spraySrc?.length) {
-    maxTop = spraySrc.length;
-  } else if (Array.isArray(schedule) && schedule.length) {
-    maxTop = Math.min(schedule.length, 12); // ปรับ limit ได้ตามต้องการ
+  if (baseSprayList.length) {
+    maxTop = baseSprayList.length;
   }
+
   const MAX_TOP = maxTop;
+  const schedTop = [];
 
-  const schedTop = [];     // Spray
-  const schedBottom = [];  // Bait
+  baseSprayList.slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
 
-  // ถ้ามีแยกเป็น spraySchedule/baitSchedule ให้ใช้ก่อน
-  if (spraySrc?.length || baitSrc?.length) {
-    (spraySrc || []).slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
-    (baitSrc  || []).slice(0, MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
-  } else {
-    // ไม่มี src แยก → ใช้ data.schedule (สมมติเรียง Spray ก่อน Bait ตาม groups)
-    const combined = Array.isArray(schedule) ? schedule : [];
-    combined.slice(0, MAX_TOP).forEach(it => schedTop.push(mapItem(it)));
-    combined.slice(MAX_TOP, MAX_TOP + MAX_BOTTOM).forEach(it => schedBottom.push(mapItem(it)));
-  }
-
-  // เติมออโต้ให้ครบจำนวนแถวตามโหมด (สร้างเดือน/ปีจาก startDate + ช่วงห่าง)
+  // เติมออโต้ให้ครบจำนวนแถวตามจำนวนรอบ (สร้างเดือน/ปีจาก startDate + ช่วงห่าง)
   const intMonthsSpray = Number(service.intervalMonthsSpray ?? service.intervalMonths ?? 4);
-  const intDaysBait    = Number(service.intervalDaysBait    ?? 20);
 
   for (let i = schedTop.length; i < MAX_TOP; i++) {
     const d = startDate ? addMonths(startDate, intMonthsSpray * (i + 1)) : null;
     schedTop.push({ mmYY: fmtThaiMonthYear(d), note: "" });
   }
-  if (showBothTables) {
-    for (let i = schedBottom.length; i < MAX_BOTTOM; i++) {
-      const d = startDate ? addDays(startDate, intDaysBait * (i + 1)) : null;
-      schedBottom.push({ mmYY: fmtThaiMonthYear(d), note: "" });
-    }
-  }
 
-  // ชื่อหัวตาราง
-  const topTitle    = service.topTitle    ?? "ตารางบริการฉีดพ่น (Spray)";
-  const bottomTitle = service.bottomTitle ?? "ตารางบริการวางเหยื่อ (Bait)";
+  const topTitle = service.topTitle ?? "ตารางบริการฉีดพ่น (Spray)";
 
-  // ✅ เพิ่มคอลัมน์ "เดือน/ปี" (แทนวันที่แบบเต็ม)
   const headCols = [
     "ครั้งที่",
     "เดือน/ปี",
@@ -342,37 +306,6 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     },
   });
   y = (doc.lastAutoTable?.finalY || y) + TABLE_GAP;
-
-  // ตารางล่าง (Bait) — แสดงเฉพาะ bait/mix
-  if (showBothTables) {
-    doc.setFont(FAMILY, "bold");
-    TXT(doc, bottomTitle, M, y);
-    doc.setFont(FAMILY, "normal");
-
-    autoTable(doc, {
-      startY: y + TITLE_GAP,
-      head: [headCols],
-      body: schedBottom.map((row, i) => ([
-        String(i + 1),
-        row.mmYY || "",
-        "",
-        "",
-        row.note || "",
-      ])),
-      styles: { font: FAMILY, fontSize: 10, cellPadding: 2 },
-      headStyles: { font: FAMILY, fontStyle: "bold", fillColor: [225, 233, 245], textColor: 0 },
-      theme: "grid",
-      margin: { left: M, right: M },
-      columnStyles: {
-        0: { cellWidth: 40,  halign: "center" }, // ครั้งที่
-        1: { cellWidth: 80,  halign: "center" }, // เดือน/ปี
-        2: { cellWidth: 120 },                   // ลงชื่อเข้าบริการ
-        3: { cellWidth: 120 },                   // ลงชื่อผู้รับบริการ
-        4: { cellWidth: "auto" },                // หมายเหตุ
-      },
-    });
-    y = (doc.lastAutoTable?.finalY || y) + SPACING.afterTable;
-  }
 
   /* ---------- ข้อกำหนดและเงื่อนไข ---------- */
   if (terms.length) {
