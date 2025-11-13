@@ -197,18 +197,34 @@ export default function ContractForm() {
     const f = PKG_FORMULA[form.package] || PKG_FORMULA.pipe3993;
     const start = new Date(form.startDate);
 
+    // ✅ สำหรับแพ็กเกจ bait5500_in และ bait5500_both
+    //    "ครั้งแรก" จะไม่มีการฉีดพ่น (มีเฉพาะงาน Bait)
+    //    จึงให้เริ่มรอบฉีดพ่นจากช่วงที่ 2 เป็นต้นไป
+    const skipFirstSpray =
+      form.package === "bait5500_in" || form.package === "bait5500_both";
+
     // Spray
     const sDates = [];
-    for (let i = 0; i < Math.min(f.sprayCount, SPRAY_MAX); i++) {
-      sDates.push(toISO(addMonths(start, i * f.sprayGapM)));
+    const maxSpray = Math.min(f.sprayCount, SPRAY_MAX);
+    for (let i = 0; i < maxSpray; i++) {
+      // ปกติ roundIndex = 0,1,2,...
+      // แต่ถ้าต้องข้ามครั้งแรก → ให้เริ่มที่ 1,2,3,...
+      const roundIndex = skipFirstSpray ? i + 1 : i;
+      sDates.push(toISO(addMonths(start, roundIndex * f.sprayGapM)));
     }
     setSprayDates(sDates.length ? sDates : ["", "", ""]);
 
-    // Bait: แยกภายใน/ภายนอก
+    // Bait: แยกภายใน/ภายนอก (เหมือนเดิม)
     const inArr = [];
-    for (let i = 0; i < f.baitIn; i++) inArr.push(toISO(addDays(start, i * f.baitInGapD)));
+    for (let i = 0; i < f.baitIn; i++) {
+      inArr.push(toISO(addDays(start, i * f.baitInGapD)));
+    }
+
     const outArr = [];
-    for (let i = 0; i < f.baitOut; i++) outArr.push(toISO(addMonths(start, i * f.baitOutGapM)));
+    for (let i = 0; i < f.baitOut; i++) {
+      outArr.push(toISO(addMonths(start, i * f.baitOutGapM)));
+    }
+
     const [inFixed, outFixed] = clampBait(inArr, outArr);
     setBaitInDates(inFixed);
     setBaitOutDates(outFixed);

@@ -114,6 +114,19 @@ function derivePkgKey(c) {
   return "spray";
 }
 
+/** ✅ helper ใหม่: อ่าน “คีย์แพ็กเกจดิบ” เช่น pipe3993, bait5500_in, bait5500_both ฯลฯ */
+function getRawPkgKey(c) {
+  if (!c) return "";
+  return String(
+    c.package ||
+    c.pkg ||
+    c.servicePackage ||
+    c.packageLabel ||
+    c.servicePackageLabel ||
+    ""
+  ).toLowerCase().trim();
+}
+
 const labelFromContract = (c) => {
   const k = derivePkgKey(c);
   return typeof PKG.getPackageLabel === "function"
@@ -576,12 +589,27 @@ export default function CheckPage() {
   const scheduleGroups = useMemo(() => {
     if (!contract) return [];
     const pkgKey = derivePkgKey(contract);
+    const rawPkgKey = getRawPkgKey(contract);
     const start  = contract.startDate || "";
     const end    = contract.endDate || (start ? addMonths(start, 12) : "");
 
     const baitInDates  = readBaitInDates(contract, start);
-    const sprayDates   = readSprayDates(contract, start, { hasBaitIn: baitInDates.length > 0 });
+    let   sprayDates   = readSprayDates(contract, start, { hasBaitIn: baitInDates.length > 0 });
     const baitOutDates = readBaitOutDates(contract, start);
+
+    // ✅ ถ้าเป็นแพ็กเกจ bait5500_in หรือ bait5500_both
+    //    และรอบฉีดครั้งแรกมีวันที่ตรงกับวันเริ่มสัญญา → ตัดครั้งแรกออก
+    const isSkipFirstSprayPkg =
+      /^bait5500(?:_|-)?in\b/.test(rawPkgKey) ||
+      /^bait5500(?:_|-)?both\b/.test(rawPkgKey);
+
+    if (isSkipFirstSprayPkg && sprayDates && sprayDates.length > 0 && start) {
+      const firstSpray = toDateFlexible(sprayDates[0]);
+      const startDateObj = toDateFlexible(start);
+      if (firstSpray && startDateObj && firstSpray.getTime() === startDateObj.getTime()) {
+        sprayDates = sprayDates.slice(1);
+      }
+    }
 
     const sprayGroup = {
       title: `ฉีดพ่น (${sprayDates.length} ครั้ง)`,
