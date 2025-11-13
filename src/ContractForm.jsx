@@ -127,6 +127,7 @@ export default function ContractForm() {
   // UI
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", ok: false });
+  const [saveInfo, setSaveInfo] = useState(null);
 
   // ====== ฐานราคาจากแพ็กเกจ (ล็อกเป็น “ราคาพื้นฐาน” เสมอ) ======
   const baseServicePrice = useMemo(() => pkgPrice(form.package), [form.package]);
@@ -422,7 +423,18 @@ export default function ContractForm() {
         throw new Error(json?.error || `save-failed (${res.status})`);
       }
 
-      setMsg({ text: "บันทึกสำเร็จ", ok: true });
+      // ✅ เก็บข้อมูลชีต/แท็บ/แถวที่ถูกเขียนจริง (มาจาก GAS: ssUrl, ssId, sheet, row, build)
+      setSaveInfo({
+        ssUrl: json.ssUrl || "",
+        ssId: json.ssId || "",
+        sheet: json.sheet || "",
+        row: json.row || 0,
+        build: json.build || ""
+      });
+
+      // ✅ ข้อความสำเร็จ + แนบลิงก์ให้กดเปิดชีตได้ทันที
+      const hint = json?.ssUrl ? ` (เปิดชีตจริงได้จากลิงก์ด้านล่าง)` : "";
+      setMsg({ text: "บันทึกสำเร็จ" + hint, ok: true });
 
       // reset ฟอร์ม (คง package เดิม)
       setForm({ ...emptyForm, package: form.package });
@@ -433,6 +445,7 @@ export default function ContractForm() {
     } catch (err2) {
       const hint = err2?.name === "AbortError" ? "คำขอหมดเวลา (timeout)" : (err2?.message || err2);
       setMsg({ text: `บันทึกไม่สำเร็จ (POST ${API_URL}) : ${hint}`, ok: false });
+      setSaveInfo(null);
     } finally {
       setLoading(false);
     }
@@ -794,6 +807,19 @@ export default function ContractForm() {
           </div>
 
           {msg.text && <p className={`cf__msg ${msg.ok ? "cf__msg--ok" : "cf__msg--err"}`}>{msg.text}</p>}
+          {saveInfo?.ssUrl && (
+            <div className="cf__debug" style={{marginTop: 8}}>
+              <div>
+                ✅ เขียนลงแท็บ: <b>{saveInfo.sheet || "-"}</b> แถวที่: <b>{saveInfo.row || "-"}</b>
+              </div>
+              <div style={{marginTop: 4}}>
+                <a href={saveInfo.ssUrl} target="_blank" rel="noopener noreferrer" className="cf__link">
+                  เปิดชีตที่ถูกเขียนจริง
+                </a>
+                {saveInfo.build && <span className="cf-chip cf-chip--muted" style={{marginLeft: 8}}>build: {saveInfo.build}</span>}
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>
