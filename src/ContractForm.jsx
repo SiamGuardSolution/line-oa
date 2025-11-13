@@ -1,32 +1,35 @@
-// src/ContractForm.jsx (Lite + Dynamic schedule with add/remove + Split Bait In/Out)
+// src/ContractForm.jsx (Lite + Dynamic schedule + GAS submit)
 import React, { useEffect, useMemo, useState } from "react";
 import "./ContractForm.css";
 import generateReceiptPDF from "./lib/generateReceiptPDF";
 import generateContractPDF from "./lib/generateContractPDF";
 import * as PKG from "./config/packages";
 
-const API_URL = "/api/submit-contract";
+/* ------------------------- GAS BASE ------------------------- */
+// ตั้งค่าใน .env
+// REACT_APP_GAS_BASE=https://script.google.com/macros/s/XXXX/exec
+// หรือ NEXT_PUBLIC_GAS_EXEC=.../exec
+const EXEC_BASE =
+  (process.env.REACT_APP_GAS_BASE || process.env.NEXT_PUBLIC_GAS_EXEC || "").replace(
+    /\/+$/,
+    ""
+  );
 
 /* ------------------------- Helpers ------------------------- */
 const pkgLabel = (k) =>
   typeof PKG.getPackageLabel === "function"
     ? PKG.getPackageLabel(k)
-    : (PKG.PACKAGE_LABEL?.[k] ?? String(k));
+    : PKG.PACKAGE_LABEL?.[k] ?? String(k);
 
 // ==== ใช้เฉพาะ export ที่มีจริงจาก ./config/packages ====
 const pkgPrice = (k) => {
-  // 1) ฟังก์ชัน (ถ้ามี)
   if (typeof PKG.getPackagePrice === "function") {
     const v = Number(PKG.getPackagePrice(k));
     if (Number.isFinite(v) && v >= 0) return v;
   }
-  // 2) แม็ปคงที่
   const v2 = Number(PKG?.PACKAGE_PRICE?.[k]);
   if (Number.isFinite(v2) && v2 >= 0) return v2;
-
-  // 3) ไม่เจอ → 0 และเตือนตอน dev
   if (process.env.NODE_ENV !== "production") {
-    // eslint-disable-next-line no-console
     console.warn("[ContractForm] price not found for package:", k);
   }
   return 0;
@@ -36,7 +39,10 @@ const priceText = (n) =>
 
 const pad2 = (n) => String(n).padStart(2, "0");
 const toISO = (d) => {
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  if (!d) return "";
+  const x = d instanceof Date ? d : new Date(d);
+  if (isNaN(x)) return String(d || "");
+  const local = new Date(x.getTime() - x.getTimezoneOffset() * 60000);
   return `${local.getUTCFullYear()}-${pad2(local.getUTCMonth() + 1)}-${pad2(local.getUTCDate())}`;
 };
 const digitsOnly = (s) => String(s || "").replace(/\D/g, "");
@@ -94,11 +100,11 @@ const BAIT_MAX = 12;
 
 /* -------------------- สูตรแพ็กเกจแบบง่าย -------------------- */
 const PKG_FORMULA = {
-  pipe3993:         { sprayCount: 4, sprayGapM: 3, baitIn: 0, baitInGapD: 15, baitOut: 0, baitOutGapM: 2 },
-  bait5500_in:      { sprayCount: 4, sprayGapM: 3, baitIn: 5, baitInGapD: 15, baitOut: 0, baitOutGapM: 2 },
-  bait5500_out:     { sprayCount: 4, sprayGapM: 3, baitIn: 0, baitInGapD: 15, baitOut: 6, baitOutGapM: 2 },
-  bait5500_both:    { sprayCount: 4, sprayGapM: 3, baitIn: 4, baitInGapD: 15, baitOut: 4, baitOutGapM: 2 },
-  combo8500:        { sprayCount: 4, sprayGapM: 3, baitIn: 4, baitInGapD: 15, baitOut: 4, baitOutGapM: 2 },
+  pipe3993:      { sprayCount: 4, sprayGapM: 3, baitIn: 0, baitInGapD: 15, baitOut: 0, baitOutGapM: 2 },
+  bait5500_in:   { sprayCount: 4, sprayGapM: 3, baitIn: 5, baitInGapD: 15, baitOut: 0, baitOutGapM: 2 },
+  bait5500_out:  { sprayCount: 4, sprayGapM: 3, baitIn: 0, baitInGapD: 15, baitOut: 6, baitOutGapM: 2 },
+  bait5500_both: { sprayCount: 4, sprayGapM: 3, baitIn: 4, baitInGapD: 15, baitOut: 4, baitOutGapM: 2 },
+  combo8500:     { sprayCount: 4, sprayGapM: 3, baitIn: 4, baitInGapD: 15, baitOut: 4, baitOutGapM: 2 },
 };
 
 /* -------------------- ฟอร์มเริ่มต้น -------------------- */
@@ -128,13 +134,13 @@ export default function ContractForm() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState({ text: "", ok: false });
 
-  // ====== ฐานราคาจากแพ็กเกจ (ล็อกเป็น “ราคาพื้นฐาน” เสมอ) ======
+  // ====== ฐานราคาจากแพ็กเกจ ======
   const baseServicePrice = useMemo(() => pkgPrice(form.package), [form.package]);
   const packageLabel = useMemo(() => pkgLabel(form.package), [form.package]);
 
   const setVal = (k, v) => setForm((s) => ({ ...s, [k]: v }));
 
-  // ====== ยอดเงิน (คงสูตร: ฐานราคา + Add-on − ส่วนลด) ======
+  // ====== ยอดเงิน ======
   const itemsSubtotal = baseServicePrice;
   const addonsSubtotal = useMemo(
     () => (addons || []).reduce((sum, ad) => sum + Number(ad.qty || 0) * Number(ad.price || 0), 0),
@@ -174,7 +180,7 @@ export default function ContractForm() {
     }
   }
 
-  // เปลี่ยนแพ็กเกจ → เซ็ตค่าตั้งต้นสปรินต์ตาราง
+  // เปลี่ยนแพ็กเกจ → preset ตาราง
   useEffect(() => {
     setSprayDates(["", "", ""]);
     resetBaitByPackage(form.package);
@@ -192,7 +198,6 @@ export default function ContractForm() {
   /* -------------------- เติมตารางอัตโนมัติจากแพ็กเกจ -------------------- */
   const fillScheduleByPackage = () => {
     if (!form.startDate) return alert("กรุณาเลือกวันที่เริ่มสัญญาก่อน");
-
     const f = PKG_FORMULA[form.package] || PKG_FORMULA.pipe3993;
     const start = new Date(form.startDate);
 
@@ -203,7 +208,7 @@ export default function ContractForm() {
     }
     setSprayDates(sDates.length ? sDates : ["", "", ""]);
 
-    // Bait: แยกภายใน/ภายนอก
+    // Bait แยก in/out
     const inArr = [];
     for (let i = 0; i < f.baitIn; i++) inArr.push(toISO(addDays(start, i * f.baitInGapD)));
     const outArr = [];
@@ -217,7 +222,6 @@ export default function ContractForm() {
   const validate = () => {
     if (!form.name.trim()) return "กรุณากรอกชื่อลูกค้า";
     if (digitsOnly(form.phone).length < 9) return "กรุณากรอกเบอร์โทรให้ถูกต้อง";
-    if (form.taxId && taxIdDigits(form.taxId).length !== 13) return "กรุณากรอกเลขประจำตัวผู้เสียภาษีให้ครบ 13 หลัก";
     if (!form.startDate) return "กรุณาเลือกวันที่เริ่มสัญญา";
     if (!form.endDate) return "กรุณาเลือกวันสิ้นสุดสัญญา";
     return "";
@@ -264,7 +268,7 @@ export default function ContractForm() {
       await generateReceiptPDF(payload, {
         filename: `Receipt-${payload.receiptNo}.pdf`,
         returnType: "save",
-        forceReceiptDate: startForPdf, // ให้วันในหัวใบเสร็จเท่ากับวันเริ่มสัญญา
+        forceReceiptDate: startForPdf,
       });
     } catch (e) {
       console.error(e);
@@ -334,7 +338,26 @@ export default function ContractForm() {
     }
   }
 
-  /* -------------------- บันทึกลง GAS -------------------- */
+  /* -------------------- ส่งเข้า GAS -------------------- */
+
+  async function submitToGAS(payload) {
+    if (!EXEC_BASE) throw new Error("EXEC_BASE is empty (ตั้ง REACT_APP_GAS_BASE หรือ NEXT_PUBLIC_GAS_EXEC ให้ชี้ /exec)");
+    const res = await fetch(`${EXEC_BASE}?path=submit`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" }, // <<< ตรงกับ doPost ของ GAS
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`BAD_RESPONSE: ${text.slice(0, 140)}`);
+    }
+    if (!data.ok) throw new Error(data.error || "save-failed");
+    return data; // { ok:true, sheet, row }
+  }
+
   const handleSubmitAndSave = async (e) => {
     e.preventDefault();
     setMsg({ text: "", ok: false });
@@ -348,7 +371,7 @@ export default function ContractForm() {
       sprayMap[`serviceSpray${i + 1}`] = sprayDates[i] || "";
     }
 
-    // รวม bait ภายใน+ภายนอก → serviceBait1..12 (legacy compat)
+    // รวม bait in/out → serviceBait1..12 (legacy compat)
     const mergedBait = [...baitInDates, ...baitOutDates].slice(0, BAIT_MAX);
     const baitMap = {};
     for (let i = 0; i < BAIT_MAX; i++) {
@@ -356,11 +379,11 @@ export default function ContractForm() {
     }
 
     const payload = {
-      // ===== meta/แพ็กเกจ & ราคา (สำคัญต่อการคำนวณฝั่งอ่าน) =====
-      pkg: form.package,                           // คีย์แพ็กเกจสั้น
-      package: form.package,
+      // ===== แพ็กเกจ =====
+      package: form.package,           // <<< สำคัญ: GAS จะ map → spray/bait/mix ให้
+      pkg: form.package,
       packageLabel,
-      price: baseServicePrice,                     // ฐานราคาคงที่จากแพ็กเกจ
+      price: baseServicePrice,
       priceText: `${priceText(baseServicePrice)} บาท`,
 
       // ===== ลูกค้า & สัญญา =====
@@ -375,19 +398,19 @@ export default function ContractForm() {
       note: form.note,
       status: form.status || "ใช้งานอยู่",
 
-      // ===== ยอดเงิน (คงสูตร: ฐานราคา + Add-on − ส่วนลด) =====
+      // ===== ยอดเงิน =====
       items: [{ name: `ค่าบริการแพ็กเกจ ${packageLabel}`, quantity: 1, price: baseServicePrice }],
       discount: discountValue === "" ? "" : Number(discountValue),
-      addons,                                      // เก็บรายการเต็ม
-      itemsSubtotal,                               // ฐานราคา
+      addons,
+      itemsSubtotal,
       addonsSubtotal,
       netBeforeVat,
 
-      // ===== แนบคีย์ตาราง (legacy fields) =====
+      // ===== Legacy fields =====
       ...sprayMap,
       ...baitMap,
 
-      // ===== JSON กำหนดการแบบแยก in/out (ตัวจริงที่ระบบอ่าน) =====
+      // ===== JSON หลัก (ที่ระบบอ่านจริง) =====
       serviceScheduleJson: JSON.stringify({
         startDate: form.startDate,
         endDate: form.endDate,
@@ -400,25 +423,18 @@ export default function ContractForm() {
 
     try {
       setLoading(true);
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const result = await submitToGAS(payload);
+      setMsg({ text: `บันทึกสำเร็จ → เขียนลงชีต ${result.sheet} แถวที่ ${result.row}`, ok: true });
 
-      const raw = await res.text();
-      let json; try { json = JSON.parse(raw); } catch { json = { ok: res.ok, raw }; }
-      if (!res.ok || json?.ok === false) throw new Error(json?.error || "save-failed");
-
-      setMsg({ text: "บันทึกสำเร็จ", ok: true });
-      // reset ฟอร์ม (คง package เดิม)
+      // reset (คง package เดิม)
       setForm({ ...emptyForm, package: form.package });
       setDiscountValue("");
       setAddons([{ name: "", qty: 1, price: 0 }]);
       setSprayDates(["", "", ""]);
       resetBaitByPackage(form.package);
     } catch (err2) {
-      setMsg({ text: `บันทึกไม่สำเร็จ ${err2?.message || err2}`, ok: false });
+      console.error("[SUBMIT] failed:", err2);
+      setMsg({ text: `บันทึกไม่สำเร็จ: ${err2?.message || err2}`, ok: false });
     } finally {
       setLoading(false);
     }
