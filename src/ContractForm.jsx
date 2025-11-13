@@ -292,24 +292,66 @@ export default function ContractForm() {
 
   /* -------------------- PDF: สัญญา -------------------- */
   function buildContractPdfData() {
+    // Spray
     const spraySchedule = sprayDates
-      .map((d, i) => (d ? { round: i + 1, date: d, note: "Service Spray" } : null))
+      .map((d, i) =>
+        d
+          ? {
+              round: i + 1,
+              date: d,
+              // เดิม: "Service Spray"
+              note: "บริการฉีดพ่น",
+            }
+          : null
+      )
       .filter(Boolean);
 
+    // Bait – ภายใน
     const baitInSchedule = baitInDates
-      .map((d, i) => (d ? { round: i + 1, date: d, note: "Service Bait (Inside)" } : null))
+      .map((d, i) =>
+        d
+          ? {
+              round: i + 1,
+              date: d,
+              // เดิม: "Service Bait (Inside)"
+              note: "บริการวางเหยื่อ (ภายใน)",
+            }
+          : null
+      )
       .filter(Boolean);
 
+    // Bait – ภายนอก
     const baitOutSchedule = baitOutDates
-      .map((d, i) => (d ? { round: i + 1, date: d, note: "Service Bait (Outside)" } : null))
+      .map((d, i) =>
+        d
+          ? {
+              round: i + 1,
+              date: d,
+              // เดิม: "Service Bait (Outside)"
+              note: "บริการวางเหยื่อ (ภายนอก)",
+            }
+          : null
+      )
       .filter(Boolean);
+
+    // ✅ เรียงลำดับให้ “วางเหยื่อ” มาก่อน “ฉีดพ่น” เสมอ
+    const mergedSchedule = [
+      ...baitInSchedule,
+      ...baitOutSchedule,
+      ...spraySchedule,
+    ];
 
     const data = {
       contractNumber: makeContractNo(),
       contractDate: new Date(),
       startDate: form.startDate,
       endDate: form.endDate,
-      company: { name: COMPANY.name, address: COMPANY.address, phone: COMPANY.phone, taxId: COMPANY.taxId },
+      company: {
+        name: COMPANY.name,
+        address: COMPANY.address,
+        phone: COMPANY.phone,
+        taxId: COMPANY.taxId,
+      },
       client: {
         name: form.name,
         phone: digitsOnly(form.phone),
@@ -328,7 +370,8 @@ export default function ContractForm() {
             price: Number(a.qty || 0) * Number(a.price || 0),
           })),
       },
-      schedule: [...spraySchedule, ...baitInSchedule, ...baitOutSchedule],
+      // ใช้ mergedSchedule ที่เรียง Bait ก่อน Spray แล้ว
+      schedule: mergedSchedule,
       terms: [
         "วันที่ครบกำหนด คือ วันที่ที่ครบกำหนดบริการตามเงื่อนไข เป็นเพียงกำหนดการนัดหมายส่งงานเท่านั้น",
         "วันที่เข้าบริการ คือ วันที่เข้ารับบริการจริง ซึ่งทางบริษัทฯ ได้ทำการนัดหมายลูกค้าอย่างชัดเจน",
@@ -337,6 +380,7 @@ export default function ContractForm() {
       ],
       signatures: { companyRep: form.tech || "", clientRep: form.name || "" },
     };
+
     return { data, fileName: `Contract_${data.contractNumber}.pdf` };
   }
 
