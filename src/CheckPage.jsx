@@ -20,15 +20,14 @@ const PAY_LINK_8500 = process.env.REACT_APP_PAY_LINK_8500 || "https://pay.beamch
 // ลิงก์ติดต่อแอดมินไลน์
 const LINE_ADMIN_URL = process.env.REACT_APP_LINE_ADMIN_URL || "https://lin.ee/7K4hHjf";
 
-/* ---------------------- LIFF helpers (บนสุดของไฟล์ นอกคอมโพเนนต์) ---------------------- */
-const LIFF_ID = process.env.REACT_APP_LIFF_ID || ""; // ตั้งค่าใน .env (REACT_APP_LIFF_ID)
+/* ---------------------- LIFF helpers ---------------------- */
+const LIFF_ID = process.env.REACT_APP_LIFF_ID || "";
 
 const hasLiff = () => typeof window !== "undefined" && !!window.liff;
 
 const ensureLiffReady = async () => {
   if (!hasLiff() || !LIFF_ID) return false;
   const liff = window.liff;
-  // ป้องกัน init ซ้ำ
   if (!liff._sgInited) {
     try { await liff.init({ liffId: LIFF_ID }); } catch (e) { /* ignore */ }
     liff._sgInited = true;
@@ -48,7 +47,7 @@ async function uploadPdfAndGetUrl(blob, filename) {
   const res = await fetch(UPLOAD_API, { method: "POST", body: form });
   if (!res.ok) throw new Error(`UPLOAD_FAILED_${res.status}`);
   const { url } = await res.json();
-  return url; // https://.../receipts/xxx.pdf
+  return url;
 }
 
 function buildReceiptFlex(pdfUrl) {
@@ -87,11 +86,9 @@ function buildCheckUrls(digits) {
 function derivePkgKey(c) {
   if (!c) return "spray";
 
-  // 1) ตีความจากฟิลด์ pkg โดยตรงก่อน
   const rawPkg = String(c.pkg || "").toLowerCase();
   if (["spray","bait","mix"].includes(rawPkg)) return rawPkg;
 
-  // 2) รองรับคีย์แพ็กเกจใหม่ของระบบ (pipe3993, bait5500_in/out/both, combo8500)
   const directKey =
     String(c.package || c.servicePackage || c.packageLabel || c.servicePackageLabel || "")
       .toLowerCase();
@@ -101,30 +98,15 @@ function derivePkgKey(c) {
   if (/^bait5500(?:_|-)?both\b/.test(directKey)) return "bait";
   if (/^combo8500\b/.test(directKey)) return "mix";
 
-  // 3) เดาจากคำในฉลากรวม
   const blob = `${c?.package || ""}|${c?.packageLabel || ""}|${c?.servicePackage || ""}|${c?.servicePackageLabel || ""}|${c?.serviceType || ""}`.toLowerCase();
   if (/\bmix|ผสม|combo/.test(blob)) return "mix";
   if (/\bbait|เหยื่อ/.test(blob)) return "bait";
   if (/\bspray|ฉีด/.test(blob)) return "spray";
 
-  // 4) เดาจากราคา (สุดท้าย)
   const text = `${c?.priceText || ""}`.toLowerCase();
   if (/8500/.test(text)) return "mix";
   if (/5500/.test(text)) return "bait";
   return "spray";
-}
-
-/** ✅ helper ใหม่: อ่าน “คีย์แพ็กเกจดิบ” เช่น pipe3993, bait5500_in, bait5500_both ฯลฯ */
-function getRawPkgKey(c) {
-  if (!c) return "";
-  return String(
-    c.package ||
-    c.pkg ||
-    c.servicePackage ||
-    c.packageLabel ||
-    c.servicePackageLabel ||
-    ""
-  ).toLowerCase().trim();
 }
 
 const labelFromContract = (c) => {
@@ -232,7 +214,6 @@ const addonsFrom = (c) => {
   } catch { return []; }
 };
 
-
 const addonsSubtotalFrom = (c) => {
   const direct = firstNonEmpty(c?.addonsSubtotal, c?.['ค่าบริการเพิ่มเติม']);
   const n = toNumberSafe(direct);
@@ -248,7 +229,6 @@ function selectFixedPayLinkByBasePrice(basePrice) {
     { p: 5500, url: PAY_LINK_5500 },
     { p: 8500, url: PAY_LINK_8500 },
   ];
-  // ยอมคลาดเคลื่อน ±1 เผื่อข้อมูลมีจุดทศนิยมหรือฟอร์แมตแปลกๆ
   const hit = CAND.find(c => Math.abs(n - c.p) <= 1);
   return hit ? hit.url : "";
 }
@@ -281,8 +261,7 @@ const addMonths = (dateStr, n) => {
   return toYMD(d);
 };
 
-// ==== อ่านข้อมูลรอบบริการจาก JSON ใหม่ (ถ้ามี) ====
-// (แทนที่ฟังก์ชัน readScheduleJsonArrays เดิม)
+// ==== อ่านข้อมูลรอบบริการจาก JSON ใหม่ ==== 
 function readScheduleJsonArrays(c) {
   try {
     const raw =
@@ -297,10 +276,8 @@ function readScheduleJsonArrays(c) {
     const baitIn = Array.isArray(obj?.baitIn) ? obj.baitIn.filter(Boolean) : [];
     const baitOut= Array.isArray(obj?.baitOut)? obj.baitOut.filter(Boolean): [];
 
-    // backward compat: ถ้าเก่ามีแค่ bait รวม ๆ
     let bait = Array.isArray(obj?.bait) ? obj.bait.filter(Boolean) : [];
     if (bait.length && (!baitIn.length && !baitOut.length)) {
-      // ถ้าไม่มี in/out แยก: ให้ถือว่าเป็น "ภายใน"
       baitIn.push(...bait);
       bait = [];
     }
@@ -310,17 +287,16 @@ function readScheduleJsonArrays(c) {
   }
 }
 
-// ----- Month–Year (Thai, พ.ศ.) -----
+// ----- Month–Year (Thai, พ.ศ.) ----- 
 const parseDate = (v) => {
   if (!v) return null;
   const s = String(v).trim();
-  // พยายาม parse รูปแบบที่ใช้บ่อย
   let d = new Date(s);
   if (isNaN(d)) {
-    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/); // YYYY-MM-DD
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (m) d = new Date(+m[1], +m[2]-1, +m[3]);
     else {
-      m = s.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/); // DD/MM/YYYY
+      m = s.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
       if (m) d = new Date(+m[3], +m[2]-1, +m[1]);
     }
   }
@@ -341,7 +317,6 @@ function toDateFlexible(v) {
   if (!v && v !== 0) return null;
   if (v instanceof Date && !isNaN(v)) return v;
 
-  // Excel serial number (เช่นจาก Google Sheets)
   if (typeof v === 'number') {
     const d = new Date(Math.round((v - 25569) * 86400 * 1000));
     return isNaN(d) ? null : d;
@@ -350,7 +325,6 @@ function toDateFlexible(v) {
   const s = String(v).trim();
   if (!s) return null;
 
-  // YYYY-MM-DD
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) {
     const [, Y, M, D] = m;
@@ -358,17 +332,15 @@ function toDateFlexible(v) {
     return isNaN(d) ? null : d;
   }
 
-  // DD/MM/YYYY หรือ DD-MM-YYYY (พ.ศ./ค.ศ.)
   m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (m) {
     let [, d, mo, y] = m;
     let Y = parseInt(y, 10);
-    if (Y > 2400) Y -= 543; // เผื่อกรอกเป็น พ.ศ.
+    if (Y > 2400) Y -= 543;
     const dt = new Date(Y, parseInt(mo, 10) - 1, parseInt(d, 10));
     return isNaN(dt) ? null : dt;
   }
 
-  // fallback ให้ Date parse เอง
   const dt = new Date(s);
   return isNaN(dt) ? null : dt;
 }
@@ -381,6 +353,12 @@ function fmtThaiDMY(v, useBuddhist = true) {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yyyy = d.getFullYear() + (useBuddhist ? 543 : 0);
   return `${dd}/${mm}/${yyyy}`;
+}
+
+// helper เอาไว้เทียบว่าวันเดียวกัน (YYYY-MM-DD)
+function normalizeYMD(v) {
+  const d = toDateFlexible(v);
+  return d ? toYMD(d) : "";
 }
 
 /* ---------------------- COMPONENTS ---------------------- */
@@ -420,7 +398,6 @@ export default function CheckPage() {
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState(false);
 
-  // อยู่ใน LINE app ไหม (เพื่อเปลี่ยนโหมดปุ่ม)
   const [inLineApp, setInLineApp] = useState(false);
   useEffect(() => {
     (async () => {
@@ -429,23 +406,19 @@ export default function CheckPage() {
     })();
   }, []);
 
-  // หลายสัญญา + index ที่เลือก
   const [contracts, setContracts] = useState([]);
   const [activeIdx, setActiveIdx] = useState(0);
 
-  // contract ปัจจุบัน
   const contract = useMemo(
     () => (contracts && contracts.length ? (contracts[activeIdx] || null) : null),
     [contracts, activeIdx]
   );
 
-  // เบอร์ที่จะใช้เปิดหน้า ServiceReportPage.jsx (เอาเบอร์ในสัญญาถ้าเจอ ไม่งั้นใช้ช่องค้นหา)
   const phoneDigits = useMemo(
     () => normalizePhone(contract?.phone || phoneInput),
     [contract, phoneInput]
   );
 
-  // ไปหน้ารายงานของเบอร์นี้
   const goToReports = useCallback(() => {
     const d = phoneDigits;
     if (!d || d.length < 9) {
@@ -454,7 +427,6 @@ export default function CheckPage() {
     }
   }, [phoneDigits]);
 
-  // โหลดเบอร์ล่าสุด
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LS_LAST_PHONE_KEY);
@@ -466,7 +438,6 @@ export default function CheckPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- NEW: map services[] -> service1, service2,... (อ่านจากชีตก่อนเสมอ) ----
   const normalizeContractRecord = (c) => {
     if (!c) return c;
     const out = { ...c };
@@ -483,7 +454,6 @@ export default function CheckPage() {
     return out;
   };
 
-  // fetch helper
   const searchByDigits = async (digits) => {
     setError("");
     if (!digits || digits.length < 9) { setError("กรุณากรอกเบอร์โทรอย่างน้อย 9 หลัก"); return; }
@@ -532,7 +502,6 @@ export default function CheckPage() {
     const { spray } = readScheduleJsonArrays(c);
     if (spray.length) return spray;
 
-    // legacy keys/services[]
     const out = [];
     if (c?.serviceSpray1) out.push(c.serviceSpray1);
     if (c?.serviceSpray2) out.push(c.serviceSpray2);
@@ -545,7 +514,6 @@ export default function CheckPage() {
     }
     if (out.length) return out;
 
-    // fallback 4 รอบ เว้นแต่ถูกสั่งให้ปิด หรือไม่มีวันเริ่ม
     if (!start || suppressFallback) return [];
     const s0 = addMonths(start, 0);
     const s1 = addMonths(start, 3);
@@ -554,12 +522,10 @@ export default function CheckPage() {
     return [s0, s1, s2, s3];
   };
 
-  // Bait ภายใน: JSON ใหม่ (baitIn) → legacy (serviceBait1..5 ตีความเป็นภายในก่อน) → สูตร 20/40/60/80/100 วัน
   const readBaitInDates = (c, start) => {
     const { baitIn } = readScheduleJsonArrays(c);
     if (baitIn.length) return baitIn;
 
-    // legacy: เอา serviceBait1..5 มาเป็น "ภายใน" ก่อน (ถ้ามี services[] แยกไม่ออก ให้ถือเป็นภายใน)
     const out = [];
     for (let i=1;i<=5;i++) {
       const k = `serviceBait${i}`;
@@ -578,37 +544,52 @@ export default function CheckPage() {
     return [20,40,60,80,100].map(d => addDays(start, d));
   };
 
-  // Bait ภายนอก: JSON ใหม่ (baitOut) → ถ้าไม่มี ให้เป็น []
   const readBaitOutDates = (c, start) => {
     const { baitOut } = readScheduleJsonArrays(c);
     if (baitOut.length) return baitOut;
-    // legacy แยกไม่ออกว่าใน/นอก ⇒ ปล่อยว่าง
     return [];
   };
 
   const scheduleGroups = useMemo(() => {
     if (!contract) return [];
+
     const pkgKey = derivePkgKey(contract);
-    const rawPkgKey = getRawPkgKey(contract);
+
+    // raw key ของแพ็กเกจ (ใช้เช็ก bait5500_in / bait5500_both)
+    const rawPkgKey = String(
+      contract.pkg ||
+      contract.package ||
+      contract.servicePackage ||
+      contract.packageLabel ||
+      contract.servicePackageLabel ||
+      ""
+    ).toLowerCase();
+
     const start  = contract.startDate || "";
     const end    = contract.endDate || (start ? addMonths(start, 12) : "");
 
     const baitInDates  = readBaitInDates(contract, start);
-    let   sprayDates   = readSprayDates(contract, start, { hasBaitIn: baitInDates.length > 0 });
+    let   sprayDates   = readSprayDates(contract, start);
     const baitOutDates = readBaitOutDates(contract, start);
 
-    // ✅ ถ้าเป็นแพ็กเกจ bait5500_in หรือ bait5500_both
-    //    และรอบฉีดครั้งแรกมีวันที่ตรงกับวันเริ่มสัญญา → ตัดครั้งแรกออก
-    const isSkipFirstSprayPkg =
+    // ✅ สำหรับแพ็กเกจ bait5500_in และ bait5500_both:
+    // ถ้าเจอรอบฉีดพ่นที่ "ตรงกับวันเริ่มสัญญา" ให้ลบออก 1 รายการ
+    const needDropFirstSpray =
       /^bait5500(?:_|-)?in\b/.test(rawPkgKey) ||
       /^bait5500(?:_|-)?both\b/.test(rawPkgKey);
 
-    if (isSkipFirstSprayPkg && sprayDates && sprayDates.length > 0 && start) {
-      const firstSpray = toDateFlexible(sprayDates[0]);
-      const startDateObj = toDateFlexible(start);
-      if (firstSpray && startDateObj && firstSpray.getTime() === startDateObj.getTime()) {
-        sprayDates = sprayDates.slice(1);
-      }
+    if (needDropFirstSpray && start && sprayDates.length) {
+      const startYMD = normalizeYMD(start);
+      let removed = false;
+      sprayDates = sprayDates.filter((d) => {
+        if (!d) return false;
+        const ymd = normalizeYMD(d);
+        if (!removed && ymd === startYMD) {
+          removed = true;     // ลบเฉพาะตัวแรกที่ตรงวันเริ่มสัญญา
+          return false;
+        }
+        return true;
+      });
     }
 
     const sprayGroup = {
@@ -634,7 +615,7 @@ export default function CheckPage() {
 
     if (pkgKey === "spray") return [sprayGroup, endGroup];
     if (pkgKey === "bait")  return [baitInGroup, baitOutGroup, sprayGroup, endGroup];
-    return [baitInGroup, baitOutGroup, sprayGroup, endGroup]; // mix
+    return [baitInGroup, baitOutGroup, sprayGroup, endGroup];
   }, [contract]);
 
   const contractStatus = useMemo(() => {
@@ -647,7 +628,7 @@ export default function CheckPage() {
     return end < mid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
   }, [contract]);
 
-  // ====== ค่าใช้จ่าย (ก่อน/หลัง VAT) ======
+  // ====== ค่าใช้จ่าย ======
   const discount = useMemo(() => discountFrom(contract), [contract]);
   const addonsSubtotal = useMemo(() => addonsSubtotalFrom(contract), [contract]);
   const addonsArr = useMemo(() => addonsFrom(contract), [contract]);
@@ -661,10 +642,6 @@ export default function CheckPage() {
   }, [basePrice, discount, addonsSubtotal]);
   const grandTotal = subTotal;
 
-  // ลิงก์จ่ายเงิน:
-  // - ปิดทั้งหมดถ้า FORCE_ADMIN_MODE
-  // - ปิดถ้ามีส่วนลดหรือค่าบริการเพิ่มเติม
-  // - มิฉะนั้น map จาก "ราคาแพ็กเกจฐาน" → 3993/5500/8500
   const payUrl = useMemo(() => {
     if (!contract) return "";
     if (FORCE_ADMIN_MODE) return "";
@@ -684,7 +661,6 @@ export default function CheckPage() {
       const companyPhone  = process.env.REACT_APP_COMPANY_PHONE  || "02-xxx-xxxx";
       const companyTaxId  = process.env.REACT_APP_COMPANY_TAXID  || "";
 
-      // ---- วันเริ่มสัญญา: ดึงจากหลายคีย์ แล้ว normalize เป็น dd/MM/yyyy (ค.ศ.) ----
       const pickStartRaw =
         firstNonEmpty(
           current.startDate,
@@ -696,10 +672,9 @@ export default function CheckPage() {
 
       const startFromForm = (() => {
         if (!pickStartRaw) return "";
-        // YYYY-MM-DD → dd/MM/yyyy
         const m = String(pickStartRaw).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (m) return `${m[3]}/${m[2]}/${m[1]}`;   // 08/10/2025
-        return String(pickStartRaw).trim();        // รองรับ dd/MM/yyyy โดยตรง
+        if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+        return String(pickStartRaw).trim();
       })();
 
       const basePrice = basePriceFrom(current);
@@ -730,7 +705,6 @@ export default function CheckPage() {
         clientTaxId: current.taxId || current.clientTaxId || "",
         receiptNo,
         issueDate: new Date(),
-        // ส่งผ่าน payload ด้วย เผื่อ lib จะอ่านจากคีย์นี้
         contractStartDate: startFromForm,
         items,
         discount: toNumberSafe(discountFrom(current)),
@@ -741,17 +715,14 @@ export default function CheckPage() {
 
       const filename = `Receipt-${receiptNo}.pdf`;
 
-      // ✅ “คันโยก” บังคับวันใน PDF ให้เท่ากับวันเริ่มสัญญาเสมอ (dd/MM/yyyy – ค.ศ.)
       const blob = await generateReceiptPDF(payload, {
         returnType: "blob",
         filename,
-        forceReceiptDate: startFromForm,   // <<<<<<<<<< สำคัญสุด
+        forceReceiptDate: startFromForm,
       });
 
-      // --- หลังได้ blob แล้ว ---
       const isLineUA = /Line\/|LIFF/i.test(navigator.userAgent);
 
-      // อัปโหลดก่อนเสมอ เพื่อให้ได้ลิงก์ใช้งานได้ใน LINE
       let pdfUrl = "";
       try {
         pdfUrl = await uploadPdfAndGetUrl(blob, filename);
@@ -880,7 +851,6 @@ export default function CheckPage() {
             </div>
           </section>
 
-          {/* สรุปค่าใช้จ่าย + ปุ่มรับใบเสร็จ */}
           <section className="card">
             <div className="row between">
               <h3 className="title">สรุปค่าใช้จ่าย</h3>
@@ -946,7 +916,6 @@ export default function CheckPage() {
             <div className="row between">
               <h3 className="title">กำหนดการ</h3>
 
-              {/* กล่องทางขวา: pill + ปุ่มดูประวัติ */}
               <div className="row" style={{ gap: 8, alignItems: "center" }}>
                 <span className="pill">
                   {(() => {
