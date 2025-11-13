@@ -245,7 +245,9 @@ export default async function generateContractPDF(data = {}, opts = {}) {
   }
 
   /* ===== ตารางรอบบริการ (Top = Spray , Bottom = Bait) ===== */
-  const MAX_TOP = 2;
+
+  // 👉 จำนวนแถวเริ่มต้นของตารางฉีดพ่น (ใช้เมื่อไม่มีข้อมูลอื่นให้เดา)
+  const DEFAULT_SPRAY_ROWS = 2;
   const MAX_BOTTOM = 5;
 
   const mapItem = (it) => ({
@@ -255,6 +257,17 @@ export default async function generateContractPDF(data = {}, opts = {}) {
 
   const spraySrc = Array.isArray(service.spraySchedule) ? service.spraySchedule : null;
   const baitSrc  = Array.isArray(service.baitSchedule)  ? service.baitSchedule  : null;
+
+  // ✅ คำนวณจำนวนแถวของตาราง Spray จาก "จำนวนรอบบริการจริง"
+  // ถ้ามี spraySchedule → ใช้ length
+  // ถ้าไม่มี → ใช้จำนวน row ของ schedule (พร้อมลิมิต 12)
+  let maxTop = DEFAULT_SPRAY_ROWS;
+  if (spraySrc?.length) {
+    maxTop = spraySrc.length;
+  } else if (Array.isArray(schedule) && schedule.length) {
+    maxTop = Math.min(schedule.length, 12); // ปรับ limit ได้ตามต้องการ
+  }
+  const MAX_TOP = maxTop;
 
   const schedTop = [];     // Spray
   const schedBottom = [];  // Bait
