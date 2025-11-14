@@ -394,8 +394,24 @@ body{ background:var(--bg); }
 .addons-row { display:grid; grid-template-columns:2fr .7fr 1fr 1fr; gap:8px; }
 .addons-row--head { font-weight:600; opacity:.85; }
 
+/* เหยื่อ (ภายใน) = สีเดียวกับฉีดพ่น */
+.chip.bait-in {
+  background:#ecfeff;      /* เหมือน .chip.spray */
+  border-color:#a5f3fc;
+  color:#0e7490;
+}
+.timeline .dot.bait-in {
+  background:#06b6d4;      /* เหมือน .dot.spray */
+}
 
-.chip.bait-in, .dot.bait-in   { background: #4caf50; }   /* เขียว */
-.chip.bait-out, .dot.bait-out { background: #ff9800; }   /* ส้ม */
+/* เหยื่อ (ภายนอก) ให้ยังเป็นโทนส้มเหมือนเดิม */
+.chip.bait-out {
+  background:#ecfeff; 
+  border-color:#a5f3fc;
+  color:#0e7490;
+}
+.timeline .dot.bait-out {
+  background:#06b6d4;
+}
 
 .dot { width: 10px; height: 10px; border-radius: 50%; }
