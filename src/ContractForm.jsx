@@ -104,7 +104,7 @@ const BAIT_MAX = 12;
 /* -------------------- สูตรแพ็กเกจแบบง่าย -------------------- */
 const PKG_FORMULA = {
   pipe3993: {
-    sprayCount: 4,
+    sprayCount: 4,          // ✅ pipe3993 ใช้ 4 รอบ (0, +3, +6, +9 เดือน)
     sprayGapM: 3,
     baitIn: 0,
     baitInGapD: 15,
@@ -112,7 +112,7 @@ const PKG_FORMULA = {
     baitOutGapM: 2,
   },
   bait5500_in: {
-    sprayCount: 4,
+    sprayCount: 3,
     sprayGapM: 3,
     baitIn: 5,
     baitInGapD: 15,
@@ -120,7 +120,7 @@ const PKG_FORMULA = {
     baitOutGapM: 2,
   },
   bait5500_out: {
-    sprayCount: 4,
+    sprayCount: 3,
     sprayGapM: 3,
     baitIn: 0,
     baitInGapD: 15,
@@ -128,7 +128,7 @@ const PKG_FORMULA = {
     baitOutGapM: 2,
   },
   bait5500_both: {
-    sprayCount: 4,
+    sprayCount: 3,
     sprayGapM: 3,
     baitIn: 4,
     baitInGapD: 15,
@@ -136,7 +136,7 @@ const PKG_FORMULA = {
     baitOutGapM: 2,
   },
   combo8500: {
-    sprayCount: 4,
+    sprayCount: 3,
     sprayGapM: 3,
     baitIn: 4,
     baitInGapD: 15,
@@ -164,7 +164,10 @@ export default function ContractForm() {
   const [form, setForm] = useState({ ...emptyForm });
 
   // ตารางบริการ (ไดนามิก)
-  const [sprayDates, setSprayDates] = useState(["", "", ""]); // ค่าเริ่มต้น 3 รอบ
+  const [sprayDates, setSprayDates] = useState(() =>
+    // เริ่มต้นให้ตรงตามสูตรแพ็กเกจ (pipe3993 = 4 รอบ, อื่น ๆ = 3 รอบ)
+    getDefaultSprayDates(emptyForm.package)
+  );
   const [baitInDates, setBaitInDates] = useState([]); // ภายใน
   const [baitOutDates, setBaitOutDates] = useState([]); // ภายนอก
 
@@ -221,6 +224,14 @@ export default function ContractForm() {
     ) / 100;
 
   /* -------------------- Utilities -------------------- */
+  // กำหนดจำนวนช่อง Spray ตั้งต้นต่อแพ็กเกจ
+  function getDefaultSprayDates(pkg) {
+    const defCount =
+      PKG_FORMULA[pkg]?.sprayCount ??
+      PKG_FORMULA.pipe3993.sprayCount;
+    return Array(Math.min(defCount, SPRAY_MAX)).fill("");
+  }
+
   function clampBait(inArr, outArr) {
     const total = inArr.length + outArr.length;
     if (total <= BAIT_MAX) return [inArr, outArr];
@@ -249,7 +260,7 @@ export default function ContractForm() {
 
   // เปลี่ยนแพ็กเกจ → เซ็ตค่าตั้งต้นสปรินต์ตาราง
   useEffect(() => {
-    setSprayDates(["", "", ""]);
+    setSprayDates(getDefaultSprayDates(form.package)); // ✅ ใช้สูตรแพ็กเกจ
     resetBaitByPackage(form.package);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.package]);
@@ -620,7 +631,7 @@ export default function ContractForm() {
       setForm({ ...emptyForm, package: form.package });
       setDiscountValue("");
       setAddons([{ name: "", qty: 1, price: 0 }]);
-      setSprayDates(["", "", ""]);
+      setSprayDates(getDefaultSprayDates(form.package)); // ✅ reset ตามแพ็กเกจ
       resetBaitByPackage(form.package);
     } catch (err2) {
       const hint =
@@ -787,7 +798,7 @@ export default function ContractForm() {
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => {
-                  setSprayDates(["", "", ""]);
+                  setSprayDates(getDefaultSprayDates(form.package)); // ✅ ล้างตามสูตร
                   resetBaitByPackage(form.package);
                 }}
               >
@@ -854,7 +865,7 @@ export default function ContractForm() {
                         #{i + 1}
                       </div>
                       <label className="cf__label">
-                        Service Spray รอบที่ {i + 1}
+                        Spray รอบที่ {i + 1}
                       </label>
                       <input
                         type="date"
@@ -1394,7 +1405,7 @@ export default function ContractForm() {
                 setAddons([
                   { name: "", qty: 1, price: 0 },
                 ]);
-                setSprayDates(["", "", ""]);
+                setSprayDates(getDefaultSprayDates(form.package)); // ✅ reset ตามสูตร
                 resetBaitByPackage(form.package);
               }}
             >
