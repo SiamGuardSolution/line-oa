@@ -158,6 +158,7 @@ const emptyForm = {
   tech: "",
   note: "",
   status: "ใช้งานอยู่",
+  contractType: "normal",   // 👈 ใช้สำหรับมาร์กสัญญาปกติ/พิเศษ
 };
 
 export default function ContractForm() {
@@ -345,7 +346,7 @@ export default function ContractForm() {
     const startForPdf = toCE_ddmmyyyy(form.startDate);
     const pdfItems = [
       {
-        description: `ค่าบริการแพ็กเกจ ${packageLabel}`,
+        description: `ค่าบริการ${packageLabel}`,
         qty: 1,
         unitPrice: baseServicePrice,
       },
@@ -552,6 +553,7 @@ export default function ContractForm() {
       tech: form.tech,
       note: form.note,
       status: form.status || "ใช้งานอยู่",
+      contractType: form.contractType || "normal",  // 👈 ส่งไปเก็บในชีตด้วย
 
       // ===== ยอดเงิน =====
       items: [
@@ -629,8 +631,12 @@ export default function ContractForm() {
         : "";
       setMsg({ text: "บันทึกสำเร็จ" + hint, ok: true });
 
-      // reset ฟอร์ม (คง package เดิม)
-      setForm({ ...emptyForm, package: form.package });
+      // reset ฟอร์ม (คง package + contractType เดิม)
+      setForm({
+        ...emptyForm,
+        package: form.package,
+        contractType: form.contractType,
+      });
       setDiscountValue("");
       setAddons([{ name: "", qty: 1, price: 0 }]);
       setSprayDates(getDefaultSprayDates(form.package)); // ✅ reset ตามแพ็กเกจ
@@ -1342,7 +1348,7 @@ export default function ContractForm() {
             </div>
           </div>
 
-          {/* หมายเหตุ + สถานะ */}
+          {/* หมายเหตุ + ประเภทสัญญา + สถานะ */}
           <div
             className="cf__field"
             style={{ marginTop: 12 }}
@@ -1358,6 +1364,26 @@ export default function ContractForm() {
               }
             />
           </div>
+
+          <div
+            className="cf__field"
+            style={{ marginTop: 8 }}
+          >
+            <label className="cf__label">
+              ประเภทสัญญา
+            </label>
+            <select
+              className="cf__select"
+              value={form.contractType}
+              onChange={(e) =>
+                setVal("contractType", e.target.value)
+              }
+            >
+              <option value="normal">สัญญาปกติ</option>
+              <option value="special">สัญญาพิเศษ</option>
+            </select>
+          </div>
+
           <div
             className="cf__field"
             style={{ marginTop: 8 }}
@@ -1402,12 +1428,13 @@ export default function ContractForm() {
                 setForm({
                   ...emptyForm,
                   package: form.package,
+                  contractType: form.contractType, // 👈 คงประเภทสัญญาเดิม
                 });
                 setDiscountValue("");
                 setAddons([
                   { name: "", qty: 1, price: 0 },
                 ]);
-                setSprayDates(getDefaultSprayDates(form.package)); // ✅ reset ตามสูตร
+                setSprayDates(getDefaultSprayDates(form.package)); // ✅ reset ตามแพ็กเกจ
                 resetBaitByPackage(form.package);
               }}
             >
