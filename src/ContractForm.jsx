@@ -573,6 +573,8 @@ export default function ContractForm() {
 
       // ===== ตารางจริงแบบแยก in/out =====
       serviceScheduleJson: JSON.stringify({
+        version: 2,
+        sprayMode: "manual",
         startDate: form.startDate,
         endDate: form.endDate,
         spray: sprayDates.filter(Boolean),
@@ -743,7 +745,7 @@ export default function ContractForm() {
               >
                 {pkgOptions.map((k) => (
                   <option key={k} value={k}>
-                    {pkgLabel(k)}
+                    {pkgLabel(k)} 
                   </option>
                 ))}
               </select>
