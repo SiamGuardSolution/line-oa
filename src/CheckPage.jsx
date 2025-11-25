@@ -260,6 +260,15 @@ const addMonths = (dateStr, n) => {
   if (d.getDate() < day) d.setDate(0);
   return toYMD(d);
 };
+const toBool = (v) => {
+  if (typeof v === "boolean") return v;
+  if (v == null) return false;
+  const s = String(v).trim().toLowerCase();
+  if (!s) return false;
+  // รองรับค่าที่มาจากชีต เช่น TRUE/FALSE, 1/0, yes/no
+  if (["0", "false", "no", "off"].includes(s)) return false;
+  return true;
+};
 
 // ==== อ่านข้อมูลรอบบริการจาก JSON ใหม่ ==== 
 function readScheduleJsonArrays(c) {
@@ -362,7 +371,7 @@ function normalizeYMD(v) {
 }
 
 /* ---------------------- COMPONENTS ---------------------- */
-const NotesFlex = ({ payUrl, adminUrl, showAdmin }) => (
+const NotesFlex = ({ payUrl, adminUrl, showAdmin, extraNote }) => (
   <section className="notes-flex" aria-label="หมายเหตุการให้บริการ">
     <header className="notes-flex__header">หมายเหตุ</header>
     <ol className="notes-flex__list">
@@ -387,6 +396,12 @@ const NotesFlex = ({ payUrl, adminUrl, showAdmin }) => (
           </ol>
         </div>
       </li>
+      {extraNote && (
+        <li>
+          <span className="badge">6</span>
+          <div>{extraNote}</div>
+        </li>
+      )}
     </ol>
   </section>
 );
@@ -628,6 +643,26 @@ export default function CheckPage() {
     return end < mid ? { text: "หมดอายุ", tone: "danger" } : { text: "ใช้งานอยู่", tone: "success" };
   }, [contract]);
 
+  const extraNoteText = useMemo(() => {
+    if (!contract) return "";
+    // รองรับหลายชื่อ column เผื่ออนาคต
+    const rawEnabled =
+      contract.extraNoteEnabled ??
+      contract.specialNoteEnabled ??
+      contract.showExtraNote;
+
+    const enabled = toBool(rawEnabled);
+
+    if (!enabled) return "";
+
+    const txt = firstNonEmpty(
+      contract.extraNote,
+      contract.specialNote,
+      contract.noteForCustomer
+    );
+    return (txt || "").trim();
+  }, [contract]);
+
   // ====== ค่าใช้จ่าย ======
   const discount = useMemo(() => discountFrom(contract), [contract]);
   const addonsSubtotal = useMemo(() => addonsSubtotalFrom(contract), [contract]);
@@ -847,6 +882,7 @@ export default function CheckPage() {
                 payUrl={payUrl}
                 adminUrl={LINE_ADMIN_URL}
                 showAdmin={!payUrl}
+                extraNote={extraNoteText}
               />
             </div>
           </section>

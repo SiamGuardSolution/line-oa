@@ -157,6 +157,8 @@ const emptyForm = {
   endDate: "",
   tech: "",
   note: "",
+  extraNoteEnabled: false,
+  extraNote: "",
   status: "ใช้งานอยู่",
   contractType: "normal",   // 👈 ใช้สำหรับมาร์กสัญญาปกติ/พิเศษ
 };
@@ -552,6 +554,8 @@ export default function ContractForm() {
       endDate: form.endDate,
       tech: form.tech,
       note: form.note,
+      extraNoteEnabled: !!form.extraNoteEnabled,
+      extraNote: form.extraNote || "",
       status: form.status || "ใช้งานอยู่",
       contractType: form.contractType || "normal",  // 👈 ส่งไปเก็บในชีตด้วย
 
@@ -1362,6 +1366,43 @@ export default function ContractForm() {
               onChange={(e) =>
                 setVal("note", e.target.value)
               }
+            />
+          </div>
+
+          {/* 👇 หมายเหตุพิเศษ (ใช้เป็นข้อที่ 6 ในหน้าตรวจสอบสัญญา) */}
+          <div
+            className="cf__field"
+            style={{ marginTop: 8 }}
+          >
+            <label className="cf__label">
+              หมายเหตุพิเศษ (แสดงเฉพาะลูกค้าที่เลือกไว้)
+            </label>
+            <label
+              className="cf__checkbox"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 4,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={!!form.extraNoteEnabled}
+                onChange={(e) =>
+                  setVal("extraNoteEnabled", e.target.checked)
+                }
+              />
+              แสดงหมายเหตุข้อนี้ในหน้าตรวจสอบสัญญา
+            </label>
+            <textarea
+              className="cf__textarea"
+              placeholder="เช่น เงื่อนไขการรับประกันเพิ่มเติม หรือข้อความเฉพาะเคสนี้"
+              value={form.extraNote || ""}
+              onChange={(e) =>
+                setVal("extraNote", e.target.value)
+              }
+              disabled={!form.extraNoteEnabled}
             />
           </div>
 
