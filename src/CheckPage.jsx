@@ -538,25 +538,29 @@ export default function CheckPage() {
   };
 
   const readBaitInDates = (c, start) => {
-    const { baitIn } = readScheduleJsonArrays(c);
-    if (baitIn.length) return baitIn;
+    const { baitIn, baitOut } = readScheduleJsonArrays(c);
 
+    if (baitIn.length) return baitIn;
+    if (baitOut.length) return [];
     const out = [];
-    for (let i=1;i<=5;i++) {
+    for (let i = 1; i <= 5; i++) {
       const k = `serviceBait${i}`;
       if (c?.[k]) out.push(c[k]);
     }
+
     if (Array.isArray(c?.services)) {
       const arr = c.services
-        .filter(s => /(bait|เหยื่อ)/i.test(String(s?.label||"")) && s?.date)
-        .sort((a,b)=>String(a.label).localeCompare(String(b.label)))
+        .filter(s => /(bait|เหยื่อ)/i.test(String(s?.label || "")) && s?.date)
+        .sort((a, b) => String(a.label).localeCompare(String(b.label)))
         .map(s => s.date);
+
       arr.forEach(d => { if (!out.includes(d)) out.push(d); });
     }
+
     if (out.length) return out;
 
     if (!start) return [];
-    return [20,40,60,80,100].map(d => addDays(start, d));
+    return [20, 40, 60, 80, 100].map(d => addDays(start, d));
   };
 
   const readBaitOutDates = (c, start) => {
@@ -628,9 +632,25 @@ export default function CheckPage() {
       items: [{ kind: "end", label: "สิ้นสุดสัญญา", date: end, isEnd: true }]
     };
 
-    if (pkgKey === "spray") return [sprayGroup, endGroup];
-    if (pkgKey === "bait")  return [baitInGroup, baitOutGroup, sprayGroup, endGroup];
-    return [baitInGroup, baitOutGroup, sprayGroup, endGroup];
+    // ✅ แสดงเฉพาะกลุ่มที่มีรายการจริง ๆ
+    const groups = [];
+
+    if (pkgKey === "spray") {
+      if (sprayDates.length) groups.push(sprayGroup);
+    } else if (pkgKey === "bait") {
+      if (baitInDates.length) groups.push(baitInGroup);
+      if (baitOutDates.length) groups.push(baitOutGroup);
+      if (sprayDates.length) groups.push(sprayGroup);
+    } else {
+      if (baitInDates.length) groups.push(baitInGroup);
+      if (baitOutDates.length) groups.push(baitOutGroup);
+      if (sprayDates.length) groups.push(sprayGroup);
+    }
+
+    // สิ้นสุดสัญญาแสดงเสมอ
+    groups.push(endGroup);
+
+    return groups;
   }, [contract]);
 
   const contractStatus = useMemo(() => {
