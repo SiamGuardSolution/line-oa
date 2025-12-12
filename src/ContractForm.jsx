@@ -520,10 +520,13 @@ export default function ContractForm() {
     const err = validate();
     if (err) return setMsg({ text: err, ok: false });
 
-    // map sprayDates → serviceSpray1..6
+    // ✅ เอาเฉพาะวันที่ที่กรอกจริง (กันช่องว่าง/ค่าค้าง)
+    const sprayList = (sprayDates || []).filter(Boolean);
+
+    // map sprayList → serviceSpray1..6
     const sprayMap = {};
     for (let i = 0; i < SPRAY_MAX; i++) {
-      sprayMap[`serviceSpray${i + 1}`] = sprayDates[i] || "";
+      sprayMap[`serviceSpray${i + 1}`] = sprayList[i] || "";
     }
 
     // รวม bait ภายใน+ภายนอก → serviceBait1..12 (legacy compat)
@@ -583,10 +586,10 @@ export default function ContractForm() {
         sprayMode: "manual",
         startDate: form.startDate,
         endDate: form.endDate,
-        spray: sprayDates.filter(Boolean),
-        baitIn: baitInDates.filter(Boolean),
-        baitOut: baitOutDates.filter(Boolean),
-        bait: [...baitInDates, ...baitOutDates].filter(Boolean), // compat
+        spray: sprayList,
+        baitIn: (baitInDates || []).filter(Boolean),
+        baitOut: (baitOutDates || []).filter(Boolean),
+        bait: mergedBait,
       }),
     };
 
