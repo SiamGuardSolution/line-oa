@@ -247,11 +247,6 @@ const toYMD = (d) => {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 };
-const addDays = (dateStr, days) => {
-  if (!dateStr) return "";
-  const d = new Date(dateStr); if (isNaN(d)) return "";
-  d.setDate(d.getDate() + days); return toYMD(d);
-};
 const addMonths = (dateStr, n) => {
   if (!dateStr) return "";
   const d = new Date(dateStr); if (isNaN(d)) return "";
@@ -294,6 +289,81 @@ function readScheduleJsonArrays(c) {
   } catch {
     return { spray: [], baitIn: [], baitOut: [] };
   }
+}
+
+// ==== อ่านรอบบริการจาก "services[]" (ที่มาจากคอลัมน์ในชีต) แบบตรงๆ ====
+// คืนค่าเป็น array ที่ index = รอบ-1 (รองรับ 1..6) แล้ว trim ท้ายว่างออก
+function readScheduleFromServicesList(c, { max = 6 } = {}) {
+  const svc = Array.isArray(c?.services) ? c.services : [];
+
+  const spray   = Array.from({ length: max }, () => "");
+  const baitIn  = Array.from({ length: max }, () => "");
+  const baitOut = Array.from({ length: max }, () => "");
+
+  const getRound = (label) => {
+    const s = String(label || "");
+    const m = s.match(/(?:รอบที่|ครั้งที่)\s*(\d+)/i);
+    const n = m ? parseInt(m[1], 10) : NaN;
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const put = (arr, round, date) => {
+    if (!round || round < 1 || round > max) return;
+    const ymd = normalizeYMD(date);
+    if (!ymd) return;
+    if (!arr[round - 1]) arr[round - 1] = ymd; // ไม่ทับของเดิม (กัน label ซ้ำ)
+  };
+
+  svc.forEach((s) => {
+    const label = String(s?.label || "");
+    const round = getRound(label);
+    const date  = s?.date;
+
+    if (/bait/i.test(label) || /เหยื่อ/.test(label)) {
+      if (/(ภายใน|inside|in)/i.test(label))  return put(baitIn, round, date);
+      if (/(ภายนอก|outside|out)/i.test(label)) return put(baitOut, round, date);
+      // ถ้าไม่ระบุ in/out ให้โยนเข้า baitIn เป็นค่าเริ่มต้น
+      return put(baitIn, round, date);
+    }
+
+    if (/spray/i.test(label) || /ฉีดพ่น/.test(label)) {
+      return put(spray, round, date);
+    }
+  });
+
+  const trim = (arr) => {
+    const a = arr.slice();
+    while (a.length && !a[a.length - 1]) a.pop();
+    return a.filter(Boolean); // เอาเฉพาะที่มีจริง
+  };
+
+  return { spray: trim(spray), baitIn: trim(baitIn), baitOut: trim(baitOut) };
+}
+
+// ==== รวมทุกแหล่ง (แต่ "ไม่คำนวณวันเอง") ====
+// priority: services[] -> serviceScheduleJson/serviceSchedule (กรณีเก่า)
+function readScheduleArraysStrict(c) {
+  const fromServices = readScheduleFromServicesList(c);
+  if (fromServices.spray.length || fromServices.baitIn.length || fromServices.baitOut.length) {
+    return fromServices;
+  }
+
+  // fallback: JSON (แต่ไม่เติมวันเอง)
+  const fromJson = readScheduleJsonArrays(c);
+  if (fromJson.spray.length || fromJson.baitIn.length || fromJson.baitOut.length) {
+    return fromJson;
+  }
+
+  // fallback สุดท้าย: ถ้ามี key รายตัว (เผื่ออนาคต)
+  const spray = [];
+  const baitIn = [];
+  const baitOut = [];
+  for (let i = 1; i <= 6; i++) {
+    if (c?.[`serviceSpray${i}`]) spray.push(normalizeYMD(c[`serviceSpray${i}`]));
+    if (c?.[`serviceBaitIn${i}`]) baitIn.push(normalizeYMD(c[`serviceBaitIn${i}`]));
+    if (c?.[`serviceBaitOut${i}`]) baitOut.push(normalizeYMD(c[`serviceBaitOut${i}`]));
+  }
+  return { spray: spray.filter(Boolean), baitIn: baitIn.filter(Boolean), baitOut: baitOut.filter(Boolean) };
 }
 
 // ----- Month–Year (Thai, พ.ศ.) ----- 
@@ -512,61 +582,20 @@ export default function CheckPage() {
     try { localStorage.setItem(LS_LAST_PHONE_KEY, digits); } catch {}
     await searchByDigits(digits);
   };
-  
-  const readSprayDates = (c, start, { suppressFallback = false } = {}) => {
-    const { spray } = readScheduleJsonArrays(c);
-    if (spray.length) return spray;
 
-    const out = [];
-    if (c?.serviceSpray1) out.push(c.serviceSpray1);
-    if (c?.serviceSpray2) out.push(c.serviceSpray2);
-    if (Array.isArray(c?.services)) {
-      const arr = c.services
-        .filter(s => /(spray|ฉีดพ่น)/i.test(String(s?.label || "")) && s?.date)
-        .sort((a, b) => String(a.label).localeCompare(String(b.label)))
-        .map(s => s.date);
-      arr.forEach(d => { if (!out.includes(d)) out.push(d); });
-    }
-    if (out.length) return out;
-
-    if (!start || suppressFallback) return [];
-    const s0 = addMonths(start, 0);
-    const s1 = addMonths(start, 3);
-    const s2 = addMonths(start, 6);
-    const s3 = addMonths(start, 9);
-    return [s0, s1, s2, s3];
+  const readSprayDates = (c) => {
+    const { spray } = readScheduleArraysStrict(c);
+    return spray;
   };
 
-  const readBaitInDates = (c, start) => {
-    const { baitIn, baitOut } = readScheduleJsonArrays(c);
-
-    if (baitIn.length) return baitIn;
-    if (baitOut.length) return [];
-    const out = [];
-    for (let i = 1; i <= 5; i++) {
-      const k = `serviceBait${i}`;
-      if (c?.[k]) out.push(c[k]);
-    }
-
-    if (Array.isArray(c?.services)) {
-      const arr = c.services
-        .filter(s => /(bait|เหยื่อ)/i.test(String(s?.label || "")) && s?.date)
-        .sort((a, b) => String(a.label).localeCompare(String(b.label)))
-        .map(s => s.date);
-
-      arr.forEach(d => { if (!out.includes(d)) out.push(d); });
-    }
-
-    if (out.length) return out;
-
-    if (!start) return [];
-    return [20, 40, 60, 80, 100].map(d => addDays(start, d));
+  const readBaitInDates = (c) => {
+    const { baitIn } = readScheduleArraysStrict(c);
+    return baitIn;
   };
 
-  const readBaitOutDates = (c, start) => {
-    const { baitOut } = readScheduleJsonArrays(c);
-    if (baitOut.length) return baitOut;
-    return [];
+  const readBaitOutDates = (c) => {
+    const { baitOut } = readScheduleArraysStrict(c);
+    return baitOut;
   };
 
   const scheduleGroups = useMemo(() => {
@@ -587,9 +616,9 @@ export default function CheckPage() {
     const start  = contract.startDate || "";
     const end    = contract.endDate || (start ? addMonths(start, 12) : "");
 
-    const baitInDates  = readBaitInDates(contract, start);
-    let   sprayDates   = readSprayDates(contract, start);
-    const baitOutDates = readBaitOutDates(contract, start);
+    const baitInDates  = readBaitInDates(contract);
+    let   sprayDates   = readSprayDates(contract);
+    const baitOutDates = readBaitOutDates(contract);
 
     // ✅ สำหรับแพ็กเกจ bait5500_in และ bait5500_both:
     // ถ้าเจอรอบฉีดพ่นที่ "ตรงกับวันเริ่มสัญญา" ให้ลบออก 1 รายการ
