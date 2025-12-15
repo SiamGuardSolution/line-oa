@@ -104,8 +104,8 @@ const BAIT_MAX = 12;
 /* -------------------- สูตรแพ็กเกจแบบง่าย -------------------- */
 const PKG_FORMULA = {
   pipe3993: {
-    sprayCount: 4,          // ✅ pipe3993 ใช้ 4 รอบ (0, +3, +6, +9 เดือน)
-    sprayGapM: 3,
+    sprayCount: 3,          // ✅ pipe3993 ใช้ 4 รอบ (0, +3, +6, +9 เดือน)
+    sprayGapM: 4,
     baitIn: 0,
     baitInGapD: 15,
     baitOut: 0,
