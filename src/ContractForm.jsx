@@ -246,19 +246,32 @@ export default function ContractForm() {
   }
 
   function resetBaitByPackage(pkg) {
-    if (pkg === "bait5500_both" || pkg === "combo8500") {
-      setBaitInDates(Array(3).fill(""));
-      setBaitOutDates(Array(3).fill("")); // รวม 6
-    } else if (pkg === "bait5500_in") {
+    if (pkg === "combo8500") {
+      setBaitInDates(Array(3).fill("")); 
+      setBaitOutDates([]);               
+      return;
+    }
+
+    if (pkg === "bait5500_both") {
+      setBaitInDates(Array(3).fill("3"));
+      setBaitOutDates(Array(3).fill(""));
+      return;
+    }
+
+    if (pkg === "bait5500_in") {
       setBaitInDates(Array(6).fill(""));
       setBaitOutDates([]);
-    } else if (pkg === "bait5500_out") {
+      return;
+    }
+
+    if (pkg === "bait5500_out") {
       setBaitInDates([]);
       setBaitOutDates(Array(6).fill(""));
-    } else {
-      setBaitInDates([]);
-      setBaitOutDates([]);
+      return;
     }
+
+    setBaitInDates([]);
+    setBaitOutDates([]);
   }
 
   // เปลี่ยนแพ็กเกจ → เซ็ตค่าตั้งต้นสปรินต์ตาราง
