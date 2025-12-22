@@ -98,7 +98,7 @@ const makeContractNo = () => {
 };
 
 /* -------------------- เพดาน map ลงคีย์ -------------------- */
-const SPRAY_MAX = 6;
+const SPRAY_MAX = 12;
 const BAIT_MAX = 12;
 
 /* -------------------- สูตรแพ็กเกจแบบง่าย -------------------- */
@@ -253,7 +253,7 @@ export default function ContractForm() {
     }
 
     if (pkg === "bait5500_both") {
-      setBaitInDates(Array(3).fill("3"));
+      setBaitInDates(Array(3).fill(""));
       setBaitOutDates(Array(3).fill(""));
       return;
     }
