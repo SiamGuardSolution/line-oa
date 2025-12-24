@@ -1,86 +1,30 @@
 import React, { useMemo, useState } from "react";
 import "./DateCheckPage.css";
 
-/* ---------------------- CONFIG (เหมือน CheckPage) ---------------------- */
-const HOST = window.location.hostname;
-const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
-const API_BASES = (HOST === "localhost" || HOST === "127.0.0.1") ? ["", PROXY] : [PROXY];
+/** ใช้ endpoint เดิมที่ proxy รองรับอยู่แล้ว (เหมือน Check) */
+const API_CHECK = "/api/check";
 
-/* ---------------------- Helpers ---------------------- */
-async function fetchJsonWithFallback(urlPath) {
-  let lastErr = null;
-
-  for (const base of API_BASES) {
-    const url = `${base}${urlPath}`;
-    try {
-      const r = await fetch(url, { method: "GET" });
-      const text = await r.text();
-
-      // ถ้า 404/500 แล้ว body ไม่ใช่ JSON จะได้เห็นข้อความจริง
-      let data = null;
-      try { data = JSON.parse(text); } catch { /* ignore */ }
-
-      if (!r.ok) {
-        // ถ้าเป็น JSON ก็ใช้ error ใน JSON ถ้าไม่ใช่ก็โชว์หัวข้อความ
-        const msg = (data && (data.error || data.message))
-          ? (data.error || data.message)
-          : `HTTP_${r.status}: ${text.slice(0, 120)}`;
-        throw new Error(msg);
-      }
-
-      if (!data) {
-        throw new Error(`NOT_JSON: ${text.slice(0, 140)}`);
-      }
-
-      return data;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-
-  throw lastErr || new Error("REQUEST_FAILED");
-}
-
-async function fetchDateScan(date) {
-  const d = encodeURIComponent(date);
-
-  // ✅ ลองหลายรูปแบบ เพื่อให้เข้ากับ Proxy/Worker ที่ต่างกัน
-  const candidates = [
-    `/exec?path=date-scan&date=${d}`,
-    `/?path=date-scan&date=${d}`,
-    `/exec?path=dateScan&date=${d}`,
-    `/?path=dateScan&date=${d}`,
-
-    `/exec?action=dateScan&date=${d}`,
-    `/?action=dateScan&date=${d}`,
-  ];
-
-  let last = null;
-  for (const u of candidates) {
-    try {
-      const res = await fetchJsonWithFallback(u);
-      if (res?.ok) return res;
-      last = res;
-    } catch (e) {
-      last = e;
-    }
-  }
-
-  throw (last instanceof Error) ? last : new Error(last?.error || "NOT_FOUND");
+/** normalize ชื่อชีตให้ได้ 3 กลุ่มแน่นอน */
+function normalizeSheetKey(v) {
+  const s = String(v || "").trim().toLowerCase();
+  if (s === "spray") return "Spray";
+  if (s === "bait") return "Bait";
+  if (s === "mix") return "Mix";
+  return v ? String(v) : "Other";
 }
 
 export default function DateCheckPage() {
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(""); // YYYY-MM-DD
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [results, setResults] = useState([]);
 
   const grouped = useMemo(() => {
-    const g = { Spray: [], Bait: [], Mix: [] };
+    const g = { Bait: [], Spray: [], Mix: [] };
     for (const r of results || []) {
-      const k = r.sheet || "Other";
-      if (!g[k]) g[k] = [];
-      g[k].push(r);
+      const key = normalizeSheetKey(r.sheet || r.sheetName || r.tab || r.type);
+      if (!g[key]) g[key] = [];
+      g[key].push(r);
     }
     return g;
   }, [results]);
@@ -95,15 +39,116 @@ export default function DateCheckPage() {
     }
 
     setLoading(true);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+
     try {
-      const data = await fetchDateScan(date);
+      // ✅ ใช้ API_CHECK (แก้ warning no-unused-vars)
+      const url = `${API_CHECK}?action=dateScan&date=${encodeURIComponent(date)}`;
+
+      const res = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+        cache: "no-store",
+        headers: {
+          "Accept": "application/json",
+        },
+      });
+
+      const raw = await res.text();
+
+      // parse แบบทนทาน (กันเคสได้ HTML กลับมา)
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        const preview = String(raw || "").slice(0, 180);
+        throw new Error(
+          `API ตอบกลับไม่ใช่ JSON (status ${res.status}) : ${preview}`
+        );
+      }
+
+      if (!res.ok || data?.ok === false) {
+        throw new Error(data?.error || `NOT_OK (${res.status})`);
+      }
+
       setResults(Array.isArray(data.results) ? data.results : []);
     } catch (e) {
-      setErr(String(e?.message || e));
+      const msg =
+        e?.name === "AbortError"
+          ? "คำขอหมดเวลา (timeout)"
+          : String(e?.message || e);
+      setErr(msg);
     } finally {
+      clearTimeout(timer);
       setLoading(false);
     }
   }
+
+  const renderTable = (k) => {
+    const rows = grouped[k] || [];
+    if (!rows.length) return <div className="dc-empty">— ไม่พบข้อมูล —</div>;
+
+    return (
+      <div className="dc-tablewrap">
+        <table className="dc-table">
+          <thead>
+            <tr>
+              <th style={{ width: 220 }}>ชื่อ</th>
+              <th style={{ width: 140 }}>เบอร์โทร</th>
+              <th>ที่อยู่</th>
+              <th style={{ width: 260 }}>พบในคอลัมน์ Service</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, idx) => {
+              const name = r.name || r.customerName || "-";
+              const phone = r.phone || r.tel || r.mobile || "-";
+              const address = r.address || r.addr || "-";
+
+              const services = Array.isArray(r.services)
+                ? r.services
+                : Array.isArray(r.serviceColumns)
+                ? r.serviceColumns
+                : Array.isArray(r.cols)
+                ? r.cols
+                : [];
+
+              const rowNumber = r.rowNumber || r.row || r.rowIndex || "-";
+              const sheetName = r.sheetName || r.sheet || k;
+
+              return (
+                <tr key={`${k}-${rowNumber}-${idx}`}>
+                  <td>{name}</td>
+                  <td>{phone}</td>
+                  <td className="dc-address">{address}</td>
+                  <td>
+                    <div className="dc-tags">
+                      {services.length ? (
+                        services.map((s, i) => (
+                          <span className="dc-tag" key={i}>
+                            {s}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="dc-tag dc-tag--muted">
+                          ไม่ระบุคอลัมน์
+                        </span>
+                      )}
+                    </div>
+                    <div className="dc-rowhint">
+                      แถว #{rowNumber} ({sheetName})
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   return (
     <div className="datecheck-container">
@@ -139,47 +184,21 @@ export default function DateCheckPage() {
         </div>
       </div>
 
-      {["Bait", "Spray", "Mix"].map((k) => (
-        <div key={k} className="dc-section">
-          <h2 className="dc-h2">{k}</h2>
+      {/* Results */}
+      <div className="dc-section">
+        <h2 className="dc-h2">Bait</h2>
+        {renderTable("Bait")}
+      </div>
 
-          {!grouped[k]?.length ? (
-            <div className="dc-empty">— ไม่พบข้อมูล —</div>
-          ) : (
-            <div className="dc-tablewrap">
-              <table className="dc-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 220 }}>ชื่อ</th>
-                    <th style={{ width: 140 }}>เบอร์โทร</th>
-                    <th>ที่อยู่</th>
-                    <th style={{ width: 260 }}>พบในคอลัมน์ Service</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grouped[k].map((r, idx) => (
-                    <tr key={`${k}-${r.rowNumber}-${idx}`}>
-                      <td>{r.name || "-"}</td>
-                      <td>{r.phone || "-"}</td>
-                      <td className="dc-address">{r.address || "-"}</td>
-                      <td>
-                        <div className="dc-tags">
-                          {(r.services || []).map((s, i) => (
-                            <span className="dc-tag" key={i}>{s}</span>
-                          ))}
-                        </div>
-                        <div className="dc-rowhint">
-                          แถว #{r.rowNumber} ({r.sheetName})
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      ))}
+      <div className="dc-section">
+        <h2 className="dc-h2">Spray</h2>
+        {renderTable("Spray")}
+      </div>
+
+      <div className="dc-section">
+        <h2 className="dc-h2">Mix</h2>
+        {renderTable("Mix")}
+      </div>
     </div>
   );
 }
