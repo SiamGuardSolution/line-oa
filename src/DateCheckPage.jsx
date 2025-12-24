@@ -1,16 +1,28 @@
 import React, { useMemo, useState } from "react";
 import "./DateCheckPage.css";
 
-/** ใช้ endpoint เดิมที่ proxy รองรับอยู่แล้ว (เหมือน Check) */
-const API_CHECK = "/api/check";
+/** ✅ ใช้ endpoint เดียวกับระบบ check ที่ proxy รองรับจริง */
+const API_EXEC = "/api/exec";
 
-/** normalize ชื่อชีตให้ได้ 3 กลุ่มแน่นอน */
 function normalizeSheetKey(v) {
   const s = String(v || "").trim().toLowerCase();
   if (s === "spray") return "Spray";
   if (s === "bait") return "Bait";
   if (s === "mix") return "Mix";
   return v ? String(v) : "Other";
+}
+
+function toErrText(e) {
+  if (!e) return "เกิดข้อผิดพลาด";
+  if (typeof e === "string") return e;
+  if (e?.name === "AbortError") return "คำขอหมดเวลา (timeout)";
+  const m = e?.message;
+  if (typeof m === "string") return m;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
 }
 
 export default function DateCheckPage() {
@@ -44,42 +56,40 @@ export default function DateCheckPage() {
     const timer = setTimeout(() => controller.abort(), 15000);
 
     try {
-      // ✅ ใช้ API_CHECK (แก้ warning no-unused-vars)
-      const url = `${API_CHECK}?action=dateScan&date=${encodeURIComponent(date)}`;
+      // ✅ ยิงไปที่ /api/exec เหมือนหน้า check
+      const url = `${API_EXEC}?action=dateScan&date=${encodeURIComponent(date)}`;
 
       const res = await fetch(url, {
         method: "GET",
         signal: controller.signal,
         cache: "no-store",
-        headers: {
-          "Accept": "application/json",
-        },
+        headers: { Accept: "application/json" },
       });
 
       const raw = await res.text();
 
-      // parse แบบทนทาน (กันเคสได้ HTML กลับมา)
       let data;
       try {
         data = JSON.parse(raw);
       } catch {
         const preview = String(raw || "").slice(0, 180);
-        throw new Error(
-          `API ตอบกลับไม่ใช่ JSON (status ${res.status}) : ${preview}`
-        );
+        throw new Error(`API ตอบกลับไม่ใช่ JSON (status ${res.status}) : ${preview}`);
       }
 
       if (!res.ok || data?.ok === false) {
-        throw new Error(data?.error || `NOT_OK (${res.status})`);
+        // รองรับ error เป็น string/object
+        const msg =
+          typeof data?.error === "string"
+            ? data.error
+            : data?.error
+            ? JSON.stringify(data.error)
+            : `NOT_OK (${res.status})`;
+        throw new Error(msg);
       }
 
       setResults(Array.isArray(data.results) ? data.results : []);
     } catch (e) {
-      const msg =
-        e?.name === "AbortError"
-          ? "คำขอหมดเวลา (timeout)"
-          : String(e?.message || e);
-      setErr(msg);
+      setErr(toErrText(e));
     } finally {
       clearTimeout(timer);
       setLoading(false);
@@ -132,9 +142,7 @@ export default function DateCheckPage() {
                           </span>
                         ))
                       ) : (
-                        <span className="dc-tag dc-tag--muted">
-                          ไม่ระบุคอลัมน์
-                        </span>
+                        <span className="dc-tag dc-tag--muted">ไม่ระบุคอลัมน์</span>
                       )}
                     </div>
                     <div className="dc-rowhint">
@@ -176,15 +184,10 @@ export default function DateCheckPage() {
         {err ? <div className="dc-error">⚠ {err}</div> : null}
 
         <div className="dc-meta">
-          {results?.length ? (
-            <span>พบทั้งหมด {results.length} รายการ</span>
-          ) : (
-            <span>ยังไม่มีผลลัพธ์</span>
-          )}
+          {results?.length ? <span>พบทั้งหมด {results.length} รายการ</span> : <span>ยังไม่มีผลลัพธ์</span>}
         </div>
       </div>
 
-      {/* Results */}
       <div className="dc-section">
         <h2 className="dc-h2">Bait</h2>
         {renderTable("Bait")}
