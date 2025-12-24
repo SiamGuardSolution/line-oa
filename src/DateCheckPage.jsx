@@ -1,6 +1,53 @@
 import React, { useMemo, useState } from "react";
 import "./DateCheckPage.css";
 
+/* ---------------------- CONFIG (เหมือน CheckPage) ---------------------- */
+const HOST = window.location.hostname;
+const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
+const API_BASES = (HOST === "localhost" || HOST === "127.0.0.1") ? ["", PROXY] : [PROXY];
+
+/* ---------------------- Helpers ---------------------- */
+async function fetchJsonWithFallback(urlPath) {
+  let lastErr = null;
+
+  for (const base of API_BASES) {
+    const url = `${base}${urlPath}`;
+    try {
+      const r = await fetch(url, { method: "GET" });
+      const text = await r.text();
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // ถ้าได้ HTML/ข้อความแปลกๆ จะเห็นหัวข้อความชัด
+        throw new Error(`NOT_JSON: ${text.slice(0, 140)}`);
+      }
+
+      if (!r.ok) throw new Error(data?.error || `HTTP_${r.status}`);
+      return data;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  throw lastErr || new Error("REQUEST_FAILED");
+}
+
+async function fetchDateScan(date) {
+  // 1) ลองแบบ path ก่อน (แนะนำให้ GAS รองรับ path=date-scan)
+  const u1 = `/exec?path=date-scan&date=${encodeURIComponent(date)}`;
+  const d1 = await fetchJsonWithFallback(u1);
+
+  // ถ้า ok แล้วจบ
+  if (d1?.ok) return d1;
+
+  // 2) ถ้า GAS ยังไม่รองรับ path ให้ลองแบบ action
+  const u2 = `/exec?action=dateScan&date=${encodeURIComponent(date)}`;
+  const d2 = await fetchJsonWithFallback(u2);
+  return d2;
+}
+
 export default function DateCheckPage() {
   const [date, setDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,9 +75,7 @@ export default function DateCheckPage() {
 
     setLoading(true);
     try {
-      // ✅ เรียกผ่าน proxy ของเว็บ (แนะนำ)
-      const r = await fetch(`/api/date-scan?date=${encodeURIComponent(date)}`);
-      const data = await r.json();
+      const data = await fetchDateScan(date);
 
       if (!data?.ok) throw new Error(data?.error || "ค้นหาไม่สำเร็จ");
       setResults(Array.isArray(data.results) ? data.results : []);
