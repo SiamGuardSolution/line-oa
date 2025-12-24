@@ -1,49 +1,16 @@
 import React, { useMemo, useState } from "react";
 import "./DateCheckPage.css";
 
-/** endpoint หลักที่เราอยากใช้ */
-const API_CHECK = "/api/check";
+// ✅ ยิง Worker ตรง ๆ (ไม่ผ่าน contract.siamguards.com)
+const PROXY_BASE = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev")
+  .replace(/\/$/, "");
 
-/** normalize ชื่อชีตให้ได้ 3 กลุ่มแน่นอน */
 function normalizeSheetKey(v) {
   const s = String(v || "").trim().toLowerCase();
   if (s === "spray") return "Spray";
   if (s === "bait") return "Bait";
   if (s === "mix") return "Mix";
   return v ? String(v) : "Other";
-}
-
-async function fetchJsonWithTimeout(url, ms = 15000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-
-  const res = await fetch(url, { method: "GET", signal: controller.signal });
-  clearTimeout(timer);
-
-  const raw = await res.text();
-
-  let data;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    const preview = String(raw || "").slice(0, 180);
-    throw new Error(`API ตอบกลับไม่ใช่ JSON (status ${res.status}) : ${preview}`);
-  }
-
-  if (!res.ok || data?.ok === false) {
-    // ถ้าเป็น Next/Vercel 404 มักได้ {code, message}
-    const msg =
-      data?.error ||
-      data?.message ||
-      (data?.code ? `${data.code}: ${data.message || ""}` : "") ||
-      `NOT_OK (${res.status})`;
-    const err = new Error(msg.trim() || `NOT_OK (${res.status})`);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-
-  return data;
 }
 
 export default function DateCheckPage() {
@@ -73,24 +40,26 @@ export default function DateCheckPage() {
 
     setLoading(true);
     try {
-      // 1) ยิงไป endpoint หลัก (ใหม่)
-      const u1 = `${API_CHECK}?action=dateScan&date=${encodeURIComponent(date)}`;
+      // ✅ เรียก endpoint เดียวกับ Check แต่ยิง Worker ตรง ๆ
+      const url = `${PROXY_BASE}/api/check?action=dateScan&date=${encodeURIComponent(date)}`;
 
-      // 2) fallback ยิงไป /api/exec (pass-through)
-      const u2 = `/api/exec?action=dateScan&date=${encodeURIComponent(date)}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
 
-      // 3) fallback สุดท้าย เผื่อบางที่ยังใช้แบบ path=date-scan (ถ้าคุณทำไว้ใน GAS)
-      const u3 = `${API_CHECK}?path=date-scan&date=${encodeURIComponent(date)}`;
+      const res = await fetch(url, { method: "GET", signal: controller.signal });
+      clearTimeout(timer);
 
-      let data = null;
+      const raw = await res.text();
+
+      let data;
       try {
-        data = await fetchJsonWithTimeout(u1);
-      } catch (e1) {
-        try {
-          data = await fetchJsonWithTimeout(u2);
-        } catch (e2) {
-          data = await fetchJsonWithTimeout(u3);
-        }
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(`API ตอบกลับไม่ใช่ JSON (status ${res.status}) : ${String(raw || "").slice(0, 180)}`);
+      }
+
+      if (!res.ok || data?.ok === false) {
+        throw new Error(data?.error || `NOT_OK (${res.status})`);
       }
 
       setResults(Array.isArray(data.results) ? data.results : []);
@@ -174,6 +143,9 @@ export default function DateCheckPage() {
         <p className="dc-subtitle">
           เลือกวันที่ → ระบบจะค้นหาทุกแถวใน Spray / Bait / Mix และบอกว่า “วันที่นี้อยู่ในคอลัมน์ Service ไหน”
         </p>
+        <div className="dc-subtitle" style={{ opacity: 0.7 }}>
+          API: {PROXY_BASE}
+        </div>
       </div>
 
       <div className="dc-card">
