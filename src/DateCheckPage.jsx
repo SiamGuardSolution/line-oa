@@ -16,15 +16,22 @@ async function fetchJsonWithFallback(urlPath) {
       const r = await fetch(url, { method: "GET" });
       const text = await r.text();
 
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        // ถ้าได้ HTML/ข้อความแปลกๆ จะเห็นหัวข้อความชัด
+      // ถ้า 404/500 แล้ว body ไม่ใช่ JSON จะได้เห็นข้อความจริง
+      let data = null;
+      try { data = JSON.parse(text); } catch { /* ignore */ }
+
+      if (!r.ok) {
+        // ถ้าเป็น JSON ก็ใช้ error ใน JSON ถ้าไม่ใช่ก็โชว์หัวข้อความ
+        const msg = (data && (data.error || data.message))
+          ? (data.error || data.message)
+          : `HTTP_${r.status}: ${text.slice(0, 120)}`;
+        throw new Error(msg);
+      }
+
+      if (!data) {
         throw new Error(`NOT_JSON: ${text.slice(0, 140)}`);
       }
 
-      if (!r.ok) throw new Error(data?.error || `HTTP_${r.status}`);
       return data;
     } catch (e) {
       lastErr = e;
@@ -35,17 +42,31 @@ async function fetchJsonWithFallback(urlPath) {
 }
 
 async function fetchDateScan(date) {
-  // 1) ลองแบบ path ก่อน (แนะนำให้ GAS รองรับ path=date-scan)
-  const u1 = `/exec?path=date-scan&date=${encodeURIComponent(date)}`;
-  const d1 = await fetchJsonWithFallback(u1);
+  const d = encodeURIComponent(date);
 
-  // ถ้า ok แล้วจบ
-  if (d1?.ok) return d1;
+  // ✅ ลองหลายรูปแบบ เพื่อให้เข้ากับ Proxy/Worker ที่ต่างกัน
+  const candidates = [
+    `/exec?path=date-scan&date=${d}`,
+    `/?path=date-scan&date=${d}`,
+    `/exec?path=dateScan&date=${d}`,
+    `/?path=dateScan&date=${d}`,
 
-  // 2) ถ้า GAS ยังไม่รองรับ path ให้ลองแบบ action
-  const u2 = `/exec?action=dateScan&date=${encodeURIComponent(date)}`;
-  const d2 = await fetchJsonWithFallback(u2);
-  return d2;
+    `/exec?action=dateScan&date=${d}`,
+    `/?action=dateScan&date=${d}`,
+  ];
+
+  let last = null;
+  for (const u of candidates) {
+    try {
+      const res = await fetchJsonWithFallback(u);
+      if (res?.ok) return res;
+      last = res;
+    } catch (e) {
+      last = e;
+    }
+  }
+
+  throw (last instanceof Error) ? last : new Error(last?.error || "NOT_FOUND");
 }
 
 export default function DateCheckPage() {
@@ -76,8 +97,6 @@ export default function DateCheckPage() {
     setLoading(true);
     try {
       const data = await fetchDateScan(date);
-
-      if (!data?.ok) throw new Error(data?.error || "ค้นหาไม่สำเร็จ");
       setResults(Array.isArray(data.results) ? data.results : []);
     } catch (e) {
       setErr(String(e?.message || e));
@@ -120,7 +139,6 @@ export default function DateCheckPage() {
         </div>
       </div>
 
-      {/* Results */}
       {["Bait", "Spray", "Mix"].map((k) => (
         <div key={k} className="dc-section">
           <h2 className="dc-h2">{k}</h2>
