@@ -8,6 +8,7 @@ import ContractForm from "./ContractForm";
 import CheckPage from "./CheckPage";
 import PayPage from "./PayPage";
 import ServiceReportPage from "./ServiceReportPage.jsx";
+import DateCheckPage from "./DateCheckPage";
 
 
 /** ---------- DEV BYPASS (เปิดโหมด mock ด้วย ?mock=1 หรือ .env: REACT_APP_BYPASS_LINE=1) ---------- */
@@ -123,6 +124,7 @@ export default function App() {
           <Route path="/reports" element={<ServiceReportPage />} />            {/* รายการรวม (ถ้ามี) */}
           <Route path="/reports/:serviceId" element={<ServiceReportPage />} /> {/* ใหม่ */}
           <Route path="/report-view/:serviceId" element={<ServiceReportPage />} /> {/* เดิม */}
+          <Route path="/date-check" element={<DateCheckPage />} />
 
           {/* require LINE login */}
           <Route
