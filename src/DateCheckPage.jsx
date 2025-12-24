@@ -1,14 +1,10 @@
 import React, { useMemo, useState } from "react";
 import "./DateCheckPage.css";
 
-/** เหมือน CheckPage: มี PROXY fallback */
-const HOST = window.location.hostname;
-const PROXY = (process.env.REACT_APP_API_BASE || "https://siamguards-proxy.phet67249.workers.dev").replace(/\/$/, "");
-const API_BASES =
-  HOST === "localhost" || HOST === "127.0.0.1"
-    ? ["", PROXY] // dev: ลอง local ก่อน ถ้าไม่ได้ค่อยยิง proxy
-    : ["", PROXY]; // prod: ลอง same-origin ก่อน แล้วค่อย proxy
+/** endpoint หลักที่เราอยากใช้ */
+const API_CHECK = "/api/check";
 
+/** normalize ชื่อชีตให้ได้ 3 กลุ่มแน่นอน */
 function normalizeSheetKey(v) {
   const s = String(v || "").trim().toLowerCase();
   if (s === "spray") return "Spray";
@@ -17,52 +13,37 @@ function normalizeSheetKey(v) {
   return v ? String(v) : "Other";
 }
 
-function safeJsonParse(raw) {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function errText(x) {
-  if (!x) return "เกิดข้อผิดพลาด";
-  if (typeof x === "string") return x;
-  if (x?.name === "AbortError") return "คำขอหมดเวลา (timeout)";
-  if (typeof x?.message === "string") return x.message;
-  try {
-    return JSON.stringify(x);
-  } catch {
-    return String(x);
-  }
-}
-
-/** fetch JSON + timeout + คืนรายละเอียดไว้ debug */
-async function fetchJson(url, ms = 15000) {
+async function fetchJsonWithTimeout(url, ms = 15000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
 
+  const res = await fetch(url, { method: "GET", signal: controller.signal });
+  clearTimeout(timer);
+
+  const raw = await res.text();
+
+  let data;
   try {
-    const res = await fetch(url, {
-      method: "GET",
-      signal: controller.signal,
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-
-    const raw = await res.text();
-    const json = safeJsonParse(raw);
-
-    return {
-      ok: res.ok && json && json.ok !== false,
-      status: res.status,
-      json,
-      raw,
-      url,
-    };
-  } finally {
-    clearTimeout(timer);
+    data = JSON.parse(raw);
+  } catch {
+    const preview = String(raw || "").slice(0, 180);
+    throw new Error(`API ตอบกลับไม่ใช่ JSON (status ${res.status}) : ${preview}`);
   }
+
+  if (!res.ok || data?.ok === false) {
+    // ถ้าเป็น Next/Vercel 404 มักได้ {code, message}
+    const msg =
+      data?.error ||
+      data?.message ||
+      (data?.code ? `${data.code}: ${data.message || ""}` : "") ||
+      `NOT_OK (${res.status})`;
+    const err = new Error(msg.trim() || `NOT_OK (${res.status})`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+
+  return data;
 }
 
 export default function DateCheckPage() {
@@ -91,64 +72,34 @@ export default function DateCheckPage() {
     }
 
     setLoading(true);
-
-    const encDate = encodeURIComponent(date);
-
-    // ✅ สร้างชุด URL ที่ “เป็นไปได้” ตาม proxy ที่คุณเคยใช้จริง
-    const buildCandidates = (base) => {
-      const b = base ? base.replace(/\/$/, "") : "";
-      const prefix = b; // base อาจเป็น "" หรือ https://...workers.dev
-
-      // ถ้า base เป็น same-origin (""), ก็จะกลายเป็น "/api/..."
-      // ถ้า base เป็น PROXY, ก็จะกลายเป็น "https://.../api/..."
-      return [
-        `${prefix}/api/check?action=dateScan&date=${encDate}`,
-        `${prefix}/api/exec?action=dateScan&date=${encDate}`,
-        `${prefix}/api/exec?path=date-scan&date=${encDate}`,     // บางระบบใช้ path
-        `${prefix}/exec?action=dateScan&date=${encDate}`,        // บาง proxy ใช้ /exec
-        `${prefix}/exec?path=date-scan&date=${encDate}`,
-        `${prefix}/?action=dateScan&date=${encDate}`,            // บาง proxy รับที่ root
-        `${prefix}/?path=date-scan&date=${encDate}`,
-      ].map((u) => u.replace(/^\/\//, "/")); // กันกรณี base="" แล้วได้ "//api"
-    };
-
-    let lastFail = null;
-
     try {
-      // ✅ ลองทีละตัวจนกว่าจะเจอ ok:true
-      for (const base of API_BASES) {
-        const candidates = buildCandidates(base);
+      // 1) ยิงไป endpoint หลัก (ใหม่)
+      const u1 = `${API_CHECK}?action=dateScan&date=${encodeURIComponent(date)}`;
 
-        for (const url of candidates) {
-          const r = await fetchJson(url, 15000);
+      // 2) fallback ยิงไป /api/exec (pass-through)
+      const u2 = `/api/exec?action=dateScan&date=${encodeURIComponent(date)}`;
 
-          if (r.ok && Array.isArray(r.json?.results)) {
-            setResults(r.json.results);
-            setErr("");
-            return;
-          }
+      // 3) fallback สุดท้าย เผื่อบางที่ยังใช้แบบ path=date-scan (ถ้าคุณทำไว้ใน GAS)
+      const u3 = `${API_CHECK}?path=date-scan&date=${encodeURIComponent(date)}`;
 
-          // เก็บไว้เป็น error ล่าสุด เพื่อแสดงถ้าลองหมดแล้วไม่เจอ
-          lastFail = r;
-
-          // ถ้าได้ JSON ok:false ก็ลองตัวถัดไปได้เลย
-          // ถ้าเป็น 404 ก็ลองตัวถัดไป
+      let data = null;
+      try {
+        data = await fetchJsonWithTimeout(u1);
+      } catch (e1) {
+        try {
+          data = await fetchJsonWithTimeout(u2);
+        } catch (e2) {
+          data = await fetchJsonWithTimeout(u3);
         }
       }
 
-      // ลองหมดแล้วไม่เจอ
-      if (lastFail) {
-        const apiErr =
-          (lastFail.json && (lastFail.json.error || lastFail.json.message)) ||
-          `HTTP ${lastFail.status}`;
-
-        // โชว์ให้รู้ด้วยว่า “ล้มที่ URL ไหน”
-        setErr(`${apiErr} @ ${lastFail.url}`);
-      } else {
-        setErr("ไม่สามารถเรียก API ได้");
-      }
+      setResults(Array.isArray(data.results) ? data.results : []);
     } catch (e) {
-      setErr(errText(e));
+      const msg =
+        e?.name === "AbortError"
+          ? "คำขอหมดเวลา (timeout)"
+          : String(e?.message || e);
+      setErr(msg);
     } finally {
       setLoading(false);
     }
@@ -203,7 +154,9 @@ export default function DateCheckPage() {
                         <span className="dc-tag dc-tag--muted">ไม่ระบุคอลัมน์</span>
                       )}
                     </div>
-                    <div className="dc-rowhint">แถว #{rowNumber} ({sheetName})</div>
+                    <div className="dc-rowhint">
+                      แถว #{rowNumber} ({sheetName})
+                    </div>
                   </td>
                 </tr>
               );
