@@ -265,7 +265,7 @@ export default async function generateContractPDF(data = {}, opts = {}) {
     schedTop.push({ mmYY: fmtThaiMonthYear(d), note: "" });
   }
 
-  const topTitle = service.topTitle ?? "ตารางบริการฉีดพ่น (Spray)";
+  const topTitle = service.topTitle ?? "ตารางบริการ";
 
   const headCols = [
     "ครั้งที่",
