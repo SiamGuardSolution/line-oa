@@ -40,22 +40,27 @@ export default function DateCheckPage() {
 
     setLoading(true);
     try {
-      // ✅ เรียก endpoint เดียวกับ Check แต่ยิง Worker ตรง ๆ
       const url = `${PROXY_BASE}/api/check?action=dateScan&date=${encodeURIComponent(date)}`;
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 45000);
 
-      const res = await fetch(url, { method: "GET", signal: controller.signal });
-      clearTimeout(timer);
-
-      const raw = await res.text();
+      let res;
+      let raw = "";
+      try {
+        res = await fetch(url, { method: "GET", signal: controller.signal });
+        raw = await res.text(); // ✅ เก็บข้อความดิบไว้ debug
+      } finally {
+        clearTimeout(timer); // ✅ เคลียร์เสมอ ไม่ว่า success/fail
+      }
 
       let data;
       try {
-        data = JSON.parse(raw);
+        data = JSON.parse(raw); // ✅ ใช้ raw จริง
       } catch {
-        throw new Error(`API ตอบกลับไม่ใช่ JSON (status ${res.status}) : ${String(raw || "").slice(0, 180)}`);
+        throw new Error(
+          `API ตอบกลับไม่ใช่ JSON (status ${res?.status ?? "?"}) : ${String(raw || "").slice(0, 180)}`
+        );
       }
 
       if (!res.ok || data?.ok === false) {
