@@ -163,16 +163,13 @@
 
 .dc-table{
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  min-width: 980px; /* กันตารางพังบนจอเล็ก */
+  table-layout: fixed; /* ทำให้คอลัมน์กระจายพื้นที่ */
 }
 
 .dc-table th, .dc-table td{
-  border-bottom: 1px solid #eef0f6;
-  padding: 10px 10px;
-  vertical-align: top;
-  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dc-table thead th{
@@ -363,8 +360,12 @@
 
 .dc-grid2{
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
+}
+
+.dc-panel{
+  min-width: 0; /* สำคัญมาก ถ้ามี table/overflow */
 }
 
 .dc-panel{
