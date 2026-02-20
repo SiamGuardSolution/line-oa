@@ -633,6 +633,18 @@ export default function DateCheckPage() {
                                   </div>
                                 )}
                               </div>
+
+                              <div className="dc-expand-col">
+                                <div className="dc-expand-title">หมายเหตุ</div>
+
+                                {isDL ? (
+                                  <div className="dc-empty">กำลังโหลดหมายเหตุ...</div>
+                                ) : derr ? (
+                                  <div className="dc-error">⚠ {derr}</div>
+                                ) : (
+                                  <div className="dc-expand-text">{safeText(detail?.note) || "-"}</div>
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>
